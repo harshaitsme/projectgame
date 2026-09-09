@@ -4,19 +4,30 @@ import com.badlogic.gdx.graphics.Texture
 import com.badlogic.gdx.graphics.g2d.Batch
 import com.badlogic.gdx.graphics.g2d.SpriteBatch
 import com.badlogic.gdx.scenes.scene2d.Stage
+import com.badlogic.gdx.scenes.scene2d.ui.Image
+import com.badlogic.gdx.utils.Scaling
 import com.badlogic.gdx.utils.viewport.ExtendViewport
 import ktx.app.KtxScreen
+import ktx.collections.defaultSetSize
 import ktx.graphics.use
 import ktx.log.logger
 
 class GameScreen : KtxScreen {
 
     private val spriteBatch : Batch = SpriteBatch()
+    //player test image implementation
     private val stage: Stage = Stage(ExtendViewport(16f,9f))
     private val texture: Texture = Texture("graphics/player.png")
 
     override fun show() {
        log.debug { "GameScreen get shown" }
+        stage.addActor(
+            Image(texture).apply {
+                setPosition(2f,3f)
+                setSize(1f,1f)
+                setScaling(Scaling.fill)
+            }
+        )
     }
     override fun resize(width: Int, height: Int) {
         stage.viewport.update(width,height,true)
@@ -32,7 +43,8 @@ class GameScreen : KtxScreen {
 
 
     override fun dispose() {
-        super.dispose()
+        stage.dispose()
+        texture.dispose()
     }
 
     companion object{
