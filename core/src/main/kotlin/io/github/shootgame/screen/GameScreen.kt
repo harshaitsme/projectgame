@@ -3,6 +3,8 @@ package io.github.shootgame.screen
 import com.badlogic.gdx.graphics.Texture
 import com.badlogic.gdx.graphics.g2d.Batch
 import com.badlogic.gdx.graphics.g2d.SpriteBatch
+import com.badlogic.gdx.graphics.g2d.TextureAtlas
+import com.badlogic.gdx.graphics.g2d.TextureRegion
 import com.badlogic.gdx.scenes.scene2d.Stage
 import com.badlogic.gdx.scenes.scene2d.ui.Image
 import com.badlogic.gdx.utils.Scaling
@@ -19,8 +21,8 @@ import ktx.log.logger
 class GameScreen : KtxScreen {
 
     private val spriteBatch : Batch = SpriteBatch()
-    private val stage: Stage = Stage(ExtendViewport(16f,9f))
-    private val texture: Texture = Texture("graphics/player.png")
+    private val stage: Stage = Stage(ExtendViewport(16f,9f));
+    private val textureAtlas = TextureAtlas("graphics/PlayerObject.atlas")
 
     private val world: World = World {
 
@@ -30,18 +32,33 @@ class GameScreen : KtxScreen {
             system<RenderSystem>()
     }
 
+  // ==================================================================================
+
+    /*This code area shows all the object we want to in game window if you want to add any object
+    * add it this  code area. remember : if you change any code block plc comment it properly
+    * if you want to show  any Component call `override fun show()` world.entity implanted fun
+    * because we used entity component system for that... */
+
+
     override fun show() {
        log.debug { "GameScreen get shown" }
 
         world.entity {
             add<ImageComponent>{
-                image = Image(texture).apply {
-
-                    setSize(8f,8f)
+                image = Image(TextureRegion(textureAtlas.findRegion("Walk"),0,0, 128 ,128)).apply {
+                    setSize(4f,4f)
                 }
             }
         }
+
     }
+
+    // ==================================================================================
+
+
+
+
+
     override fun resize(width: Int, height: Int) {
         stage.viewport.update(width,height,true)
     }
@@ -54,7 +71,7 @@ class GameScreen : KtxScreen {
 
     override fun dispose() {
         stage.disposeSafely()
-        texture.disposeSafely()
+        textureAtlas.disposeSafely()
         world.dispose()
     }
 
