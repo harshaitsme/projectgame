@@ -7,18 +7,23 @@ import com.badlogic.gdx.scenes.scene2d.Stage
 import com.badlogic.gdx.scenes.scene2d.ui.Image
 import com.badlogic.gdx.utils.Scaling
 import com.badlogic.gdx.utils.viewport.ExtendViewport
+import com.github.quillraven.fleks.World
+import io.github.shootgame.system.RenderSystem
 import ktx.app.KtxScreen
 import ktx.assets.disposeSafely
-import ktx.collections.defaultSetSize
-import ktx.graphics.use
 import ktx.log.logger
 
 class GameScreen : KtxScreen {
 
     private val spriteBatch : Batch = SpriteBatch()
-    //player test image implementation
     private val stage: Stage = Stage(ExtendViewport(16f,9f))
     private val texture: Texture = Texture("graphics/player.png")
+
+    private val world: World = World {
+
+        
+            system<RenderSystem>()
+    }
 
     override fun show() {
        log.debug { "GameScreen get shown" }
@@ -46,6 +51,7 @@ class GameScreen : KtxScreen {
     override fun dispose() {
         stage.disposeSafely()
         texture.disposeSafely()
+        world.dispose()
     }
 
     companion object{
