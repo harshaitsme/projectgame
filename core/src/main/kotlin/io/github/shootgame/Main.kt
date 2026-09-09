@@ -6,6 +6,7 @@ import io.github.shootgame.screen.GameScreen
 import ktx.app.KtxGame
 import ktx.app.KtxScreen
 
+// main start point here
 class Main : KtxGame<KtxScreen>() {
 
     override fun create() {

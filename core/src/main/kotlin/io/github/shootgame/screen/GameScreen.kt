@@ -13,6 +13,8 @@ import ktx.app.KtxScreen
 import ktx.assets.disposeSafely
 import ktx.log.logger
 
+
+//game screen shown and dispose things |
 class GameScreen : KtxScreen {
 
     private val spriteBatch : Batch = SpriteBatch()
@@ -21,7 +23,8 @@ class GameScreen : KtxScreen {
 
     private val world: World = World {
 
-        
+        inject(stage)
+
             system<RenderSystem>()
     }
 
@@ -40,10 +43,7 @@ class GameScreen : KtxScreen {
     }
 
     override fun render(delta: Float) {
-        with(stage){
-            act(delta)
-            draw()
-        }
+        world.update(delta)
     }
 
 

@@ -5,6 +5,8 @@ import com.badlogic.gdx.scenes.scene2d.Stage
 import com.github.quillraven.fleks.*
 import io.github.shootgame.component.ImageComponent
 
+
+// pov : this kt class responsible for rendering
 @AllOf([ImageComponent::class])
 class RenderSystem(
     private val stage: Stage
@@ -22,6 +24,11 @@ class RenderSystem(
 
     override fun onTickEntity(entity: Entity) {
 
+    }
+
+    override fun onDispose() {
+        super.onDispose()
+//        TODO:implement dispose sys render convenient way
     }
 
 
