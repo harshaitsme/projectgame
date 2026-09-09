@@ -8,6 +8,7 @@ import com.badlogic.gdx.scenes.scene2d.ui.Image
 import com.badlogic.gdx.utils.Scaling
 import com.badlogic.gdx.utils.viewport.ExtendViewport
 import ktx.app.KtxScreen
+import ktx.assets.disposeSafely
 import ktx.collections.defaultSetSize
 import ktx.graphics.use
 import ktx.log.logger
@@ -23,8 +24,8 @@ class GameScreen : KtxScreen {
        log.debug { "GameScreen get shown" }
         stage.addActor(
             Image(texture).apply {
-                setPosition(2f,3f)
-                setSize(1f,1f)
+                setPosition(1f,1f)
+                setSize(6f,6f)
                 setScaling(Scaling.fill)
             }
         )
@@ -43,8 +44,8 @@ class GameScreen : KtxScreen {
 
 
     override fun dispose() {
-        stage.dispose()
-        texture.dispose()
+        stage.disposeSafely()
+        texture.disposeSafely()
     }
 
     companion object{
