@@ -8,6 +8,7 @@ import com.badlogic.gdx.scenes.scene2d.ui.Image
 import com.badlogic.gdx.utils.Scaling
 import com.badlogic.gdx.utils.viewport.ExtendViewport
 import com.github.quillraven.fleks.World
+import io.github.shootgame.component.ImageComponent
 import io.github.shootgame.system.RenderSystem
 import ktx.app.KtxScreen
 import ktx.assets.disposeSafely
@@ -25,18 +26,21 @@ class GameScreen : KtxScreen {
 
         inject(stage)
 
+        componentListener<ImageComponent.Companion.ImageComponentListener>()
             system<RenderSystem>()
     }
 
     override fun show() {
        log.debug { "GameScreen get shown" }
-        stage.addActor(
-            Image(texture).apply {
-                setPosition(1f,1f)
-                setSize(6f,6f)
-                setScaling(Scaling.fill)
+
+        world.entity {
+            add<ImageComponent>{
+                image = Image(texture).apply {
+
+                    setSize(8f,8f)
+                }
             }
-        )
+        }
     }
     override fun resize(width: Int, height: Int) {
         stage.viewport.update(width,height,true)
