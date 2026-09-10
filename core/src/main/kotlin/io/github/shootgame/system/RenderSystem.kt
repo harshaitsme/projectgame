@@ -12,6 +12,7 @@ import com.github.quillraven.fleks.*
 import com.github.quillraven.fleks.collection.compareEntity
 import io.github.shootgame.component.ImageComponent
 import io.github.shootgame.event.MapChangeEvent
+import ktx.assets.disposeSafely
 import ktx.graphics.use
 import ktx.tiled.forEachLayer
 
@@ -67,10 +68,7 @@ class RenderSystem(
         imageCmps[entity].image.toFront()
     }
 
-    override fun onDispose() {
-        super.onDispose()
-//        TODO:implement dispose sys render convenient way
-    }
+
 
     override fun handle(event: Event?): Boolean {
 
@@ -95,5 +93,8 @@ class RenderSystem(
         return false
     }
 
+    override fun onDispose() {
+        mapRenderer.disposeSafely()
+    }
 
 }
