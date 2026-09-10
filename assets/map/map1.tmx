@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<map version="1.10" tiledversion="1.12.2" orientation="orthogonal" renderorder="right-down" width="32" height="18" tilewidth="32" tileheight="32" infinite="0" nextlayerid="3" nextobjectid="1">
+<map version="1.10" tiledversion="1.12.2" orientation="orthogonal" renderorder="right-down" width="32" height="18" tilewidth="32" tileheight="32" infinite="0" nextlayerid="4" nextobjectid="1">
  <properties>
   <property name="mapMusic" value=""/>
  </properties>
@@ -13,7 +13,12 @@
  </layer>
  <layer id="2" name="ground" width="32" height="18">
   <data encoding="base64" compression="zlib">
-   eJxjYBgFo2AUjILhBzSAWAYLLkTCfCTgaSTaP4GAfCEBeZi9MGDKgN0/yBjZvU4kuncUjIKRBgC0owXW
+   eJxjYBgFo2AUgIDpQDtgFFAVaACxDBZciIT5SMDTSLR/AgH5QgLyMHthAJQ+sfkHGSO714lE946CUTDSAADwNgYL
+  </data>
+ </layer>
+ <layer id="3" name="fg" width="32" height="18">
+  <data encoding="base64" compression="zlib">
+   eJxjYBgFo2AUjALagSk4MKVqBxLgcudgde8oGAWjABMAAGRQC5E=
   </data>
  </layer>
 </map>

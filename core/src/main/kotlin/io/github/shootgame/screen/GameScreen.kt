@@ -15,6 +15,8 @@ import io.github.shootgame.component.AnimationComponent
 import io.github.shootgame.component.AnimationModel
 import io.github.shootgame.component.AnimationType
 import io.github.shootgame.component.ImageComponent
+import io.github.shootgame.event.MapChangeEvent
+import io.github.shootgame.event.fire
 import io.github.shootgame.system.AnimationSystem
 import io.github.shootgame.system.RenderSystem
 import ktx.app.KtxScreen
@@ -47,8 +49,8 @@ class GameScreen : KtxScreen {
     override fun show() {
        log.debug { "GameScreen get shown" }
 
-        TmxMapLoader().load("map/map1.tmx")
-
+        val tiledMap = TmxMapLoader().load("map/map1.tmx")
+        stage.fire(MapChangeEvent(tiledMap))
 
         world.entity {
             add<ImageComponent>{
