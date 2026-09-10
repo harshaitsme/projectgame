@@ -6,6 +6,7 @@ import com.badlogic.gdx.graphics.g2d.SpriteBatch
 import com.badlogic.gdx.graphics.g2d.TextureAtlas
 import com.badlogic.gdx.graphics.g2d.TextureRegion
 import com.badlogic.gdx.maps.tiled.TmxMapLoader
+import com.badlogic.gdx.scenes.scene2d.EventListener
 import com.badlogic.gdx.scenes.scene2d.Stage
 import com.badlogic.gdx.scenes.scene2d.ui.Image
 import com.badlogic.gdx.utils.Scaling
@@ -49,6 +50,12 @@ class GameScreen : KtxScreen {
     override fun show() {
        log.debug { "GameScreen get shown" }
 
+        /*We laod the map and fire this trigger event and hold the map event.handler*/
+        world.systems.forEach { system ->
+            if(system is EventListener){
+                stage.addListener(system)
+            }
+        }
         val tiledMap = TmxMapLoader().load("map/map1.tmx")
         stage.fire(MapChangeEvent(tiledMap))
 
