@@ -11,6 +11,7 @@ import com.badlogic.gdx.utils.Scaling
 import com.badlogic.gdx.utils.viewport.ExtendViewport
 import com.github.quillraven.fleks.World
 import io.github.shootgame.component.AnimationComponent
+import io.github.shootgame.component.AnimationModel
 import io.github.shootgame.component.AnimationType
 import io.github.shootgame.component.ImageComponent
 import io.github.shootgame.system.AnimationSystem
@@ -39,10 +40,7 @@ class GameScreen : KtxScreen {
 
   // ==================================================================================
 
-    /*This code area shows all the object we want to in game window if you want to add any object
-    * add it this  code area. remember : if you change any code block plc comment it properly
-    * if you want to show  any Component call `override fun show()` world.entity implanted fun
-    * because we used entity component system for that... */
+    /*Test Animation added here to test and see if it works. */
 
 
     override fun show() {
@@ -52,10 +50,131 @@ class GameScreen : KtxScreen {
             add<ImageComponent>{
                 image = Image().apply {
                     setSize(4f,4f)
+                    setPosition(3.5f,3f)
                 }
             }
             add<AnimationComponent> {
-                nextAnimation("", AnimationType.IDLE)
+                nextAnimation(AnimationModel.PLAYER, AnimationType.RUN)
+            }
+        }
+
+        world.entity {
+            add<ImageComponent>{
+                image = Image().apply {
+                    setSize(4f,4f)
+                    setPosition(1.5f,3f)
+                }
+            }
+            add<AnimationComponent> {
+                nextAnimation(AnimationModel.PLAYER, AnimationType.IDLE)
+            }
+        }
+
+        world.entity {
+            add<ImageComponent>{
+                image = Image().apply {
+                    setSize(4f,4f)
+                    setPosition(2.5f,3f)
+                }
+            }
+            add<AnimationComponent> {
+                nextAnimation(AnimationModel.PLAYER, AnimationType.WALK)
+            }
+        }
+
+        world.entity {
+            add<ImageComponent>{
+                image = Image().apply {
+                    setSize(4f,4f)
+                    setPosition(4.5f,3f)
+                }
+            }
+            add<AnimationComponent> {
+                nextAnimation(AnimationModel.PLAYER, AnimationType.ATTACK)
+            }
+        }
+
+        world.entity {
+            add<ImageComponent>{
+                image = Image().apply {
+                    setSize(4f,4f)
+                    setPosition(5.5f,3f)
+                }
+            }
+            add<AnimationComponent> {
+                nextAnimation(AnimationModel.PLAYER, AnimationType.HURT)
+            }
+        }
+
+        world.entity {
+            add<ImageComponent>{
+                image = Image().apply {
+                    setSize(4f,4f)
+                    setPosition(6.5f,3f)
+                }
+            }
+            add<AnimationComponent> {
+                nextAnimation(AnimationModel.PLAYER, AnimationType.DEAD)
+            }
+        }
+
+        world.entity {
+            add<ImageComponent>{
+                image = Image().apply {
+                    setSize(4f,4f)
+                    setPosition(7.5f,3f)
+                }
+            }
+            add<AnimationComponent> {
+                nextAnimation(AnimationModel.PLAYER, AnimationType.RECHARGE)
+            }
+        }
+
+        world.entity {
+            add<ImageComponent>{
+                image = Image().apply {
+                    setSize(4f,4f)
+                    setPosition(8.5f,3f)
+                }
+            }
+            add<AnimationComponent> {
+                nextAnimation(AnimationModel.PLAYER, AnimationType.GRENADE)
+            }
+        }
+
+        world.entity {
+            add<ImageComponent>{
+                image = Image().apply {
+                    setSize(4f,4f)
+                    setPosition(12.5f,3f)
+                }
+            }
+            add<AnimationComponent> {
+                nextAnimation(AnimationModel.PLAYER, AnimationType.EXPLOSION)
+            }
+        }
+
+        world.entity {
+            add<ImageComponent>{
+                image = Image().apply {
+                    setSize(4f,4f)
+                    setPosition(3f,1f)
+                }
+            }
+            add<AnimationComponent> {
+                nextAnimation(AnimationModel.PLAYER, AnimationType.SHOT1)
+            }
+        }
+
+        world.entity {
+            add<ImageComponent>{
+                image = Image().apply {
+                    setSize(4f,4f)
+                    setPosition(5f,1f)
+                }
+            }
+            add<AnimationComponent> {
+                nextAnimation(AnimationModel.PLAYER, AnimationType.SHOT2)
             }
         }
 

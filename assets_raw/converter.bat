@@ -1,1 +1,1 @@
-magick convert Idle.png -crop 128x128 Idle_S1/Idle_%02d.png
+magick convert Run.png -crop 128x128 Run_S1/Run_%02d.png
