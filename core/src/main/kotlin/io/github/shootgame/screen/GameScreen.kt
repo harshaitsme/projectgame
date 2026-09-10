@@ -5,6 +5,7 @@ import com.badlogic.gdx.graphics.g2d.Batch
 import com.badlogic.gdx.graphics.g2d.SpriteBatch
 import com.badlogic.gdx.graphics.g2d.TextureAtlas
 import com.badlogic.gdx.graphics.g2d.TextureRegion
+import com.badlogic.gdx.maps.tiled.TmxMapLoader
 import com.badlogic.gdx.scenes.scene2d.Stage
 import com.badlogic.gdx.scenes.scene2d.ui.Image
 import com.badlogic.gdx.utils.Scaling
@@ -45,6 +46,9 @@ class GameScreen : KtxScreen {
 
     override fun show() {
        log.debug { "GameScreen get shown" }
+
+        TmxMapLoader().load("map/map1.tmx")
+
 
         world.entity {
             add<ImageComponent>{
