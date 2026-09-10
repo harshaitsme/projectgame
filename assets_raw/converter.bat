@@ -1,0 +1,1 @@
+magick convert Idle.png -crop 128x128 Idle_S1/Idle_%02d.png

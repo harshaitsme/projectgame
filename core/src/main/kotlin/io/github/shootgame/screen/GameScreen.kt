@@ -10,7 +10,10 @@ import com.badlogic.gdx.scenes.scene2d.ui.Image
 import com.badlogic.gdx.utils.Scaling
 import com.badlogic.gdx.utils.viewport.ExtendViewport
 import com.github.quillraven.fleks.World
+import io.github.shootgame.component.AnimationComponent
+import io.github.shootgame.component.AnimationType
 import io.github.shootgame.component.ImageComponent
+import io.github.shootgame.system.AnimationSystem
 import io.github.shootgame.system.RenderSystem
 import ktx.app.KtxScreen
 import ktx.assets.disposeSafely
@@ -27,8 +30,10 @@ class GameScreen : KtxScreen {
     private val world: World = World {
 
         inject(stage)
+        inject(textureAtlas)
 
         componentListener<ImageComponent.Companion.ImageComponentListener>()
+            system<AnimationSystem>()
             system<RenderSystem>()
     }
 
@@ -45,11 +50,15 @@ class GameScreen : KtxScreen {
 
         world.entity {
             add<ImageComponent>{
-                image = Image(TextureRegion(textureAtlas.findRegion("Walk"),0,0, 128 ,128)).apply {
+                image = Image().apply {
                     setSize(4f,4f)
                 }
             }
+            add<AnimationComponent> {
+                nextAnimation("", AnimationType.IDLE)
+            }
         }
+
 
     }
 
