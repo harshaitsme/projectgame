@@ -1,1 +1,1 @@
-magick convert Run.png -crop 128x128 Run_S1/Run_%02d.png
+magick convert Shot1.png -crop 128x128 Shot1_S1/Shot1_%02d.png

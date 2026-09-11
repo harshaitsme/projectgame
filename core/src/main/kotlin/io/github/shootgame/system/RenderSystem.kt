@@ -10,6 +10,7 @@ import com.badlogic.gdx.scenes.scene2d.EventListener
 import com.badlogic.gdx.scenes.scene2d.Stage
 import com.github.quillraven.fleks.*
 import com.github.quillraven.fleks.collection.compareEntity
+import io.github.shootgame.Main.Companion.UNIT_SCALE
 import io.github.shootgame.component.ImageComponent
 import io.github.shootgame.event.MapChangeEvent
 import ktx.assets.disposeSafely
@@ -32,7 +33,7 @@ class RenderSystem(
     private val bgdLayers = mutableListOf<TiledMapTileLayer>()
     private val fgdLayers = mutableListOf<TiledMapTileLayer>()
 
-    private val mapRenderer = OrthogonalTiledMapRenderer(null,1/32f,stage.batch)
+    private val mapRenderer = OrthogonalTiledMapRenderer(null,UNIT_SCALE,stage.batch)
     private val orthoCam = stage.camera as OrthographicCamera
 
     override fun onTick() {
