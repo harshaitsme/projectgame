@@ -1,0 +1,503 @@
+
+PlayerObject.png
+size: 2048, 1024
+format: RGBA8888
+filter: Nearest, Nearest
+repeat: none
+Player/Attack
+  rotate: false
+  xy: 0, 0
+  size: 128, 128
+  orig: 128, 128
+  offset: 0, 0
+  index: 0
+Player/Attack
+  rotate: false
+  xy: 128, 0
+  size: 128, 128
+  orig: 128, 128
+  offset: 0, 0
+  index: 1
+Player/Attack
+  rotate: false
+  xy: 256, 0
+  size: 128, 128
+  orig: 128, 128
+  offset: 0, 0
+  index: 2
+Player/Dead
+  rotate: false
+  xy: 384, 0
+  size: 128, 128
+  orig: 128, 128
+  offset: 0, 0
+  index: 0
+Player/Dead
+  rotate: false
+  xy: 512, 0
+  size: 128, 128
+  orig: 128, 128
+  offset: 0, 0
+  index: 1
+Player/Dead
+  rotate: false
+  xy: 640, 0
+  size: 128, 128
+  orig: 128, 128
+  offset: 0, 0
+  index: 2
+Player/Dead
+  rotate: false
+  xy: 768, 0
+  size: 128, 128
+  orig: 128, 128
+  offset: 0, 0
+  index: 3
+Player/Explosion
+  rotate: false
+  xy: 896, 0
+  size: 128, 128
+  orig: 128, 128
+  offset: 0, 0
+  index: 0
+Player/Explosion
+  rotate: false
+  xy: 1024, 0
+  size: 128, 128
+  orig: 128, 128
+  offset: 0, 0
+  index: 1
+Player/Explosion
+  rotate: false
+  xy: 1152, 0
+  size: 128, 128
+  orig: 128, 128
+  offset: 0, 0
+  index: 2
+Player/Explosion
+  rotate: false
+  xy: 1280, 0
+  size: 128, 128
+  orig: 128, 128
+  offset: 0, 0
+  index: 3
+Player/Explosion
+  rotate: false
+  xy: 1408, 0
+  size: 128, 128
+  orig: 128, 128
+  offset: 0, 0
+  index: 4
+Player/Explosion
+  rotate: false
+  xy: 1536, 0
+  size: 128, 128
+  orig: 128, 128
+  offset: 0, 0
+  index: 5
+Player/Explosion
+  rotate: false
+  xy: 1664, 0
+  size: 128, 128
+  orig: 128, 128
+  offset: 0, 0
+  index: 6
+Player/Explosion
+  rotate: false
+  xy: 1792, 0
+  size: 128, 128
+  orig: 128, 128
+  offset: 0, 0
+  index: 7
+Player/Explosion
+  rotate: false
+  xy: 1920, 0
+  size: 128, 128
+  orig: 128, 128
+  offset: 0, 0
+  index: 8
+Player/Grenade
+  rotate: false
+  xy: 0, 128
+  size: 128, 128
+  orig: 128, 128
+  offset: 0, 0
+  index: 0
+Player/Grenade
+  rotate: false
+  xy: 128, 128
+  size: 128, 128
+  orig: 128, 128
+  offset: 0, 0
+  index: 1
+Player/Grenade
+  rotate: false
+  xy: 256, 128
+  size: 128, 128
+  orig: 128, 128
+  offset: 0, 0
+  index: 2
+Player/Grenade
+  rotate: false
+  xy: 384, 128
+  size: 128, 128
+  orig: 128, 128
+  offset: 0, 0
+  index: 3
+Player/Grenade
+  rotate: false
+  xy: 512, 128
+  size: 128, 128
+  orig: 128, 128
+  offset: 0, 0
+  index: 4
+Player/Grenade
+  rotate: false
+  xy: 640, 128
+  size: 128, 128
+  orig: 128, 128
+  offset: 0, 0
+  index: 5
+Player/Grenade
+  rotate: false
+  xy: 768, 128
+  size: 128, 128
+  orig: 128, 128
+  offset: 0, 0
+  index: 6
+Player/Grenade
+  rotate: false
+  xy: 896, 128
+  size: 128, 128
+  orig: 128, 128
+  offset: 0, 0
+  index: 7
+Player/Grenade
+  rotate: false
+  xy: 1024, 128
+  size: 128, 128
+  orig: 128, 128
+  offset: 0, 0
+  index: 8
+Player/Hurt
+  rotate: false
+  xy: 1152, 128
+  size: 128, 128
+  orig: 128, 128
+  offset: 0, 0
+  index: 0
+Player/Hurt
+  rotate: false
+  xy: 1280, 128
+  size: 128, 128
+  orig: 128, 128
+  offset: 0, 0
+  index: 1
+Player/Hurt
+  rotate: false
+  xy: 1408, 128
+  size: 128, 128
+  orig: 128, 128
+  offset: 0, 0
+  index: 2
+Player/Idle
+  rotate: false
+  xy: 1536, 128
+  size: 128, 128
+  orig: 128, 128
+  offset: 0, 0
+  index: 2
+Player/Idle
+  rotate: false
+  xy: 1536, 128
+  size: 128, 128
+  orig: 128, 128
+  offset: 0, 0
+  index: 4
+Player/Idle
+  rotate: false
+  xy: 1664, 128
+  size: 128, 128
+  orig: 128, 128
+  offset: 0, 0
+  index: 3
+Player/Idle
+  rotate: false
+  xy: 1792, 128
+  size: 128, 128
+  orig: 128, 128
+  offset: 0, 0
+  index: 5
+Player/Idle
+  rotate: false
+  xy: 1792, 128
+  size: 128, 128
+  orig: 128, 128
+  offset: 0, 0
+  index: 1
+Player/Idle
+  rotate: false
+  xy: 1920, 128
+  size: 128, 128
+  orig: 128, 128
+  offset: 0, 0
+  index: 6
+Player/Idle
+  rotate: false
+  xy: 1920, 128
+  size: 128, 128
+  orig: 128, 128
+  offset: 0, 0
+  index: 0
+Player/Recharge
+  rotate: false
+  xy: 0, 256
+  size: 128, 128
+  orig: 128, 128
+  offset: 0, 0
+  index: 0
+Player/Recharge
+  rotate: false
+  xy: 0, 256
+  size: 128, 128
+  orig: 128, 128
+  offset: 0, 0
+  index: 12
+Player/Recharge
+  rotate: false
+  xy: 128, 256
+  size: 128, 128
+  orig: 128, 128
+  offset: 0, 0
+  index: 1
+Player/Recharge
+  rotate: false
+  xy: 256, 256
+  size: 128, 128
+  orig: 128, 128
+  offset: 0, 0
+  index: 2
+Player/Recharge
+  rotate: false
+  xy: 384, 256
+  size: 128, 128
+  orig: 128, 128
+  offset: 0, 0
+  index: 3
+Player/Recharge
+  rotate: false
+  xy: 512, 256
+  size: 128, 128
+  orig: 128, 128
+  offset: 0, 0
+  index: 4
+Player/Recharge
+  rotate: false
+  xy: 640, 256
+  size: 128, 128
+  orig: 128, 128
+  offset: 0, 0
+  index: 5
+Player/Recharge
+  rotate: false
+  xy: 768, 256
+  size: 128, 128
+  orig: 128, 128
+  offset: 0, 0
+  index: 6
+Player/Recharge
+  rotate: false
+  xy: 896, 256
+  size: 128, 128
+  orig: 128, 128
+  offset: 0, 0
+  index: 7
+Player/Recharge
+  rotate: false
+  xy: 1024, 256
+  size: 128, 128
+  orig: 128, 128
+  offset: 0, 0
+  index: 8
+Player/Recharge
+  rotate: false
+  xy: 1152, 256
+  size: 128, 128
+  orig: 128, 128
+  offset: 0, 0
+  index: 9
+Player/Recharge
+  rotate: false
+  xy: 1280, 256
+  size: 128, 128
+  orig: 128, 128
+  offset: 0, 0
+  index: 10
+Player/Recharge
+  rotate: false
+  xy: 1408, 256
+  size: 128, 128
+  orig: 128, 128
+  offset: 0, 0
+  index: 11
+Player/Run
+  rotate: false
+  xy: 1536, 256
+  size: 128, 128
+  orig: 128, 128
+  offset: 0, 0
+  index: 0
+Player/Run
+  rotate: false
+  xy: 1664, 256
+  size: 128, 128
+  orig: 128, 128
+  offset: 0, 0
+  index: 1
+Player/Run
+  rotate: false
+  xy: 1792, 256
+  size: 128, 128
+  orig: 128, 128
+  offset: 0, 0
+  index: 2
+Player/Run
+  rotate: false
+  xy: 1920, 256
+  size: 128, 128
+  orig: 128, 128
+  offset: 0, 0
+  index: 3
+Player/Run
+  rotate: false
+  xy: 0, 384
+  size: 128, 128
+  orig: 128, 128
+  offset: 0, 0
+  index: 4
+Player/Run
+  rotate: false
+  xy: 128, 384
+  size: 128, 128
+  orig: 128, 128
+  offset: 0, 0
+  index: 5
+Player/Run
+  rotate: false
+  xy: 256, 384
+  size: 128, 128
+  orig: 128, 128
+  offset: 0, 0
+  index: 6
+Player/Run
+  rotate: false
+  xy: 384, 384
+  size: 128, 128
+  orig: 128, 128
+  offset: 0, 0
+  index: 7
+Player/Shot1
+  rotate: false
+  xy: 512, 384
+  size: 128, 128
+  orig: 128, 128
+  offset: 0, 0
+  index: 0
+Player/Shot1
+  rotate: false
+  xy: 640, 384
+  size: 128, 128
+  orig: 128, 128
+  offset: 0, 0
+  index: 1
+Player/Shot1
+  rotate: false
+  xy: 768, 384
+  size: 128, 128
+  orig: 128, 128
+  offset: 0, 0
+  index: 2
+Player/Shot1
+  rotate: false
+  xy: 896, 384
+  size: 128, 128
+  orig: 128, 128
+  offset: 0, 0
+  index: 3
+Player/Shot2
+  rotate: false
+  xy: 1024, 384
+  size: 128, 128
+  orig: 128, 128
+  offset: 0, 0
+  index: 0
+Player/Shot2
+  rotate: false
+  xy: 1152, 384
+  size: 128, 128
+  orig: 128, 128
+  offset: 0, 0
+  index: 1
+Player/Shot2
+  rotate: false
+  xy: 1280, 384
+  size: 128, 128
+  orig: 128, 128
+  offset: 0, 0
+  index: 2
+Player/Shot2
+  rotate: false
+  xy: 1408, 384
+  size: 128, 128
+  orig: 128, 128
+  offset: 0, 0
+  index: 3
+Player/Walk
+  rotate: false
+  xy: 1536, 384
+  size: 128, 128
+  orig: 128, 128
+  offset: 0, 0
+  index: 0
+Player/Walk
+  rotate: false
+  xy: 1664, 384
+  size: 128, 128
+  orig: 128, 128
+  offset: 0, 0
+  index: 1
+Player/Walk
+  rotate: false
+  xy: 1792, 384
+  size: 128, 128
+  orig: 128, 128
+  offset: 0, 0
+  index: 2
+Player/Walk
+  rotate: false
+  xy: 1920, 384
+  size: 128, 128
+  orig: 128, 128
+  offset: 0, 0
+  index: 3
+Player/Walk
+  rotate: false
+  xy: 0, 512
+  size: 128, 128
+  orig: 128, 128
+  offset: 0, 0
+  index: 4
+Player/Walk
+  rotate: false
+  xy: 128, 512
+  size: 128, 128
+  orig: 128, 128
+  offset: 0, 0
+  index: 5
+Player/Walk
+  rotate: false
+  xy: 256, 512
+  size: 128, 128
+  orig: 128, 128
+  offset: 0, 0
+  index: 6

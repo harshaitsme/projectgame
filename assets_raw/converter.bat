@@ -1,0 +1,1 @@
+magick convert Run.png -crop 128x128 Run_S1/Run_%02d.png
