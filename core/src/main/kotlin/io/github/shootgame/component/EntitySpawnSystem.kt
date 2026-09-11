@@ -5,6 +5,7 @@ import com.badlogic.gdx.scenes.scene2d.EventListener
 import com.github.quillraven.fleks.AllOf
 import com.github.quillraven.fleks.Entity
 import com.github.quillraven.fleks.IteratingSystem
+import io.github.shootgame.Main.Companion.UNIT_SCALE
 import io.github.shootgame.event.MapChangeEvent
 import ktx.app.gdxError
 import ktx.tiled.layer
@@ -30,7 +31,7 @@ class EntitySpawnSystem : EventListener, IteratingSystem() {
                     world.entity {
                         add <SpawnComponent>{
                             this.type = type
-                            this.location.set(mapObject.x,mapObject.y)
+                            this.location.set(mapObject.x*UNIT_SCALE,mapObject.y*UNIT_SCALE)
                         }
                     }
                 }
