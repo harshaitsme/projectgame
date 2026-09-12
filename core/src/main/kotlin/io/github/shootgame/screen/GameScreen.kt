@@ -16,6 +16,7 @@ import com.github.quillraven.fleks.World
 import io.github.shootgame.component.AnimationComponent
 import io.github.shootgame.component.AnimationModel
 import io.github.shootgame.component.AnimationType
+import io.github.shootgame.component.EntitySpawnSystem
 import io.github.shootgame.component.ImageComponent
 import io.github.shootgame.event.MapChangeEvent
 import io.github.shootgame.event.fire
@@ -41,6 +42,7 @@ class GameScreen : KtxScreen {
         inject(textureAtlas)
 
         componentListener<ImageComponent.Companion.ImageComponentListener>()
+            system<EntitySpawnSystem>()
             system<AnimationSystem>()
             system<RenderSystem>()
     }
@@ -62,147 +64,9 @@ class GameScreen : KtxScreen {
         currentMap = TmxMapLoader().load("map/map1.tmx")
         stage.fire(MapChangeEvent(currentMap!!))
 
-        world.entity {
-            add<ImageComponent>{
-                image = Image().apply {
-                    setSize(4f,4f)
-                    setPosition(3.5f,3f)
-                }
-            }
-            add<AnimationComponent> {
-                nextAnimation(AnimationModel.PLAYER, AnimationType.RUN)
-            }
-        }
-
-        world.entity {
-            add<ImageComponent>{
-                image = Image().apply {
-                    setSize(4f,4f)
-                    setPosition(1.5f,3f)
-                }
-            }
-            add<AnimationComponent> {
-                nextAnimation(AnimationModel.PLAYER, AnimationType.IDLE)
-            }
-        }
-
-        world.entity {
-            add<ImageComponent>{
-                image = Image().apply {
-                    setSize(4f,4f)
-                    setPosition(2.5f,3f)
-                }
-            }
-            add<AnimationComponent> {
-                nextAnimation(AnimationModel.PLAYER, AnimationType.WALK)
-            }
-        }
-
-        world.entity {
-            add<ImageComponent>{
-                image = Image().apply {
-                    setSize(4f,4f)
-                    setPosition(4.5f,3f)
-                }
-            }
-            add<AnimationComponent> {
-                nextAnimation(AnimationModel.PLAYER, AnimationType.ATTACK)
-            }
-        }
-
-        world.entity {
-            add<ImageComponent>{
-                image = Image().apply {
-                    setSize(4f,4f)
-                    setPosition(5.5f,3f)
-                }
-            }
-            add<AnimationComponent> {
-                nextAnimation(AnimationModel.PLAYER, AnimationType.HURT)
-            }
-        }
-
-        world.entity {
-            add<ImageComponent>{
-                image = Image().apply {
-                    setSize(4f,4f)
-                    setPosition(6.5f,3f)
-                }
-            }
-            add<AnimationComponent> {
-                nextAnimation(AnimationModel.PLAYER, AnimationType.DEAD)
-            }
-        }
-
-        world.entity {
-            add<ImageComponent>{
-                image = Image().apply {
-                    setSize(4f,4f)
-                    setPosition(7.5f,3f)
-                }
-            }
-            add<AnimationComponent> {
-                nextAnimation(AnimationModel.PLAYER, AnimationType.RECHARGE)
-            }
-        }
-
-        world.entity {
-            add<ImageComponent>{
-                image = Image().apply {
-                    setSize(4f,4f)
-                    setPosition(8.5f,3f)
-                }
-            }
-            add<AnimationComponent> {
-                nextAnimation(AnimationModel.PLAYER, AnimationType.GRENADE)
-            }
-        }
-
-        world.entity {
-            add<ImageComponent>{
-                image = Image().apply {
-                    setSize(4f,4f)
-                    setPosition(12.5f,3f)
-                }
-            }
-            add<AnimationComponent> {
-                nextAnimation(AnimationModel.PLAYER, AnimationType.EXPLOSION)
-            }
-        }
-
-        world.entity {
-            add<ImageComponent>{
-                image = Image().apply {
-                    setSize(4f,4f)
-                    setPosition(3f,1f)
-                }
-            }
-            add<AnimationComponent> {
-                nextAnimation(AnimationModel.PLAYER, AnimationType.SHOT1)
-            }
-        }
-
-        world.entity {
-            add<ImageComponent>{
-                image = Image().apply {
-                    setSize(4f,4f)
-                    setPosition(5f,1f)
-                }
-            }
-            add<AnimationComponent> {
-                nextAnimation(AnimationModel.PLAYER, AnimationType.SHOT2)
-            }
-        }
-
-
     }
 
     // ==================================================================================
-
-
-
-
-
     override fun resize(width: Int, height: Int) {
         stage.viewport.update(width,height,true)
     }
