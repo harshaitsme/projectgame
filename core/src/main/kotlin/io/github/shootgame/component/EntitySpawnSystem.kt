@@ -32,7 +32,7 @@ class EntitySpawnSystem(
             add<ImageComponent> {
                 image = Image().apply {
                     setPosition(spawnCmp.location.x, spawnCmp.location.y)
-                    setSize(1f,1f)
+                    setSize(4f,4f)
                     setScaling(Scaling.fill)
                 }
             }
