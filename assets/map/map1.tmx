@@ -28,6 +28,6 @@
   </data>
  </layer>
  <objectgroup id="4" name="entities">
-  <object id="1" type="Player" gid="170" x="286" y="319" width="128" height="128"/>
+  <object id="1" type="Player" gid="170" x="335" y="469" width="128" height="128"/>
  </objectgroup>
 </map>
