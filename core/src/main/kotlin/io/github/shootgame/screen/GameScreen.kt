@@ -5,6 +5,7 @@ import com.badlogic.gdx.graphics.g2d.Batch
 import com.badlogic.gdx.graphics.g2d.SpriteBatch
 import com.badlogic.gdx.graphics.g2d.TextureAtlas
 import com.badlogic.gdx.graphics.g2d.TextureRegion
+import com.badlogic.gdx.maps.tiled.TiledMap
 import com.badlogic.gdx.maps.tiled.TmxMapLoader
 import com.badlogic.gdx.scenes.scene2d.EventListener
 import com.badlogic.gdx.scenes.scene2d.Stage
@@ -32,6 +33,8 @@ class GameScreen : KtxScreen {
     private val stage: Stage = Stage(ExtendViewport(16f,9f));
     private val textureAtlas = TextureAtlas("graphics/PlayerObject.atlas")
 
+    private var currentMap: TiledMap? = null
+
     private val world: World = World {
 
         inject(stage)
@@ -56,8 +59,8 @@ class GameScreen : KtxScreen {
                 stage.addListener(system)
             }
         }
-        val tiledMap = TmxMapLoader().load("map/map1.tmx")
-        stage.fire(MapChangeEvent(tiledMap))
+        currentMap = TmxMapLoader().load("map/map1.tmx")
+        stage.fire(MapChangeEvent(currentMap!!))
 
         world.entity {
             add<ImageComponent>{
@@ -214,6 +217,7 @@ class GameScreen : KtxScreen {
         stage.disposeSafely()
         textureAtlas.disposeSafely()
         world.dispose()
+        currentMap?.disposeSafely()
     }
 
     companion object{

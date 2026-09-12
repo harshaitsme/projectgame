@@ -15,5 +15,9 @@ class Main : KtxGame<KtxScreen>() {
         addScreen(GameScreen())
         setScreen<GameScreen>()
     }
+
+    companion object{
+        const val UNIT_SCALE = 1/32f
+    }
 }
 
