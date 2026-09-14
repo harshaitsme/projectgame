@@ -1,29 +1,26 @@
 package io.github.shootgame.screen
 
-import com.badlogic.gdx.graphics.Texture
 import com.badlogic.gdx.graphics.g2d.Batch
 import com.badlogic.gdx.graphics.g2d.SpriteBatch
 import com.badlogic.gdx.graphics.g2d.TextureAtlas
-import com.badlogic.gdx.graphics.g2d.TextureRegion
 import com.badlogic.gdx.maps.tiled.TiledMap
 import com.badlogic.gdx.maps.tiled.TmxMapLoader
 import com.badlogic.gdx.scenes.scene2d.EventListener
 import com.badlogic.gdx.scenes.scene2d.Stage
-import com.badlogic.gdx.scenes.scene2d.ui.Image
-import com.badlogic.gdx.utils.Scaling
 import com.badlogic.gdx.utils.viewport.ExtendViewport
 import com.github.quillraven.fleks.World
-import io.github.shootgame.component.AnimationComponent
-import io.github.shootgame.component.AnimationModel
-import io.github.shootgame.component.AnimationType
+import io.github.shootgame.system.EntitySpawnSystem
 import io.github.shootgame.component.ImageComponent
+import io.github.shootgame.component.PhysicComponent
 import io.github.shootgame.event.MapChangeEvent
 import io.github.shootgame.event.fire
 import io.github.shootgame.system.AnimationSystem
 import io.github.shootgame.system.RenderSystem
 import ktx.app.KtxScreen
 import ktx.assets.disposeSafely
+import ktx.box2d.createWorld
 import ktx.log.logger
+import ktx.math.vec2
 
 
 //game screen shown and dispose things |
@@ -34,13 +31,18 @@ class GameScreen : KtxScreen {
     private val textureAtlas = TextureAtlas("graphics/PlayerObject.atlas")
 
     private var currentMap: TiledMap? = null
-
-    private val world: World = World {
+    private val phWorld = createWorld(gravity = vec2()).apply {
+        autoClearForces = false
+    }
+    private val eWorld: World = World {
 
         inject(stage)
         inject(textureAtlas)
+        inject(phWorld)
 
         componentListener<ImageComponent.Companion.ImageComponentListener>()
+        componentListener<PhysicComponent.Companion.PhysicComponentListener>()
+            system<EntitySpawnSystem>()
             system<AnimationSystem>()
             system<RenderSystem>()
     }
@@ -54,7 +56,7 @@ class GameScreen : KtxScreen {
        log.debug { "GameScreen get shown" }
 
         /*We laod the map and fire this trigger event and hold the map event.handler*/
-        world.systems.forEach { system ->
+        eWorld.systems.forEach { system ->
             if(system is EventListener){
                 stage.addListener(system)
             }
@@ -62,153 +64,15 @@ class GameScreen : KtxScreen {
         currentMap = TmxMapLoader().load("map/map1.tmx")
         stage.fire(MapChangeEvent(currentMap!!))
 
-        world.entity {
-            add<ImageComponent>{
-                image = Image().apply {
-                    setSize(4f,4f)
-                    setPosition(3.5f,3f)
-                }
-            }
-            add<AnimationComponent> {
-                nextAnimation(AnimationModel.PLAYER, AnimationType.RUN)
-            }
-        }
-
-        world.entity {
-            add<ImageComponent>{
-                image = Image().apply {
-                    setSize(4f,4f)
-                    setPosition(1.5f,3f)
-                }
-            }
-            add<AnimationComponent> {
-                nextAnimation(AnimationModel.PLAYER, AnimationType.IDLE)
-            }
-        }
-
-        world.entity {
-            add<ImageComponent>{
-                image = Image().apply {
-                    setSize(4f,4f)
-                    setPosition(2.5f,3f)
-                }
-            }
-            add<AnimationComponent> {
-                nextAnimation(AnimationModel.PLAYER, AnimationType.WALK)
-            }
-        }
-
-        world.entity {
-            add<ImageComponent>{
-                image = Image().apply {
-                    setSize(4f,4f)
-                    setPosition(4.5f,3f)
-                }
-            }
-            add<AnimationComponent> {
-                nextAnimation(AnimationModel.PLAYER, AnimationType.ATTACK)
-            }
-        }
-
-        world.entity {
-            add<ImageComponent>{
-                image = Image().apply {
-                    setSize(4f,4f)
-                    setPosition(5.5f,3f)
-                }
-            }
-            add<AnimationComponent> {
-                nextAnimation(AnimationModel.PLAYER, AnimationType.HURT)
-            }
-        }
-
-        world.entity {
-            add<ImageComponent>{
-                image = Image().apply {
-                    setSize(4f,4f)
-                    setPosition(6.5f,3f)
-                }
-            }
-            add<AnimationComponent> {
-                nextAnimation(AnimationModel.PLAYER, AnimationType.DEAD)
-            }
-        }
-
-        world.entity {
-            add<ImageComponent>{
-                image = Image().apply {
-                    setSize(4f,4f)
-                    setPosition(7.5f,3f)
-                }
-            }
-            add<AnimationComponent> {
-                nextAnimation(AnimationModel.PLAYER, AnimationType.RECHARGE)
-            }
-        }
-
-        world.entity {
-            add<ImageComponent>{
-                image = Image().apply {
-                    setSize(4f,4f)
-                    setPosition(8.5f,3f)
-                }
-            }
-            add<AnimationComponent> {
-                nextAnimation(AnimationModel.PLAYER, AnimationType.GRENADE)
-            }
-        }
-
-        world.entity {
-            add<ImageComponent>{
-                image = Image().apply {
-                    setSize(4f,4f)
-                    setPosition(12.5f,3f)
-                }
-            }
-            add<AnimationComponent> {
-                nextAnimation(AnimationModel.PLAYER, AnimationType.EXPLOSION)
-            }
-        }
-
-        world.entity {
-            add<ImageComponent>{
-                image = Image().apply {
-                    setSize(4f,4f)
-                    setPosition(3f,1f)
-                }
-            }
-            add<AnimationComponent> {
-                nextAnimation(AnimationModel.PLAYER, AnimationType.SHOT1)
-            }
-        }
-
-        world.entity {
-            add<ImageComponent>{
-                image = Image().apply {
-                    setSize(4f,4f)
-                    setPosition(5f,1f)
-                }
-            }
-            add<AnimationComponent> {
-                nextAnimation(AnimationModel.PLAYER, AnimationType.SHOT2)
-            }
-        }
-
-
     }
 
     // ==================================================================================
-
-
-
-
-
     override fun resize(width: Int, height: Int) {
         stage.viewport.update(width,height,true)
     }
 
     override fun render(delta: Float) {
-        world.update(delta)
+        eWorld.update(delta.coerceAtMost(0.25f))
     }
 
 
@@ -216,8 +80,9 @@ class GameScreen : KtxScreen {
     override fun dispose() {
         stage.disposeSafely()
         textureAtlas.disposeSafely()
-        world.dispose()
+        eWorld.dispose()
         currentMap?.disposeSafely()
+        phWorld.disposeSafely()
     }
 
     companion object{
