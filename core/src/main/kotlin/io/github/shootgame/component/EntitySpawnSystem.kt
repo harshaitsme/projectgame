@@ -16,6 +16,7 @@ import io.github.shootgame.Main.Companion.UNIT_SCALE
 import io.github.shootgame.component.PhysicComponent.Companion.physicCmpFromImage
 import io.github.shootgame.event.MapChangeEvent
 import ktx.app.gdxError
+import ktx.box2d.box
 import ktx.math.vec2
 import ktx.tiled.layer
 import ktx.tiled.type
@@ -50,7 +51,11 @@ class EntitySpawnSystem(
             }
 
             physicCmpFromImage(phWorld,imageCmp.image, BodyDef.BodyType.DynamicBody){ phWorld, width, height ->
-
+                box(width,height){
+                    isSensor = false
+//                    userData = "INTERACTION_SENSOR"
+//                    friction =
+                }
 
             }
         }

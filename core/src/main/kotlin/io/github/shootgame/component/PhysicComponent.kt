@@ -4,6 +4,9 @@ import com.badlogic.gdx.physics.box2d.Body
 import com.badlogic.gdx.physics.box2d.BodyDef
 import com.badlogic.gdx.physics.box2d.World
 import com.badlogic.gdx.scenes.scene2d.ui.Image
+import com.github.quillraven.fleks.ComponentListener
+import com.github.quillraven.fleks.ComponentMapper
+import com.github.quillraven.fleks.Entity
 import com.github.quillraven.fleks.EntityCreateCfg
 import ktx.box2d.BodyDefinition
 import ktx.box2d.body
@@ -33,5 +36,23 @@ class PhysicComponent {
                 }
             }
         }
-    }
+
+        class PhysicComponentListener : ComponentListener<PhysicComponent>{
+
+            override fun onComponentAdded(entity: Entity, component: PhysicComponent) {
+                component.body.userData = entity
+            }
+
+            override fun onComponentRemoved(
+                entity: Entity,
+                component: PhysicComponent
+            ) {
+                val body = component.body
+                body.world.destroyBody(component.body)
+                body.userData = null
+            }
+        }
+
+
+        }
 }
