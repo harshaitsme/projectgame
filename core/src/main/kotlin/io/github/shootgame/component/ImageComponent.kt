@@ -34,7 +34,7 @@ class ImageComponent : Comparable<ImageComponent> {
             }
 
             override fun onComponentRemoved(entity: Entity, component: ImageComponent) {
-                stage.root.removeActor(component.image)
+                component.image.remove()
             }
         }
     }

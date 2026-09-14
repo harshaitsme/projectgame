@@ -1,6 +1,5 @@
 package io.github.shootgame.system
 
-import com.artemis.annotations.All
 import com.badlogic.gdx.scenes.scene2d.Stage
 import com.github.quillraven.fleks.*
 import com.github.quillraven.fleks.collection.compareEntity
