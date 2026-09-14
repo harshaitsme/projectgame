@@ -1,5 +1,8 @@
 package io.github.shootgame.screen
 
+import com.badlogic.gdx.graphics.Texture
+import com.badlogic.gdx.scenes.scene2d.Stage
+import com.badlogic.gdx.scenes.scene2d.ui.Image
 import com.badlogic.gdx.graphics.g2d.Batch
 import com.badlogic.gdx.graphics.g2d.SpriteBatch
 import com.badlogic.gdx.graphics.g2d.TextureAtlas
@@ -26,6 +29,8 @@ import ktx.math.vec2
 //game screen shown and dispose things |
 class GameScreen : KtxScreen {
 
+    private val stage: Stage = Stage(ExtendViewport(16f,9f))
+    private val texture: Texture = Texture("graphics/player.png")
     private val spriteBatch : Batch = SpriteBatch()
     private val stage: Stage = Stage(ExtendViewport(16f,9f));
     private val textureAtlas = TextureAtlas("graphics/PlayerObject.atlas")
