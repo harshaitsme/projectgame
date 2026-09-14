@@ -1,4 +1,4 @@
-package io.github.shootgame.component
+package io.github.shootgame.system
 
 import com.badlogic.gdx.graphics.g2d.TextureAtlas
 import com.badlogic.gdx.math.Vector2
@@ -12,8 +12,14 @@ import com.github.quillraven.fleks.AllOf
 import com.github.quillraven.fleks.ComponentMapper
 import com.github.quillraven.fleks.Entity
 import com.github.quillraven.fleks.IteratingSystem
-import io.github.shootgame.Main.Companion.UNIT_SCALE
+import io.github.shootgame.Main
+import io.github.shootgame.component.AnimationComponent
+import io.github.shootgame.component.AnimationModel
+import io.github.shootgame.component.AnimationType
+import io.github.shootgame.component.ImageComponent
 import io.github.shootgame.component.PhysicComponent.Companion.physicCmpFromImage
+import io.github.shootgame.component.SpawnCfg
+import io.github.shootgame.component.SpawnComponent
 import io.github.shootgame.event.MapChangeEvent
 import ktx.app.gdxError
 import ktx.box2d.box
@@ -76,7 +82,7 @@ class EntitySpawnSystem(
         }
 
         val firstFrame = regions.first()
-        vec2(firstFrame.originalWidth * UNIT_SCALE, firstFrame.originalHeight * UNIT_SCALE)
+        vec2(firstFrame.originalWidth * Main.UNIT_SCALE, firstFrame.originalHeight * Main.UNIT_SCALE)
     }
 
     override fun handle(event: Event?): Boolean {
@@ -90,7 +96,7 @@ class EntitySpawnSystem(
                     world.entity {
                         add <SpawnComponent>{
                             this.type = type
-                            this.location.set(mapObject.x*UNIT_SCALE,mapObject.y*UNIT_SCALE)
+                            this.location.set(mapObject.x* Main.UNIT_SCALE,mapObject.y* Main.UNIT_SCALE)
                         }
                     }
                 }

@@ -9,8 +9,9 @@ import com.badlogic.gdx.scenes.scene2d.EventListener
 import com.badlogic.gdx.scenes.scene2d.Stage
 import com.badlogic.gdx.utils.viewport.ExtendViewport
 import com.github.quillraven.fleks.World
-import io.github.shootgame.component.EntitySpawnSystem
+import io.github.shootgame.system.EntitySpawnSystem
 import io.github.shootgame.component.ImageComponent
+import io.github.shootgame.component.PhysicComponent
 import io.github.shootgame.event.MapChangeEvent
 import io.github.shootgame.event.fire
 import io.github.shootgame.system.AnimationSystem
@@ -40,6 +41,7 @@ class GameScreen : KtxScreen {
         inject(phWorld)
 
         componentListener<ImageComponent.Companion.ImageComponentListener>()
+        componentListener<PhysicComponent.Companion.PhysicComponentListener>()
             system<EntitySpawnSystem>()
             system<AnimationSystem>()
             system<RenderSystem>()
