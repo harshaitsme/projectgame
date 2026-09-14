@@ -10,7 +10,7 @@ This project was generated with a template that includes Kotlin application laun
 - `android`: Android mobile platform. Needs Android SDK.
 - `server`: A separate application without access to the `core` module.
 
-## Gradle
+## Gradle    
 
 This project uses [Gradle](https://gradle.org/) to manage dependencies.
 The Gradle wrapper was included, so you can run Gradle tasks using `gradlew.bat` or `./gradlew` commands.

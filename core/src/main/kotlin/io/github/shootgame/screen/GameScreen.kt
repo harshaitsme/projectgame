@@ -72,7 +72,7 @@ class GameScreen : KtxScreen {
     }
 
     override fun render(delta: Float) {
-        eWorld.update(delta)
+        eWorld.update(delta.coerceAtMost(0.25f))
     }
 
 
