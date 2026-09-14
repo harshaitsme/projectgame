@@ -1,0 +1,1 @@
+magick convert Shot1.png -crop 128x128 Shot1_S1/Shot1_%02d.png
