@@ -2,6 +2,8 @@ package io.github.shootgame.component
 
 import com.badlogic.gdx.graphics.g2d.TextureAtlas
 import com.badlogic.gdx.math.Vector2
+import com.badlogic.gdx.physics.box2d.BodyDef
+import com.badlogic.gdx.physics.box2d.World
 import com.badlogic.gdx.scenes.scene2d.Event
 import com.badlogic.gdx.scenes.scene2d.EventListener
 import com.badlogic.gdx.scenes.scene2d.ui.Image
@@ -11,6 +13,7 @@ import com.github.quillraven.fleks.ComponentMapper
 import com.github.quillraven.fleks.Entity
 import com.github.quillraven.fleks.IteratingSystem
 import io.github.shootgame.Main.Companion.UNIT_SCALE
+import io.github.shootgame.component.PhysicComponent.Companion.physicCmpFromImage
 import io.github.shootgame.event.MapChangeEvent
 import ktx.app.gdxError
 import ktx.math.vec2
@@ -21,6 +24,7 @@ import ktx.tiled.y
 
 @AllOf([SpawnComponent::class])
 class EntitySpawnSystem(
+    private val phWorld: World,
     private val atlas: TextureAtlas,
     private val spawnCmps: ComponentMapper<SpawnComponent>,
 ) : EventListener, IteratingSystem() {
@@ -33,7 +37,7 @@ class EntitySpawnSystem(
         val cfg = spawnCfg(spawnCmp.type)
 
         world.entity {
-            add<ImageComponent> {
+          val imageCmp =   add<ImageComponent> {
                 image = Image().apply {
                     val size = size(cfg.model)
                     setPosition(spawnCmp.location.x, spawnCmp.location.y)
@@ -43,6 +47,11 @@ class EntitySpawnSystem(
             }
             add<AnimationComponent> {
                 nextAnimation(cfg.model, AnimationType.IDLE)
+            }
+
+            physicCmpFromImage(phWorld,imageCmp.image, BodyDef.BodyType.DynamicBody){ phWorld, width, height ->
+
+
             }
         }
         world.remove(entity)
