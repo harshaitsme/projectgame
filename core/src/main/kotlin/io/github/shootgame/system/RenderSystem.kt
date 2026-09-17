@@ -23,6 +23,7 @@ import ktx.tiled.forEachLayer
 @AllOf([ImageComponent::class])
 class RenderSystem(
     private val stage: Stage,
+    @Qualifier("uiStage") private val uiStage: Stage,
     private val imageCmps: ComponentMapper<ImageComponent>,
     private val playerCmps: ComponentMapper<PlayerComponent>
 ) : EventListener, IteratingSystem(
@@ -64,6 +65,12 @@ class RenderSystem(
                     fgdLayers.forEach { mapRenderer.renderTileLayer(it) }
                 }
             }
+        }
+
+        with(uiStage) {
+            viewport.apply()
+            act(deltaTime)
+            draw()
         }
     }
 

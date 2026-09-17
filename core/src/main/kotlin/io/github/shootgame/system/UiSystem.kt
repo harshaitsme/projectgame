@@ -10,9 +10,10 @@ import com.badlogic.gdx.scenes.scene2d.ui.Image
 import com.badlogic.gdx.scenes.scene2d.ui.Table
 import com.badlogic.gdx.scenes.scene2d.utils.ClickListener
 import com.github.quillraven.fleks.IntervalSystem
+import com.github.quillraven.fleks.Qualifier
 
 class UiSystem(
-    private val stage: Stage
+    @Qualifier("uiStage") private val uiStage: Stage
 ) : IntervalSystem() {
 
     var touchUp = false
@@ -45,8 +46,8 @@ class UiSystem(
         table.setFillParent(true)
         table.bottom().left()
 
-        // 2f units = 64 pixels at 32 pixels/unit scale (Main.UNIT_SCALE = 1/32)
-        val btnSize = 2f
+        // Size in pixels for ScreenViewport
+        val btnSize = 100f
         val btnUp = createButton { touchUp = it }
         val btnDown = createButton { touchDown = it }
         val btnLeft = createButton { touchLeft = it }
@@ -65,8 +66,8 @@ class UiSystem(
         dpadTable.add(btnDown).size(btnSize)
         dpadTable.add().size(btnSize)
 
-        table.add(dpadTable).pad(0.5f)
-        stage.addActor(table)
+        table.add(dpadTable).pad(20f)
+        uiStage.addActor(table)
     }
 
     private fun createButton(action: (Boolean) -> Unit): Image {
@@ -85,13 +86,7 @@ class UiSystem(
     }
 
     override fun onTick() {
-        // Keep UI at the front of the stage
-        stage.root.children.lastOrNull()?.let { last ->
-            val table = stage.root.findActor<Table>("uiTable")
-            if (table != null && last != table) {
-                table.toFront()
-            }
-        }
+        // uiStage.act(deltaTime) is handled by RenderSystem or here
     }
 
     override fun onDispose() {
