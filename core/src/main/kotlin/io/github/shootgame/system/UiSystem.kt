@@ -41,6 +41,7 @@ class UiSystem(
 
     private fun setupTouchControls() {
         val table = Table()
+        table.name = "uiTable"
         table.setFillParent(true)
         table.bottom().left()
 
@@ -83,7 +84,15 @@ class UiSystem(
         }
     }
 
-    override fun onTick() = Unit
+    override fun onTick() {
+        // Keep UI at the front of the stage
+        stage.root.children.lastOrNull()?.let { last ->
+            val table = stage.root.findActor<Table>("uiTable")
+            if (table != null && last != table) {
+                table.toFront()
+            }
+        }
+    }
 
     override fun onDispose() {
         touchTexture?.dispose()

@@ -41,7 +41,7 @@ class MoveSystem(
         if (entity in imageCmps && moveCmp.cos != 0f) {
             val image = imageCmps[entity].image
             image.originX = image.width * 0.5f
-            image.setScaleX(if (moveCmp.cos < 0f) -1f else 1f)
+            image.scaleX = if (moveCmp.cos < 0f) -1f else 1f
         }
     }
 }
