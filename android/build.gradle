@@ -22,6 +22,14 @@ android {
       jniLibs.setSrcDirs(['libs'])
     }
   }
+
+  // Task to copy raw assets into the assets folder so they are available at runtime
+  tasks.register('copyAssetsRaw', Copy) {
+    from '../assets_raw'
+    into '../assets/assets_raw'
+  }
+
+  tasks.matching { it.name.contains("merge") && it.name.contains("Assets") }.configureEach { it.dependsOn 'copyAssetsRaw' }
   packagingOptions {
 		resources {
 			excludes += ['META-INF/robovm/ios/robovm.xml', 'META-INF/DEPENDENCIES.txt', 'META-INF/DEPENDENCIES',
@@ -50,7 +58,7 @@ android {
   }
 
   kotlin.compilerOptions.jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_1_8)
-  
+
 }
 
 repositories {

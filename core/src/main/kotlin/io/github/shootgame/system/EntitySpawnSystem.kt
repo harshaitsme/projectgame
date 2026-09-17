@@ -17,7 +17,9 @@ import io.github.shootgame.component.AnimationComponent
 import io.github.shootgame.component.AnimationModel
 import io.github.shootgame.component.AnimationType
 import io.github.shootgame.component.ImageComponent
+import io.github.shootgame.component.MoveComponent
 import io.github.shootgame.component.PhysicComponent.Companion.physicCmpFromImage
+import io.github.shootgame.component.PlayerComponent
 import io.github.shootgame.component.SpawnCfg
 import io.github.shootgame.component.SpawnComponent
 import io.github.shootgame.event.MapChangeEvent
@@ -54,6 +56,11 @@ class EntitySpawnSystem(
             }
             add<AnimationComponent> {
                 nextAnimation(cfg.model, AnimationType.IDLE)
+            }
+
+            if (spawnCmp.type == "Player") {
+                add<PlayerComponent>()
+                add<MoveComponent>()
             }
 
             physicCmpFromImage(phWorld,imageCmp.image, BodyDef.BodyType.DynamicBody){ phWorld, width, height ->

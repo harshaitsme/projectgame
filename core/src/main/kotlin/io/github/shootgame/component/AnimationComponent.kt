@@ -21,9 +21,12 @@ class AnimationComponent(
 ) {
     lateinit var animation: Animation<TextureRegionDrawable>
     var nextAnimation: String = NO_ANIMATION
+    var type: AnimationType = AnimationType.UNDEFINED
 
     fun nextAnimation(model: AnimationModel, type: AnimationType) {
+        if (this.model == model && this.type == type) return
         this.model = model
+        this.type = type
         nextAnimation = "${model.atlasKey}/${type.atlasKey}"
     }
 
