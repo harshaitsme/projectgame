@@ -7,19 +7,28 @@ import com.badlogic.gdx.graphics.Texture
 import com.badlogic.gdx.scenes.scene2d.InputEvent
 import com.badlogic.gdx.scenes.scene2d.Stage
 import com.badlogic.gdx.scenes.scene2d.ui.Image
+import com.badlogic.gdx.scenes.scene2d.ui.Label
 import com.badlogic.gdx.scenes.scene2d.ui.Table
 import com.badlogic.gdx.scenes.scene2d.utils.ClickListener
+import com.github.quillraven.fleks.ComponentMapper
 import com.github.quillraven.fleks.IntervalSystem
 import com.github.quillraven.fleks.Qualifier
+import io.github.shootgame.component.AttackComponent
+import io.github.shootgame.component.PlayerComponent
 
 class UiSystem(
-    @Qualifier("uiStage") private val uiStage: Stage
+    @Qualifier("uiStage") private val uiStage: Stage,
+    private val attackCmps: ComponentMapper<AttackComponent>
 ) : IntervalSystem() {
 
     var touchUp = false
     var touchDown = false
     var touchLeft = false
     var touchRight = false
+    var touchShoot = false
+    var touchReload = false
+
+    private lateinit var ammoLabel: Label
 
     private var touchTexture: Texture? = null
 
@@ -41,12 +50,11 @@ class UiSystem(
     }
 
     private fun setupTouchControls() {
-        val table = Table()
-        table.name = "uiTable"
-        table.setFillParent(true)
-        table.bottom().left()
+        // Left side D-pad
+        val leftTable = Table()
+        leftTable.setFillParent(true)
+        leftTable.bottom().left()
 
-        // Size in pixels for ScreenViewport
         val btnSize = 100f
         val btnUp = createButton { touchUp = it }
         val btnDown = createButton { touchDown = it }
@@ -66,8 +74,31 @@ class UiSystem(
         dpadTable.add(btnDown).size(btnSize)
         dpadTable.add().size(btnSize)
 
-        table.add(dpadTable).pad(20f)
-        uiStage.addActor(table)
+        leftTable.add(dpadTable).pad(20f)
+        uiStage.addActor(leftTable)
+
+        // Right side Shoot buttonHeads-Up Display
+        val rightTable = Table()
+        rightTable.setFillParent(true)
+        rightTable.bottom().right()
+
+        val btnShoot = createButton { touchShoot = it }
+        val btnReload = createButton { touchReload = it }
+
+        rightTable.add(btnReload).size(btnSize).padBottom(20f).row()
+        rightTable.add(btnShoot).size(btnSize * 1.5f).pad(40f)
+        uiStage.addActor(rightTable)
+
+        // HUD - Top Left Ammo Counter
+        val hudTable = Table()
+        hudTable.setFillParent(true)
+        hudTable.top().left()
+
+        ammoLabel = Label("Ammo: 0/0", Label.LabelStyle().apply {
+            font = com.badlogic.gdx.graphics.g2d.BitmapFont() // Using default for now
+        })
+        hudTable.add(ammoLabel).pad(20f)
+        uiStage.addActor(hudTable)
     }
 
     private fun createButton(action: (Boolean) -> Unit): Image {
@@ -86,7 +117,10 @@ class UiSystem(
     }
 
     override fun onTick() {
-        // uiStage.act(deltaTime) is handled by RenderSystem or here
+        world.family(allOf = arrayOf(PlayerComponent::class, AttackComponent::class)).forEach { player ->
+            val attackCmp = attackCmps[player]
+            ammoLabel.setText("Ammo: ${attackCmp.ammo} / ${attackCmp.maxAmmo}${if (attackCmp.isReloading) " (Reloading...)" else ""}")
+        }
     }
 
     override fun onDispose() {
