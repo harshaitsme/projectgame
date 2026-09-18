@@ -25,8 +25,11 @@ class UiSystem(
     var touchRight = false
     var touchShoot = false
     var touchReload = false
+    var touchJump = false
+    var touchGrenade = false
 
     private lateinit var ammoLabel: Label
+    private lateinit var fragLabel: Label
 
     private var touchTexture: Texture? = null
     private var pressedTexture: Texture? = null
@@ -87,8 +90,12 @@ class UiSystem(
 
         val btnShoot = createButton("SHOOT") { touchShoot = it }
         val btnReload = createButton("RELOAD") { touchReload = it }
+        val btnJump = createButton("JUMP") { touchJump = it }
+        val btnGrenade = createButton("GRENADE") { touchGrenade = it }
 
         rightTable.add(btnReload).size(btnSize).padBottom(30f).row()
+        rightTable.add(btnJump).size(btnSize).padBottom(30f).row()
+        rightTable.add(btnGrenade).size(btnSize).padBottom(30f).row()
         rightTable.add(btnShoot).size(btnSize * 1.6f).pad(60f)
         uiStage.addActor(rightTable)
 
@@ -98,9 +105,13 @@ class UiSystem(
         hudTable.top().left()
 
         ammoLabel = Label("Ammo: 0/0", Label.LabelStyle().apply {
-            font = com.badlogic.gdx.graphics.g2d.BitmapFont() // Using default for now
+            font = com.badlogic.gdx.graphics.g2d.BitmapFont()
         })
-        hudTable.add(ammoLabel).pad(20f)
+        fragLabel = Label("Frag: 0", Label.LabelStyle().apply {
+            font = com.badlogic.gdx.graphics.g2d.BitmapFont()
+        })
+        hudTable.add(ammoLabel).pad(20f).row()
+        hudTable.add(fragLabel).padLeft(20f)
         uiStage.addActor(hudTable)
     }
 
@@ -135,6 +146,7 @@ class UiSystem(
         world.family(allOf = arrayOf(PlayerComponent::class, AttackComponent::class)).forEach { player ->
             val attackCmp = attackCmps[player]
             ammoLabel.setText("Ammo: ${attackCmp.ammo} / ${attackCmp.maxAmmo}${if (attackCmp.isReloading) " (Reloading...)" else ""}")
+            fragLabel.setText("Frag: ${attackCmp.fragAmmo}")
         }
     }
 

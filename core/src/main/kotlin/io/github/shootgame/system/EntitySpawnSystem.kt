@@ -4,6 +4,7 @@ import com.badlogic.gdx.graphics.Pixmap
 import com.badlogic.gdx.graphics.Texture
 import com.badlogic.gdx.graphics.g2d.TextureAtlas
 import com.badlogic.gdx.graphics.g2d.TextureRegion
+import com.badlogic.gdx.maps.tiled.objects.TiledMapTileMapObject
 import com.badlogic.gdx.math.Vector2
 import com.badlogic.gdx.physics.box2d.BodyDef
 import com.badlogic.gdx.physics.box2d.World
@@ -60,6 +61,12 @@ class EntitySpawnSystem(
                     if (spawnCmp.type == "Bullet") {
                         drawable = TextureRegionDrawable(bulletRegion)
                         setSize(0.2f, 0.2f) // Small bullet size in world units
+                    } else if (spawnCmp.type == "Frag") {
+                        val size = size(cfg.model, cfg.type)
+                        setSize(size.x * 0.4f, size.y * 0.4f)
+                    } else if (spawnCmp.type == "Explosion") {
+                        val size = size(cfg.model, cfg.type)
+                        setSize(size.x * 2.5f, size.y * 2.5f)
                     } else {
                         val size = size(cfg.model, cfg.type)
                         setSize(size.x, size.y)
@@ -76,6 +83,7 @@ class EntitySpawnSystem(
             }
 
             if (spawnCmp.type == "Player") {
+                println("SPAWNING PLAYER at: ${spawnCmp.location}")
                 add<PlayerComponent>()
                 add<MoveComponent>()
                 add<AttackComponent>()
@@ -92,10 +100,45 @@ class EntitySpawnSystem(
                 }
             }
 
+            if (spawnCmp.type == "Frag") {
+                add<FragComponent>()
+                if (originalMoveCmp != null) {
+                    add<MoveComponent> {
+                        cos = originalMoveCmp.cos
+                        sin = originalMoveCmp.sin
+                        speed = originalMoveCmp.speed
+                    }
+                }
+            }
+
+            if (spawnCmp.type == "Explosion") {
+                add<ExplosionComponent>()
+            }
+
             if (spawnCmp.type == "Bullet") {
                 physicCmpFromImage(phWorld, imageCmp.image, BodyDef.BodyType.DynamicBody) { _, width, height ->
+                    gravityScale = 0f
                     circle(radius = width * 0.5f) {
                         isSensor = true
+                        friction = 0f
+                    }
+                }
+            } else if (spawnCmp.type == "Frag") {
+                physicCmpFromImage(phWorld, imageCmp.image, BodyDef.BodyType.DynamicBody) { _, width, height ->
+                    gravityScale = 1.5f // Grenades fall
+                    circle(radius = width * 0.5f) {
+                        isSensor = false
+                        restitution = 0.5f // Bouncy!
+                    }
+                }
+            } else if (spawnCmp.type == "Explosion") {
+                // No physics for explosion, just visuals
+            } else if (spawnCmp.type == "Player") {
+                physicCmpFromImage(phWorld, imageCmp.image, BodyDef.BodyType.DynamicBody) { _, width, height ->
+                    // Narrower box (25% width) to fit the character and not the whitespace
+                    box(width = width * 0.25f, height = height * 0.85f) {
+                        isSensor = false
+                        friction = 0f // Prevent sticking to walls
                     }
                 }
             } else {
@@ -113,6 +156,8 @@ class EntitySpawnSystem(
         when (type) {
             "Player" -> SpawnCfg(AnimationModel.PLAYER, AnimationType.IDLE)
             "Bullet" -> SpawnCfg(AnimationModel.BULLET, AnimationType.UNDEFINED)
+            "Frag" -> SpawnCfg(AnimationModel.PLAYER, AnimationType.GRENADE)
+            "Explosion" -> SpawnCfg(AnimationModel.PLAYER, AnimationType.EXPLOSION)
             else -> gdxError("Type $type has no SpawnCfg setup")
         }
     }
@@ -133,8 +178,16 @@ class EntitySpawnSystem(
 
                val entitiesLayer = event.map.layer("entities")
                 entitiesLayer.objects.forEach { mapObject ->
+                    var type = mapObject.type
+                    if (type == null && mapObject is TiledMapTileMapObject) {
+                        type = mapObject.tile.properties.get("type", String::class.java)
+                    }
 
-                    val type = mapObject.type ?: gdxError("Map object : $mapObject missing type property")
+                    if (type == null) {
+                        println("WARNING: Map object $mapObject in 'entities' layer is missing a 'Type' (Class) property. Skipping...")
+                        return@forEach
+                    }
+
                     world.entity {
                         add <SpawnComponent>{
                             this.type = type

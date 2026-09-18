@@ -43,5 +43,9 @@ class PlayerInputSystem(
         if (Gdx.input.isKeyJustPressed(Input.Keys.R) || uiSystem.touchReload) {
             attackCmp.isReloading = true
         }
+
+        attackCmp.isThrowing = Gdx.input.isKeyJustPressed(Input.Keys.G) || uiSystem.touchGrenade
+
+        moveCmp.doJump = Gdx.input.isKeyJustPressed(Input.Keys.W) || Gdx.input.isKeyJustPressed(Input.Keys.UP) || Gdx.input.isKeyJustPressed(Input.Keys.SPACE) || uiSystem.touchJump
     }
 }
