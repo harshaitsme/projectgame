@@ -5,6 +5,7 @@ import ktx.math.vec2
 
 data class SpawnCfg(
     val model: AnimationModel,
+    val type: AnimationType = AnimationType.IDLE
 )
 
 data class SpawnComponent (

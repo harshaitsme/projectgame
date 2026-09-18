@@ -12,6 +12,7 @@ import com.github.quillraven.fleks.*
 import com.github.quillraven.fleks.collection.compareEntity
 import io.github.shootgame.Main.Companion.UNIT_SCALE
 import io.github.shootgame.component.ImageComponent
+import io.github.shootgame.component.PlayerComponent
 import io.github.shootgame.event.MapChangeEvent
 import ktx.assets.disposeSafely
 import ktx.graphics.use
@@ -22,7 +23,9 @@ import ktx.tiled.forEachLayer
 @AllOf([ImageComponent::class])
 class RenderSystem(
     private val stage: Stage,
-    private val imageCmps: ComponentMapper<ImageComponent>
+    @Qualifier("uiStage") private val uiStage: Stage,
+    private val imageCmps: ComponentMapper<ImageComponent>,
+    private val playerCmps: ComponentMapper<PlayerComponent>
 ) : EventListener, IteratingSystem(
 
     comparator = compareEntity { e1, e2 -> imageCmps[e1].compareTo(imageCmps[e2]) }
@@ -63,10 +66,26 @@ class RenderSystem(
                 }
             }
         }
+
+        with(uiStage) {
+            viewport.apply()
+            act(deltaTime)
+            draw()
+        }
     }
 
     override fun onTickEntity(entity: Entity) {
-        imageCmps[entity].image.toFront()
+        val image = imageCmps[entity].image
+        image.toFront()
+
+        // Camera follow
+        if (entity in playerCmps) {
+            orthoCam.position.set(
+                image.x + image.width * 0.5f,
+                image.y + image.height * 0.5f,
+                0f
+            )
+        }
     }
 
 
