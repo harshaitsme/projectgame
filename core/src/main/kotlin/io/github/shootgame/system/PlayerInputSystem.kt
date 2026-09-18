@@ -22,17 +22,15 @@ class PlayerInputSystem(
         val attackCmp = attackCmps[entity]
 
         var x = 0f
-        var y = 0f
 
-        if (Gdx.input.isKeyPressed(Input.Keys.W) || Gdx.input.isKeyPressed(Input.Keys.UP) || uiSystem.touchUp) y += 1f
-        if (Gdx.input.isKeyPressed(Input.Keys.S) || Gdx.input.isKeyPressed(Input.Keys.DOWN) || uiSystem.touchDown) y -= 1f
-        if (Gdx.input.isKeyPressed(Input.Keys.A) || Gdx.input.isKeyPressed(Input.Keys.LEFT) || uiSystem.touchLeft) x -= 1f
-        if (Gdx.input.isKeyPressed(Input.Keys.D) || Gdx.input.isKeyPressed(Input.Keys.RIGHT) || uiSystem.touchRight) x += 1f
+        if (!attackCmp.isReloading && !attackCmp.isAttacking) {
+            if (Gdx.input.isKeyPressed(Input.Keys.A) || Gdx.input.isKeyPressed(Input.Keys.LEFT) || uiSystem.touchLeft) x -= 1f
+            if (Gdx.input.isKeyPressed(Input.Keys.D) || Gdx.input.isKeyPressed(Input.Keys.RIGHT) || uiSystem.touchRight) x += 1f
+        }
 
-        if (x != 0f || y != 0f) {
-            val len = Math.sqrt((x * x + y * y).toDouble()).toFloat()
-            moveCmp.cos = x / len
-            moveCmp.sin = y / len
+        if (x != 0f) {
+            moveCmp.cos = x
+            moveCmp.sin = 0f
             moveCmp.lastCos = moveCmp.cos
             moveCmp.lastSin = moveCmp.sin
         } else {

@@ -7,17 +7,19 @@ import com.github.quillraven.fleks.Entity
 import com.github.quillraven.fleks.IteratingSystem
 import io.github.shootgame.component.*
 
-@AllOf([AttackComponent::class, MoveComponent::class, ImageComponent::class])
+@AllOf([AttackComponent::class, MoveComponent::class, ImageComponent::class, AnimationComponent::class])
 class CombatSystem(
     private val attackCmps: ComponentMapper<AttackComponent>,
     private val moveCmps: ComponentMapper<MoveComponent>,
-    private val imageCmps: ComponentMapper<ImageComponent>
+    private val imageCmps: ComponentMapper<ImageComponent>,
+    private val animationCmps: ComponentMapper<AnimationComponent>
 ) : IteratingSystem() {
 
     override fun onTickEntity(entity: Entity) {
         val attackCmp = attackCmps[entity]
         val moveCmp = moveCmps[entity]
         val imageCmp = imageCmps[entity]
+        val animationCmp = animationCmps[entity]
 
         if (attackCmp.isReloading) {
             attackCmp.stateTime += deltaTime
@@ -35,9 +37,12 @@ class CombatSystem(
 
         if (attackCmp.isAttacking && attackCmp.stateTime <= 0) {
             if (attackCmp.ammo > 0) {
-                spawnBullet(imageCmp, moveCmp)
-                attackCmp.ammo--
-                attackCmp.stateTime = attackCmp.fireRate
+                // Wait for the fire frame in SHOT1 animation (e.g., 0.15s delay)
+                if (animationCmp.type == AnimationType.SHOT1 && animationCmp.stateTime >= 0.15f) {
+                    spawnBullet(imageCmp, moveCmp)
+                    attackCmp.ammo--
+                    attackCmp.stateTime = attackCmp.fireRate
+                }
             } else {
                 attackCmp.isReloading = true
                 attackCmp.stateTime = 0f

@@ -6,10 +6,10 @@ import com.badlogic.gdx.graphics.Pixmap
 import com.badlogic.gdx.graphics.Texture
 import com.badlogic.gdx.scenes.scene2d.InputEvent
 import com.badlogic.gdx.scenes.scene2d.Stage
-import com.badlogic.gdx.scenes.scene2d.ui.Image
-import com.badlogic.gdx.scenes.scene2d.ui.Label
-import com.badlogic.gdx.scenes.scene2d.ui.Table
+import com.badlogic.gdx.scenes.scene2d.ui.*
 import com.badlogic.gdx.scenes.scene2d.utils.ClickListener
+import com.badlogic.gdx.scenes.scene2d.utils.TextureRegionDrawable
+import com.badlogic.gdx.utils.Align
 import com.github.quillraven.fleks.ComponentMapper
 import com.github.quillraven.fleks.IntervalSystem
 import com.github.quillraven.fleks.Qualifier
@@ -21,8 +21,6 @@ class UiSystem(
     private val attackCmps: ComponentMapper<AttackComponent>
 ) : IntervalSystem() {
 
-    var touchUp = false
-    var touchDown = false
     var touchLeft = false
     var touchRight = false
     var touchShoot = false
@@ -31,16 +29,32 @@ class UiSystem(
     private lateinit var ammoLabel: Label
 
     private var touchTexture: Texture? = null
+    private var pressedTexture: Texture? = null
 
-    private fun getTouchTexture(): Texture {
-        if (touchTexture == null) {
-            val pixmap = Pixmap(64, 64, Pixmap.Format.RGBA8888)
-            pixmap.setColor(1f, 1f, 1f, 0.3f)
-            pixmap.fillCircle(32, 32, 30)
-            touchTexture = Texture(pixmap)
-            pixmap.dispose()
+    private fun getTouchTexture(pressed: Boolean = false): Texture {
+        if (pressed) {
+            if (pressedTexture == null) {
+                val pixmap = Pixmap(100, 100, Pixmap.Format.RGBA8888)
+                pixmap.setColor(1f, 1f, 1f, 0.5f) // Brighter for pressed
+                pixmap.fillCircle(50, 50, 48)
+                pixmap.setColor(1f, 1f, 1f, 0.8f)
+                pixmap.drawCircle(50, 50, 48)
+                pressedTexture = Texture(pixmap)
+                pixmap.dispose()
+            }
+            return pressedTexture!!
+        } else {
+            if (touchTexture == null) {
+                val pixmap = Pixmap(100, 100, Pixmap.Format.RGBA8888)
+                pixmap.setColor(1f, 1f, 1f, 0.2f) // Fainter for normal
+                pixmap.fillCircle(50, 50, 48)
+                pixmap.setColor(1f, 1f, 1f, 0.5f)
+                pixmap.drawCircle(50, 50, 48)
+                touchTexture = Texture(pixmap)
+                pixmap.dispose()
+            }
+            return touchTexture!!
         }
-        return touchTexture!!
     }
 
     init {
@@ -50,43 +64,32 @@ class UiSystem(
     }
 
     private fun setupTouchControls() {
-        // Left side D-pad
+        // Left side movement buttons (Left/Right only)
         val leftTable = Table()
         leftTable.setFillParent(true)
         leftTable.bottom().left()
 
-        val btnSize = 100f
-        val btnUp = createButton { touchUp = it }
-        val btnDown = createButton { touchDown = it }
-        val btnLeft = createButton { touchLeft = it }
-        val btnRight = createButton { touchRight = it }
+        val btnSize = 120f
+        val btnLeft = createButton("L") { touchLeft = it }
+        val btnRight = createButton("R") { touchRight = it }
 
-        val dpadTable = Table()
-        dpadTable.add().size(btnSize)
-        dpadTable.add(btnUp).size(btnSize)
-        dpadTable.add().size(btnSize)
-        dpadTable.row()
-        dpadTable.add(btnLeft).size(btnSize)
-        dpadTable.add().size(btnSize)
-        dpadTable.add(btnRight).size(btnSize)
-        dpadTable.row()
-        dpadTable.add().size(btnSize)
-        dpadTable.add(btnDown).size(btnSize)
-        dpadTable.add().size(btnSize)
+        val moveTable = Table()
+        moveTable.add(btnLeft).size(btnSize).padRight(30f)
+        moveTable.add(btnRight).size(btnSize)
 
-        leftTable.add(dpadTable).pad(20f)
+        leftTable.add(moveTable).pad(60f)
         uiStage.addActor(leftTable)
 
-        // Right side Shoot buttonHeads-Up Display
+        // Right side Shoot button
         val rightTable = Table()
         rightTable.setFillParent(true)
         rightTable.bottom().right()
 
-        val btnShoot = createButton { touchShoot = it }
-        val btnReload = createButton { touchReload = it }
+        val btnShoot = createButton("SHOOT") { touchShoot = it }
+        val btnReload = createButton("RELOAD") { touchReload = it }
 
-        rightTable.add(btnReload).size(btnSize).padBottom(20f).row()
-        rightTable.add(btnShoot).size(btnSize * 1.5f).pad(40f)
+        rightTable.add(btnReload).size(btnSize).padBottom(30f).row()
+        rightTable.add(btnShoot).size(btnSize * 1.6f).pad(60f)
         uiStage.addActor(rightTable)
 
         // HUD - Top Left Ammo Counter
@@ -101,19 +104,31 @@ class UiSystem(
         uiStage.addActor(hudTable)
     }
 
-    private fun createButton(action: (Boolean) -> Unit): Image {
-        return Image(getTouchTexture()).apply {
-            addListener(object : ClickListener() {
-                override fun touchDown(event: InputEvent?, x: Float, y: Float, pointer: Int, button: Int): Boolean {
-                    action(true)
-                    return true
-                }
+    private fun createButton(text: String, action: (Boolean) -> Unit): Stack {
+        val stack = Stack()
+        val image = Image(getTouchTexture())
 
-                override fun touchUp(event: InputEvent?, x: Float, y: Float, pointer: Int, button: Int) {
-                    action(false)
-                }
-            })
-        }
+        val label = Label(text, Label.LabelStyle().apply {
+            font = com.badlogic.gdx.graphics.g2d.BitmapFont()
+        })
+        label.setAlignment(Align.center)
+
+        stack.add(image)
+        stack.add(label)
+
+        stack.addListener(object : ClickListener() {
+            override fun touchDown(event: InputEvent?, x: Float, y: Float, pointer: Int, button: Int): Boolean {
+                action(true)
+                image.drawable = TextureRegionDrawable(getTouchTexture(true))
+                return true
+            }
+
+            override fun touchUp(event: InputEvent?, x: Float, y: Float, pointer: Int, button: Int) {
+                action(false)
+                image.drawable = TextureRegionDrawable(getTouchTexture(false))
+            }
+        })
+        return stack
     }
 
     override fun onTick() {
@@ -125,5 +140,6 @@ class UiSystem(
 
     override fun onDispose() {
         touchTexture?.dispose()
+        pressedTexture?.dispose()
     }
 }
