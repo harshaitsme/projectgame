@@ -39,12 +39,21 @@ class EntitySpawnSystem(
 ) : EventListener, IteratingSystem() {
 
     private val cachedCfgs = mutableMapOf<String, SpawnCfg>()
-    private val cachedSizes = mutableMapOf<AnimationModel, Vector2>()
+    private val cachedSizes = mutableMapOf<Pair<AnimationModel, AnimationType>, Vector2>()
 
     private val bulletRegion: TextureRegion by lazy {
         val pixmap = Pixmap(8, 8, Pixmap.Format.RGBA8888)
         pixmap.setColor(1f, 1f, 0f, 1f) // Yellow bullet
         pixmap.fill()
+        val texture = Texture(pixmap)
+        pixmap.dispose()
+        TextureRegion(texture)
+    }
+
+    private val grenadeRegion: TextureRegion by lazy {
+        val pixmap = Pixmap(12, 12, Pixmap.Format.RGBA8888)
+        pixmap.setColor(0.2f, 0.4f, 0.2f, 1f) // Dark green grenade
+        pixmap.fillCircle(6, 6, 5)
         val texture = Texture(pixmap)
         pixmap.dispose()
         TextureRegion(texture)
@@ -60,10 +69,10 @@ class EntitySpawnSystem(
                 image = Image().apply {
                     if (spawnCmp.type == "Bullet") {
                         drawable = TextureRegionDrawable(bulletRegion)
-                        setSize(0.2f, 0.2f) // Small bullet size in world units
+                        setSize(0.2f, 0.2f)
                     } else if (spawnCmp.type == "Frag") {
-                        val size = size(cfg.model, cfg.type)
-                        setSize(size.x * 0.4f, size.y * 0.4f)
+                        drawable = TextureRegionDrawable(grenadeRegion)
+                        setSize(0.4f, 0.4f)
                     } else if (spawnCmp.type == "Explosion") {
                         val size = size(cfg.model, cfg.type)
                         setSize(size.x * 2.5f, size.y * 2.5f)
@@ -71,14 +80,37 @@ class EntitySpawnSystem(
                         val size = size(cfg.model, cfg.type)
                         setSize(size.x, size.y)
                     }
-                    setPosition(spawnCmp.location.x, spawnCmp.location.y)
+
+                    if (spawnCmp.type == "Bullet" || spawnCmp.type == "Frag" || spawnCmp.type == "Explosion") {
+                        val finalWidth = if (spawnCmp.type == "Bullet") 0.2f
+                                        else if (spawnCmp.type == "Frag") 0.4f
+                                        else size(cfg.model, cfg.type).x * 2.5f
+                        val finalHeight = if (spawnCmp.type == "Bullet") 0.2f
+                                         else if (spawnCmp.type == "Frag") 0.4f
+                                         else size(cfg.model, cfg.type).y * 2.5f
+                        val positionX = spawnCmp.location.x - finalWidth * 0.5f
+                        val positionY = if (spawnCmp.type == "Explosion") {
+                            spawnCmp.location.y
+                        } else {
+                            spawnCmp.location.y - finalHeight * 0.5f
+                        }
+
+                        setPosition(positionX, positionY)
+                    } else {
+                        // Standard bottom-left for player/map objects
+                        setPosition(spawnCmp.location.x, spawnCmp.location.y)
+                    }
                     setScaling(Scaling.fill)
                 }
             }
 
-            if (spawnCmp.type != "Bullet") {
+            // Only add AnimationComponent if it's not a Bullet or Frag (which use static sprites)
+            if (spawnCmp.type != "Bullet" && spawnCmp.type != "Frag") {
                 add<AnimationComponent> {
                     nextAnimation(cfg.model, cfg.type)
+                    if (spawnCmp.type == "Explosion") {
+                        playMode = com.badlogic.gdx.graphics.g2d.Animation.PlayMode.NORMAL
+                    }
                 }
             }
 
@@ -115,6 +147,8 @@ class EntitySpawnSystem(
                 add<ExplosionComponent>()
             }
 
+            // ... (keep the rest) ...
+
             if (spawnCmp.type == "Bullet") {
                 physicCmpFromImage(phWorld, imageCmp.image, BodyDef.BodyType.DynamicBody) { _, width, height ->
                     gravityScale = 0f
@@ -124,14 +158,22 @@ class EntitySpawnSystem(
                     }
                 }
             } else if (spawnCmp.type == "Frag") {
-                physicCmpFromImage(phWorld, imageCmp.image, BodyDef.BodyType.DynamicBody) { _, width, height ->
-                    gravityScale = 1.5f // Grenades fall
+                val pCmp = physicCmpFromImage(phWorld, imageCmp.image, BodyDef.BodyType.DynamicBody) { _, width, height ->
+                    gravityScale = 1.5f
                     circle(radius = width * 0.5f) {
                         isSensor = false
-                        restitution = 0.5f // Bouncy!
+                        restitution = 0.5f
                     }
                 }
-            } else if (spawnCmp.type == "Explosion") {
+                // Apply initial velocity immediately
+                if (originalMoveCmp != null) {
+                    pCmp.body.setLinearVelocity(
+                        originalMoveCmp.cos * originalMoveCmp.speed,
+                        originalMoveCmp.sin * originalMoveCmp.speed
+                    )
+                }
+            }
+else if (spawnCmp.type == "Explosion") {
                 // No physics for explosion, just visuals
             } else if (spawnCmp.type == "Player") {
                 physicCmpFromImage(phWorld, imageCmp.image, BodyDef.BodyType.DynamicBody) { _, width, height ->
@@ -156,13 +198,13 @@ class EntitySpawnSystem(
         when (type) {
             "Player" -> SpawnCfg(AnimationModel.PLAYER, AnimationType.IDLE)
             "Bullet" -> SpawnCfg(AnimationModel.BULLET, AnimationType.UNDEFINED)
-            "Frag" -> SpawnCfg(AnimationModel.PLAYER, AnimationType.GRENADE)
+            "Frag" -> SpawnCfg(AnimationModel.BULLET, AnimationType.UNDEFINED)
             "Explosion" -> SpawnCfg(AnimationModel.PLAYER, AnimationType.EXPLOSION)
             else -> gdxError("Type $type has no SpawnCfg setup")
         }
     }
 
-    private fun size(model: AnimationModel, type: AnimationType): Vector2 = cachedSizes.getOrPut(model){
+    private fun size(model: AnimationModel, type: AnimationType): Vector2 = cachedSizes.getOrPut(model to type){
         val regions = atlas.findRegions("${model.atlasKey}/${type.atlasKey}")
         if(regions.isEmpty){
             gdxError("There are no regions for the animation $type of model $model")
@@ -205,6 +247,9 @@ class EntitySpawnSystem(
     override fun onDispose() {
         if (bulletRegion.texture != null) {
             bulletRegion.texture.dispose()
+        }
+        if (grenadeRegion.texture != null) {
+            grenadeRegion.texture.dispose()
         }
     }
 }

@@ -21,13 +21,16 @@ class MoveSystem(
     private val animationCmps: ComponentMapper<AnimationComponent>,
     private val imageCmps: ComponentMapper<ImageComponent>,
     private val attackCmps: ComponentMapper<AttackComponent>,
-    private val bulletCmps: ComponentMapper<BulletComponent>
+    private val bulletCmps: ComponentMapper<BulletComponent>,
+    private val playerCmps: ComponentMapper<PlayerComponent>,
+    private val fragCmps: ComponentMapper<FragComponent>
 ) : IteratingSystem() {
 
     override fun onTickEntity(entity: Entity) {
         val moveCmp = moveCmps[entity]
         val physicCmp = physicCmps[entity]
         val isBullet = entity in bulletCmps
+        val isFrag = entity in fragCmps
 
         val body = physicCmp.body
         val currentVelocity = body.linearVelocity
@@ -39,9 +42,14 @@ class MoveSystem(
                 moveCmp.cos * moveCmp.speed,
                 moveCmp.sin * moveCmp.speed
             )
+        } else if (isFrag) {
+            // For grenades, we only set the horizontal speed, let gravity handle vertical
+            body.setLinearVelocity(
+                moveCmp.cos * moveCmp.speed,
+                currentVelocity.y
+            )
         } else {
-            // Non-bullets (Player) only move horizontally via input,
-            // vertical is controlled by gravity/jump
+            // Non-projectiles (Player) move horizontally via input
             body.setLinearVelocity(
                 moveCmp.cos * moveCmp.speed,
                 currentVelocity.y
@@ -57,8 +65,8 @@ class MoveSystem(
             moveCmp.doJump = false
         }
 
-        // Update animation and flipping
-        if (entity in animationCmps) {
+        // Update animation and flipping (Player only)
+        if (entity in playerCmps && entity in animationCmps) {
             val aniCmp = animationCmps[entity]
             val attackCmp = attackCmps.getOrNull(entity)
 

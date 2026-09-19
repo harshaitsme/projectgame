@@ -23,7 +23,7 @@ class PlayerInputSystem(
 
         var x = 0f
 
-        if (!attackCmp.isReloading && !attackCmp.isAttacking) {
+        if (!attackCmp.isReloading && !attackCmp.isAttacking && !attackCmp.isThrowing) {
             if (Gdx.input.isKeyPressed(Input.Keys.A) || Gdx.input.isKeyPressed(Input.Keys.LEFT) || uiSystem.touchLeft) x -= 1f
             if (Gdx.input.isKeyPressed(Input.Keys.D) || Gdx.input.isKeyPressed(Input.Keys.RIGHT) || uiSystem.touchRight) x += 1f
         }
