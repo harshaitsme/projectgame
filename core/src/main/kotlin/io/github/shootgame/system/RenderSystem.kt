@@ -41,6 +41,7 @@ class RenderSystem(
 
     override fun onTick() {
         super.onTick()
+        world.system<CameraShakeSystem>().apply(orthoCam)
 
         with(stage){
             viewport.apply()

@@ -35,7 +35,8 @@ class EntitySpawnSystem(
     private val phWorld: World,
     private val atlas: TextureAtlas,
     private val spawnCmps: ComponentMapper<SpawnComponent>,
-    private val moveCmps: ComponentMapper<MoveComponent>
+    private val moveCmps: ComponentMapper<MoveComponent>,
+    private val ownerCmps: ComponentMapper<OwnerComponent>
 ) : EventListener, IteratingSystem() {
 
     private val cachedCfgs = mutableMapOf<String, SpawnCfg>()
@@ -63,8 +64,9 @@ class EntitySpawnSystem(
         val spawnCmp = spawnCmps[entity]
         val cfg = spawnCfg(spawnCmp.type)
         val originalMoveCmp = if (entity in moveCmps) moveCmps[entity] else null
+        val originalOwnerCmp = if (entity in ownerCmps) ownerCmps[entity] else null
 
-        world.entity {
+        world.entity { spawnedEntity ->
             val imageCmp = add<ImageComponent> {
                 image = Image().apply {
                     if (spawnCmp.type == "Bullet") {
@@ -119,10 +121,20 @@ class EntitySpawnSystem(
                 add<PlayerComponent>()
                 add<MoveComponent>()
                 add<AttackComponent>()
+                add<HealthComponent>()
+                add<OwnerComponent> {
+                    owner = spawnedEntity
+                }
             }
 
             if (spawnCmp.type == "Bullet") {
                 add<BulletComponent>()
+                add<DamageComponent>()
+                if (originalOwnerCmp != null) {
+                    add<OwnerComponent> {
+                        owner = originalOwnerCmp.owner
+                    }
+                }
                 if (originalMoveCmp != null) {
                     add<MoveComponent> {
                         cos = originalMoveCmp.cos
@@ -134,6 +146,11 @@ class EntitySpawnSystem(
 
             if (spawnCmp.type == "Frag") {
                 add<FragComponent>()
+                if (originalOwnerCmp != null) {
+                    add<OwnerComponent> {
+                        owner = originalOwnerCmp.owner
+                    }
+                }
                 if (originalMoveCmp != null) {
                     add<MoveComponent> {
                         cos = originalMoveCmp.cos
@@ -144,7 +161,9 @@ class EntitySpawnSystem(
             }
 
             if (spawnCmp.type == "Explosion") {
-                add<ExplosionComponent>()
+                add<ExplosionComponent> {
+                    range = size(cfg.model, cfg.type).x * 2.5f * 0.5f
+                }
             }
 
             // ... (keep the rest) ...

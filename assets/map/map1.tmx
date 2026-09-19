@@ -9,17 +9,17 @@
    <image source="../../assets_raw/Soldier_1/Idle_S1/Idle_00.png" width="128" height="128"/>
   </tile>
  </tileset>
- <tileset firstgid="2" name="map" tilewidth="32" tileheight="32" tilecount="256" columns="16">
+ <tileset firstgid="2" name="map" tilewidth="32" tileheight="32" spacing="6" margin="6" tilecount="169" columns="13">
   <image source="../assets/graphics/map.png" width="512" height="512"/>
  </tileset>
  <layer id="1" name="background" width="32" height="18">
   <data encoding="base64" compression="zlib">
-   eJztwwEJAAAMBKHj+4dekCm4aqqqjx5TLASB
+   eJztwwENAAAMw6DqnvoLOSSsmqrqowe2exKQ
   </data>
  </layer>
  <layer id="3" name="fg" width="32" height="18">
   <data encoding="base64" compression="zlib">
-   eJztwQEBAAAAgiD/r25IQAEAfBkJAAAB
+   eJxjYBgFo2AUjIJRMAqGLpiKA5NjDi5z6QWo4Y9RQBwAABJsCLw=
   </data>
  </layer>
  <objectgroup id="4" name="entities">
@@ -27,7 +27,7 @@
  </objectgroup>
  <layer id="6" name="physics" width="32" height="18">
   <data encoding="base64" compression="zlib">
-   eJxjYBgFo2AUjIJRMApGAb2AERQjswcCj3QAADNQBnM=
+   eJxjYBgFMNCBhLGJoctR205644G2HxueQaQYOeYiY2LUYNODTf8MLGxizCJkdzY0jgiZhQ8jA3z2EwLo5mEznxSA7oaBAKP2j9pPDfs1gZifSGyGZn8WFfBMEtxaAMSySHikAwBp+XEL
   </data>
  </layer>
 </map>

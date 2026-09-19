@@ -6,11 +6,14 @@ import com.github.quillraven.fleks.AllOf
 import com.github.quillraven.fleks.ComponentMapper
 import com.github.quillraven.fleks.Entity
 import com.github.quillraven.fleks.IteratingSystem
+import com.github.quillraven.fleks.NoneOf
 import io.github.shootgame.component.AttackComponent
+import io.github.shootgame.component.DeadComponent
 import io.github.shootgame.component.MoveComponent
 import io.github.shootgame.component.PlayerComponent
 
 @AllOf([PlayerComponent::class, MoveComponent::class, AttackComponent::class])
+@NoneOf([DeadComponent::class])
 class PlayerInputSystem(
     private val moveCmps: ComponentMapper<MoveComponent>,
     private val attackCmps: ComponentMapper<AttackComponent>

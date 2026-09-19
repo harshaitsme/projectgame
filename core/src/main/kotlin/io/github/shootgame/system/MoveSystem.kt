@@ -4,6 +4,7 @@ import com.github.quillraven.fleks.AllOf
 import com.github.quillraven.fleks.ComponentMapper
 import com.github.quillraven.fleks.Entity
 import com.github.quillraven.fleks.IteratingSystem
+import com.github.quillraven.fleks.NoneOf
 import io.github.shootgame.component.AnimationComponent
 import io.github.shootgame.component.AnimationType
 import io.github.shootgame.component.AttackComponent
@@ -15,6 +16,7 @@ import io.github.shootgame.component.*
 import kotlin.math.abs
 
 @AllOf([MoveComponent::class, PhysicComponent::class])
+@NoneOf([DeadComponent::class])
 class MoveSystem(
     private val moveCmps: ComponentMapper<MoveComponent>,
     private val physicCmps: ComponentMapper<PhysicComponent>,
