@@ -6,11 +6,14 @@ import com.github.quillraven.fleks.AllOf
 import com.github.quillraven.fleks.ComponentMapper
 import com.github.quillraven.fleks.Entity
 import com.github.quillraven.fleks.IteratingSystem
+import com.github.quillraven.fleks.NoneOf
 import io.github.shootgame.component.AttackComponent
+import io.github.shootgame.component.DeadComponent
 import io.github.shootgame.component.MoveComponent
 import io.github.shootgame.component.PlayerComponent
 
 @AllOf([PlayerComponent::class, MoveComponent::class, AttackComponent::class])
+@NoneOf([DeadComponent::class])
 class PlayerInputSystem(
     private val moveCmps: ComponentMapper<MoveComponent>,
     private val attackCmps: ComponentMapper<AttackComponent>
@@ -23,7 +26,7 @@ class PlayerInputSystem(
 
         var x = 0f
 
-        if (!attackCmp.isReloading && !attackCmp.isAttacking) {
+        if (!attackCmp.isReloading && !attackCmp.isAttacking && !attackCmp.isThrowing) {
             if (Gdx.input.isKeyPressed(Input.Keys.A) || Gdx.input.isKeyPressed(Input.Keys.LEFT) || uiSystem.touchLeft) x -= 1f
             if (Gdx.input.isKeyPressed(Input.Keys.D) || Gdx.input.isKeyPressed(Input.Keys.RIGHT) || uiSystem.touchRight) x += 1f
         }
@@ -43,5 +46,9 @@ class PlayerInputSystem(
         if (Gdx.input.isKeyJustPressed(Input.Keys.R) || uiSystem.touchReload) {
             attackCmp.isReloading = true
         }
+
+        attackCmp.isThrowing = Gdx.input.isKeyJustPressed(Input.Keys.G) || uiSystem.touchGrenade
+
+        moveCmp.doJump = Gdx.input.isKeyJustPressed(Input.Keys.W) || Gdx.input.isKeyJustPressed(Input.Keys.UP) || Gdx.input.isKeyJustPressed(Input.Keys.SPACE) || uiSystem.touchJump
     }
 }

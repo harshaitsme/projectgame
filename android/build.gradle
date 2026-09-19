@@ -1,4 +1,7 @@
 
+def gameName = "shootPower"
+def gameVersion = "1.0"
+
 buildscript {
   repositories {
     mavenCentral()
@@ -30,6 +33,7 @@ android {
   }
 
   tasks.matching { it.name.contains("merge") && it.name.contains("Assets") }.configureEach { it.dependsOn 'copyAssetsRaw' }
+  tasks.matching { it.name.toLowerCase().contains("lint") }.configureEach { it.dependsOn 'copyAssetsRaw' }
   packagingOptions {
 		resources {
 			excludes += ['META-INF/robovm/ios/robovm.xml', 'META-INF/DEPENDENCIES.txt', 'META-INF/DEPENDENCIES',
@@ -43,7 +47,7 @@ android {
     minSdkVersion 21
     targetSdkVersion 36
     versionCode 1
-    versionName "1.0"
+    versionName gameVersion
   }
   compileOptions {
     sourceCompatibility "8"
@@ -58,6 +62,14 @@ android {
   }
 
   kotlin.compilerOptions.jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_1_8)
+
+  androidComponents {
+    onVariants(selector().all()) { variant ->
+      variant.outputs.forEach { output ->
+        output.outputFileName.set("${gameName}-v${gameVersion}-${variant.name}.apk")
+      }
+    }
+  }
 
 }
 
