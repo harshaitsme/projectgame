@@ -11,24 +11,51 @@ import io.github.shootgame.component.ImageComponent
 import io.github.shootgame.component.MoveComponent
 import io.github.shootgame.component.PhysicComponent
 
+import io.github.shootgame.component.*
+import kotlin.math.abs
+
 @AllOf([MoveComponent::class, PhysicComponent::class])
 class MoveSystem(
     private val moveCmps: ComponentMapper<MoveComponent>,
     private val physicCmps: ComponentMapper<PhysicComponent>,
     private val animationCmps: ComponentMapper<AnimationComponent>,
     private val imageCmps: ComponentMapper<ImageComponent>,
-    private val attackCmps: ComponentMapper<AttackComponent>
+    private val attackCmps: ComponentMapper<AttackComponent>,
+    private val bulletCmps: ComponentMapper<BulletComponent>
 ) : IteratingSystem() {
 
     override fun onTickEntity(entity: Entity) {
         val moveCmp = moveCmps[entity]
         val physicCmp = physicCmps[entity]
+        val isBullet = entity in bulletCmps
 
         val body = physicCmp.body
-        body.setLinearVelocity(
-            moveCmp.cos * moveCmp.speed,
-            moveCmp.sin * moveCmp.speed
-        )
+        val currentVelocity = body.linearVelocity
+
+        // Movement
+        if (isBullet) {
+            // Bullets move in their intended direction (cos, sin) at constant speed
+            body.setLinearVelocity(
+                moveCmp.cos * moveCmp.speed,
+                moveCmp.sin * moveCmp.speed
+            )
+        } else {
+            // Non-bullets (Player) only move horizontally via input,
+            // vertical is controlled by gravity/jump
+            body.setLinearVelocity(
+                moveCmp.cos * moveCmp.speed,
+                currentVelocity.y
+            )
+        }
+
+        // Jump logic (only for non-bullets)
+        if (!isBullet && moveCmp.doJump) {
+            // Simple grounded check: check if vertical velocity is near 0
+            if (abs(currentVelocity.y) < 0.1f) {
+                body.applyLinearImpulse(0f, moveCmp.jumpImpulse, body.worldCenter.x, body.worldCenter.y, true)
+            }
+            moveCmp.doJump = false
+        }
 
         // Update animation and flipping
         if (entity in animationCmps) {
@@ -37,6 +64,8 @@ class MoveSystem(
 
             if (attackCmp != null && attackCmp.isReloading) {
                 aniCmp.nextAnimation(aniCmp.model, AnimationType.RECHARGE)
+            } else if (attackCmp != null && attackCmp.isThrowing) {
+                aniCmp.nextAnimation(aniCmp.model, AnimationType.GRENADE)
             } else if (attackCmp != null && attackCmp.isAttacking) {
                 aniCmp.nextAnimation(aniCmp.model, AnimationType.SHOT1)
             } else if (moveCmp.cos != 0f || moveCmp.sin != 0f) {

@@ -47,6 +47,33 @@ class CombatSystem(
                 attackCmp.isReloading = true
                 attackCmp.stateTime = 0f
             }
+        } else if (attackCmp.isThrowing && attackCmp.stateTime <= 0) {
+            if (attackCmp.fragAmmo > 0) {
+                if (animationCmp.type == AnimationType.GRENADE && animationCmp.stateTime >= 0.3f) {
+                    spawnGrenade(imageCmp, moveCmp)
+                    attackCmp.fragAmmo--
+                    attackCmp.stateTime = attackCmp.throwRate
+                }
+            }
+        }
+    }
+
+    private fun spawnGrenade(imageCmp: ImageComponent, moveCmp: MoveComponent) {
+        val image = imageCmp.image
+        val facingRight = image.scaleX > 0
+        val x = image.x + image.width * 0.5f + (if (facingRight) 0.5f else -0.5f)
+        val y = image.y + image.height * 0.5f
+
+        world.entity {
+            add<SpawnComponent> {
+                type = "Frag"
+                location.set(x, y)
+            }
+            add<MoveComponent> {
+                cos = moveCmp.lastCos
+                sin = 0.5f // Throw slightly upwards
+                speed = 8f
+            }
         }
     }
 
