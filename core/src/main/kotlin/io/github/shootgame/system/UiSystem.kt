@@ -14,19 +14,25 @@ import com.github.quillraven.fleks.ComponentMapper
 import com.github.quillraven.fleks.IntervalSystem
 import com.github.quillraven.fleks.Qualifier
 import io.github.shootgame.component.AttackComponent
+import io.github.shootgame.component.HealthComponent
 import io.github.shootgame.component.PlayerComponent
 
 class UiSystem(
     @Qualifier("uiStage") private val uiStage: Stage,
-    private val attackCmps: ComponentMapper<AttackComponent>
+    private val attackCmps: ComponentMapper<AttackComponent>,
+    private val healthCmps: ComponentMapper<HealthComponent>
 ) : IntervalSystem() {
 
     var touchLeft = false
     var touchRight = false
     var touchShoot = false
     var touchReload = false
+    var touchJump = false
+    var touchGrenade = false
 
+    private lateinit var healthLabel: Label
     private lateinit var ammoLabel: Label
+    private lateinit var fragLabel: Label
 
     private var touchTexture: Texture? = null
     private var pressedTexture: Texture? = null
@@ -58,9 +64,30 @@ class UiSystem(
     }
 
     init {
+        setupHud()
         if (Gdx.app.type == Application.ApplicationType.Android) {
             setupTouchControls()
         }
+    }
+
+    private fun setupHud() {
+        val hudTable = Table()
+        hudTable.setFillParent(true)
+        hudTable.top().left()
+
+        healthLabel = Label("Health: 100 / 100", Label.LabelStyle().apply {
+            font = com.badlogic.gdx.graphics.g2d.BitmapFont()
+        })
+        ammoLabel = Label("Ammo: 0/0", Label.LabelStyle().apply {
+            font = com.badlogic.gdx.graphics.g2d.BitmapFont()
+        })
+        fragLabel = Label("Frag: 0", Label.LabelStyle().apply {
+            font = com.badlogic.gdx.graphics.g2d.BitmapFont()
+        })
+        hudTable.add(healthLabel).pad(20f).row()
+        hudTable.add(ammoLabel).padLeft(20f).row()
+        hudTable.add(fragLabel).padLeft(20f)
+        uiStage.addActor(hudTable)
     }
 
     private fun setupTouchControls() {
@@ -87,21 +114,14 @@ class UiSystem(
 
         val btnShoot = createButton("SHOOT") { touchShoot = it }
         val btnReload = createButton("RELOAD") { touchReload = it }
+        val btnJump = createButton("JUMP") { touchJump = it }
+        val btnGrenade = createButton("GRENADE") { touchGrenade = it }
 
         rightTable.add(btnReload).size(btnSize).padBottom(30f).row()
+        rightTable.add(btnJump).size(btnSize).padBottom(30f).row()
+        rightTable.add(btnGrenade).size(btnSize).padBottom(30f).row()
         rightTable.add(btnShoot).size(btnSize * 1.6f).pad(60f)
         uiStage.addActor(rightTable)
-
-        // HUD - Top Left Ammo Counter
-        val hudTable = Table()
-        hudTable.setFillParent(true)
-        hudTable.top().left()
-
-        ammoLabel = Label("Ammo: 0/0", Label.LabelStyle().apply {
-            font = com.badlogic.gdx.graphics.g2d.BitmapFont() // Using default for now
-        })
-        hudTable.add(ammoLabel).pad(20f)
-        uiStage.addActor(hudTable)
     }
 
     private fun createButton(text: String, action: (Boolean) -> Unit): Stack {
@@ -132,9 +152,15 @@ class UiSystem(
     }
 
     override fun onTick() {
-        world.family(allOf = arrayOf(PlayerComponent::class, AttackComponent::class)).forEach { player ->
-            val attackCmp = attackCmps[player]
+        world.family(
+            allOf = arrayOf(PlayerComponent::class, HealthComponent::class)
+        ).forEach { player ->
+            val health = healthCmps[player]
+            healthLabel.setText("Health: ${health.currentHealth.toInt()} / ${health.maxHealth.toInt()}")
+
+            val attackCmp = attackCmps.getOrNull(player) ?: return@forEach
             ammoLabel.setText("Ammo: ${attackCmp.ammo} / ${attackCmp.maxAmmo}${if (attackCmp.isReloading) " (Reloading...)" else ""}")
+            fragLabel.setText("Frag: ${attackCmp.fragAmmo}")
         }
     }
 

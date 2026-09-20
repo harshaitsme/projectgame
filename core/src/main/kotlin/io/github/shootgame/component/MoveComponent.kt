@@ -6,4 +6,6 @@ class MoveComponent {
     var speed: Float = 5f
     var lastCos: Float = 1f
     var lastSin: Float = 0f
+    var doJump: Boolean = false
+    var jumpImpulse: Float = 10f
 }

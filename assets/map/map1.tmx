@@ -1,33 +1,33 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<map version="1.10" tiledversion="1.12.2" orientation="orthogonal" renderorder="right-down" width="32" height="18" tilewidth="32" tileheight="32" infinite="0" nextlayerid="5" nextobjectid="2">
+<map version="1.10" tiledversion="1.12.2" orientation="orthogonal" renderorder="right-down" width="32" height="18" tilewidth="32" tileheight="32" infinite="0" nextlayerid="7" nextobjectid="7">
  <properties>
   <property name="mapMusic" value=""/>
  </properties>
- <tileset firstgid="1" name="map" tilewidth="32" tileheight="32" spacing="6" margin="3" tilecount="169" columns="13">
-  <image source="../graphics/map.png" width="512" height="512"/>
- </tileset>
- <tileset firstgid="170" name="entites" tilewidth="128" tileheight="128" tilecount="1" columns="0">
+ <tileset firstgid="1" name="entites" tilewidth="128" tileheight="128" tilecount="1" columns="0">
   <grid orientation="orthogonal" width="1" height="1"/>
   <tile id="0">
    <image source="../../assets_raw/Soldier_1/Idle_S1/Idle_00.png" width="128" height="128"/>
   </tile>
  </tileset>
+ <tileset firstgid="2" name="map" tilewidth="32" tileheight="32" spacing="6" margin="6" tilecount="169" columns="13">
+  <image source="../assets/graphics/map.png" width="512" height="512"/>
+ </tileset>
  <layer id="1" name="background" width="32" height="18">
   <data encoding="base64" compression="zlib">
-   eJwLZmBgCB7Fo3gUj+JRPIpH8SgeQRgAD9a6wQ==
-  </data>
- </layer>
- <layer id="2" name="ground" width="32" height="18">
-  <data encoding="base64" compression="zlib">
-   eJxjYBgFo2AUgIDpQDtgFFAVaACxDBZciIT5SMDTSLR/AgH5QgLyMHthAJQ+sfkHGSO714lE946CUTDSAADwNgYL
+   eJztwwENAAAMw6DqnvoLOSSsmqrqowe2exKQ
   </data>
  </layer>
  <layer id="3" name="fg" width="32" height="18">
   <data encoding="base64" compression="zlib">
-   eJxjYBgFo2AUjALagSk4MKVqBxLgcudgde8oGAWjABMAAGRQC5E=
+   eJxjYBgFo2AUjIJRMAqGLpiKA5NjDi5z6QWo4Y9RQBwAABJsCLw=
   </data>
  </layer>
  <objectgroup id="4" name="entities">
-  <object id="1" type="Player" gid="170" x="335" y="469" width="128" height="128"/>
+  <object id="1" type="Player" gid="1" x="335" y="469" width="128" height="128"/>
  </objectgroup>
+ <layer id="6" name="physics" width="32" height="18">
+  <data encoding="base64" compression="zlib">
+   eJxjYBgFMNCBhLGJoctR205644G2HxueQaQYOeYiY2LUYNODTf8MLGxizCJkdzY0jgiZhQ8jA3z2EwLo5mEznxSA7oaBAKP2j9pPDfs1gZifSGyGZn8WFfBMEtxaAMSySHikAwBp+XEL
+  </data>
+ </layer>
 </map>

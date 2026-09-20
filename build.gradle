@@ -59,7 +59,7 @@ configure(subprojects - project(':android')) {
 
 subprojects {
   version = "$projectVersion"
-  ext.appName = 'ShootGame'
+  ext.appName = 'shootPower'
   repositories {
     mavenCentral()
     // You may want to remove the following line if you have errors downloading dependencies.
@@ -69,4 +69,4 @@ subprojects {
   }
 }
 
-eclipse.project.name = 'ShootGame' + '-parent'
+eclipse.project.name = 'shootPower' + '-parent'

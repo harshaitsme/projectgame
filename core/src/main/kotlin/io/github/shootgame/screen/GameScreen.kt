@@ -21,7 +21,14 @@ import io.github.shootgame.event.MapChangeEvent
 import io.github.shootgame.event.fire
 import io.github.shootgame.system.AnimationSystem
 import io.github.shootgame.system.BulletSystem
+import io.github.shootgame.system.CameraShakeSystem
+import io.github.shootgame.system.CollisionSystem
 import io.github.shootgame.system.CombatSystem
+import io.github.shootgame.system.DamageSystem
+import io.github.shootgame.system.DeathSystem
+import io.github.shootgame.system.ExplosionSystem
+import io.github.shootgame.system.FragSystem
+import io.github.shootgame.system.HealthSystem
 import io.github.shootgame.system.MoveSystem
 import io.github.shootgame.system.PhysicSystem
 import io.github.shootgame.system.PlayerInputSystem
@@ -43,7 +50,7 @@ class GameScreen : KtxScreen {
     private val textureAtlas = TextureAtlas("graphics/PlayerObject.atlas")
 
     private var currentMap: TiledMap? = null
-    private val phWorld = createWorld(gravity = vec2()).apply {
+    private val phWorld = createWorld(gravity = vec2(0f, -20f)).apply {
         autoClearForces = false
     }
     private val eWorld: World = World {
@@ -57,13 +64,20 @@ class GameScreen : KtxScreen {
         componentListener<PhysicComponent.Companion.PhysicComponentListener>()
         componentListener<PlayerComponent.Companion.PlayerComponentListener>()
 
-        system<UiSystem>()
         system<PlayerInputSystem>()
         system<CombatSystem>()
+        system<CollisionSystem>()
+        system<FragSystem>()
         system<MoveSystem>()
         system<PhysicSystem>()
+        system<ExplosionSystem>()
+        system<DamageSystem>()
+        system<HealthSystem>()
+        system<DeathSystem>()
+        system<UiSystem>()
         system<BulletSystem>()
         system<AnimationSystem>()
+        system<CameraShakeSystem>()
         system<RenderSystem>()
         system<EntitySpawnSystem>()
     }
