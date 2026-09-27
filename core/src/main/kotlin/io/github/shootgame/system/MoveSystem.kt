@@ -12,6 +12,8 @@ import io.github.shootgame.component.ImageComponent
 import io.github.shootgame.component.MoveComponent
 import io.github.shootgame.component.PhysicComponent
 
+import io.github.shootgame.audio.AudioService
+import io.github.shootgame.audio.SoundType
 import io.github.shootgame.component.*
 import kotlin.math.abs
 
@@ -25,7 +27,8 @@ class MoveSystem(
     private val attackCmps: ComponentMapper<AttackComponent>,
     private val bulletCmps: ComponentMapper<BulletComponent>,
     private val playerCmps: ComponentMapper<PlayerComponent>,
-    private val fragCmps: ComponentMapper<FragComponent>
+    private val fragCmps: ComponentMapper<FragComponent>,
+    private val audioService: AudioService
 ) : IteratingSystem() {
 
     override fun onTickEntity(entity: Entity) {
@@ -63,6 +66,7 @@ class MoveSystem(
             // Simple grounded check: check if vertical velocity is near 0
             if (abs(currentVelocity.y) < 0.1f) {
                 body.applyLinearImpulse(0f, moveCmp.jumpImpulse, body.worldCenter.x, body.worldCenter.y, true)
+                audioService.play(SoundType.JUMP, pitchVariation = 0.06f)
             }
             moveCmp.doJump = false
         }

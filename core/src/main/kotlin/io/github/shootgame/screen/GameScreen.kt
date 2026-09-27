@@ -13,6 +13,7 @@ import com.badlogic.gdx.utils.viewport.ExtendViewport
 import com.badlogic.gdx.utils.viewport.ScreenViewport
 import com.github.quillraven.fleks.World
 import io.github.shootgame.system.EntitySpawnSystem
+import io.github.shootgame.audio.AudioService
 import io.github.shootgame.component.ImageComponent
 import io.github.shootgame.component.MoveComponent
 import io.github.shootgame.component.PhysicComponent
@@ -44,6 +45,7 @@ import ktx.math.vec2
 //game screen shown and dispose things |
 class GameScreen : KtxScreen {
 
+    private val audioService = AudioService()
     private val spriteBatch : Batch = SpriteBatch()
     private val stage: Stage = Stage(ExtendViewport(16f, 9f), spriteBatch)
     private val uiStage: Stage = Stage(ScreenViewport(), spriteBatch)
@@ -59,6 +61,7 @@ class GameScreen : KtxScreen {
         inject("uiStage", uiStage)
         inject(textureAtlas)
         inject(phWorld)
+        inject(audioService)
 
         componentListener<ImageComponent.Companion.ImageComponentListener>()
         componentListener<PhysicComponent.Companion.PhysicComponentListener>()
@@ -99,7 +102,15 @@ class GameScreen : KtxScreen {
         }
         currentMap = TmxMapLoader().load("map/map1.tmx")
         stage.fire(MapChangeEvent(currentMap!!))
+        audioService.playMusic()
+    }
 
+    override fun pause() {
+        audioService.pauseMusic()
+    }
+
+    override fun resume() {
+        audioService.resumeMusic()
     }
 
     // ==================================================================================
@@ -112,9 +123,8 @@ class GameScreen : KtxScreen {
         eWorld.update(delta.coerceAtMost(0.25f))
     }
 
-
-
     override fun dispose() {
+        audioService.dispose()
         stage.disposeSafely()
         uiStage.disposeSafely()
         textureAtlas.disposeSafely()

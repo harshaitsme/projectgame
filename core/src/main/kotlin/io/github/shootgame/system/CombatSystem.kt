@@ -5,6 +5,8 @@ import com.github.quillraven.fleks.ComponentMapper
 import com.github.quillraven.fleks.Entity
 import com.github.quillraven.fleks.IteratingSystem
 import com.github.quillraven.fleks.NoneOf
+import io.github.shootgame.audio.AudioService
+import io.github.shootgame.audio.SoundType
 import io.github.shootgame.component.*
 
 @AllOf([AttackComponent::class, MoveComponent::class, ImageComponent::class, AnimationComponent::class])
@@ -13,8 +15,11 @@ class CombatSystem(
     private val attackCmps: ComponentMapper<AttackComponent>,
     private val moveCmps: ComponentMapper<MoveComponent>,
     private val imageCmps: ComponentMapper<ImageComponent>,
-    private val animationCmps: ComponentMapper<AnimationComponent>
+    private val animationCmps: ComponentMapper<AnimationComponent>,
+    private val audioService: AudioService
 ) : IteratingSystem() {
+
+    private val reloadingEntities = mutableSetOf<Entity>()
 
     override fun onTickEntity(entity: Entity) {
         val attackCmp = attackCmps[entity]
@@ -23,13 +28,20 @@ class CombatSystem(
         val animationCmp = animationCmps[entity]
 
         if (attackCmp.isReloading) {
+            if (entity !in reloadingEntities) {
+                reloadingEntities.add(entity)
+                audioService.play(SoundType.RELOAD)
+            }
             attackCmp.stateTime += deltaTime
             if (attackCmp.stateTime >= attackCmp.reloadTime) {
                 attackCmp.ammo = attackCmp.maxAmmo
                 attackCmp.isReloading = false
                 attackCmp.stateTime = 0f
+                reloadingEntities.remove(entity)
             }
             return
+        } else {
+            reloadingEntities.remove(entity)
         }
 
         if (attackCmp.stateTime > 0) {
@@ -43,6 +55,7 @@ class CombatSystem(
                     spawnBullet(entity, imageCmp, moveCmp)
                     attackCmp.ammo--
                     attackCmp.stateTime = attackCmp.fireRate
+                    audioService.play(SoundType.SHOT, pitchVariation = 0.08f)
                 }
             } else {
                 attackCmp.isReloading = true
@@ -54,6 +67,7 @@ class CombatSystem(
                     spawnGrenade(entity, imageCmp, moveCmp)
                     attackCmp.fragAmmo--
                     attackCmp.stateTime = attackCmp.throwRate
+                    audioService.play(SoundType.THROW, pitchVariation = 0.05f)
                 }
             }
         }
