@@ -8,7 +8,7 @@ import com.badlogic.gdx.graphics.g2d.TextureAtlas
 import com.badlogic.gdx.maps.tiled.TiledMap
 import com.badlogic.gdx.maps.tiled.TmxMapLoader
 import com.badlogic.gdx.scenes.scene2d.EventListener
-import com.badlogic.gdx.scenes.scene2d.Stage
+import com.badlogic.gdx.scenes.scene2d.Stage as Scene2DStage
 import com.badlogic.gdx.utils.viewport.ExtendViewport
 import com.badlogic.gdx.utils.viewport.ScreenViewport
 import com.github.quillraven.fleks.World
@@ -45,8 +45,8 @@ import ktx.math.vec2
 class GameScreen : KtxScreen {
 
     private val spriteBatch : Batch = SpriteBatch()
-    private val stage: Stage = Stage(ExtendViewport(16f, 9f), spriteBatch)
-    private val uiStage: Stage = Stage(ScreenViewport(), spriteBatch)
+    private val stage: Scene2DStage = Scene2DStage(ExtendViewport(16f, 9f), spriteBatch)
+    private val uiStage: Scene2DStage = Scene2DStage(ScreenViewport(), spriteBatch)
     private val textureAtlas = TextureAtlas("graphics/PlayerObject.atlas")
 
     private var currentMap: TiledMap? = null
