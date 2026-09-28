@@ -68,15 +68,20 @@ class AudioService {
         }
     }
 
-    fun play(type: SoundType, volumeModifier: Float = 1f, pitchVariation: Float = 0f) {
+    fun play(
+        type: SoundType,
+        volumeModifier: Float = 1f,
+        pitchVariation: Float = 0f,
+        basePitch: Float = 1f
+    ) {
         if (!isSoundEnabled) return
         val sound = soundCache[type] ?: return
 
         val finalVolume = (soundVolume * volumeModifier).coerceIn(0f, 1f)
         val finalPitch = if (pitchVariation > 0f) {
-            (1f + MathUtils.random(-pitchVariation, pitchVariation)).coerceIn(0.5f, 2.0f)
+            (basePitch + MathUtils.random(-pitchVariation, pitchVariation)).coerceIn(0.5f, 2.0f)
         } else {
-            1f
+            basePitch.coerceIn(0.5f, 2.0f)
         }
 
         sound.play(finalVolume, finalPitch, 0f)

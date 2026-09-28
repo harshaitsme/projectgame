@@ -18,11 +18,13 @@ import io.github.shootgame.audio.SoundType
 import io.github.shootgame.component.AttackComponent
 import io.github.shootgame.component.HealthComponent
 import io.github.shootgame.component.PlayerComponent
+import io.github.shootgame.component.WeaponComponent
 
 class UiSystem(
     @Qualifier("uiStage") private val uiStage: Stage,
     private val attackCmps: ComponentMapper<AttackComponent>,
     private val healthCmps: ComponentMapper<HealthComponent>,
+    private val weaponCmps: ComponentMapper<WeaponComponent>,
     private val audioService: AudioService
 ) : IntervalSystem() {
 
@@ -32,8 +34,16 @@ class UiSystem(
     var touchReload = false
     var touchJump = false
     var touchGrenade = false
+    var touchSwitchWeapon = false
+
+    fun consumeWeaponSwitch(): Boolean {
+        val res = touchSwitchWeapon
+        touchSwitchWeapon = false
+        return res
+    }
 
     private lateinit var healthLabel: Label
+    private lateinit var weaponLabel: Label
     private lateinit var ammoLabel: Label
     private lateinit var fragLabel: Label
     private var sfxButtonLabel: Label? = null
@@ -83,6 +93,9 @@ class UiSystem(
         healthLabel = Label("Health: 100 / 100", Label.LabelStyle().apply {
             font = com.badlogic.gdx.graphics.g2d.BitmapFont()
         })
+        weaponLabel = Label("Weapon: Pistol [1-4 / Q,E]", Label.LabelStyle().apply {
+            font = com.badlogic.gdx.graphics.g2d.BitmapFont()
+        })
         ammoLabel = Label("Ammo: 0/0", Label.LabelStyle().apply {
             font = com.badlogic.gdx.graphics.g2d.BitmapFont()
         })
@@ -90,7 +103,8 @@ class UiSystem(
             font = com.badlogic.gdx.graphics.g2d.BitmapFont()
         })
         hudTable.add(healthLabel).pad(20f).row()
-        hudTable.add(ammoLabel).padLeft(20f).row()
+        hudTable.add(weaponLabel).padLeft(20f).padBottom(5f).row()
+        hudTable.add(ammoLabel).padLeft(20f).padBottom(5f).row()
         hudTable.add(fragLabel).padLeft(20f)
         uiStage.addActor(hudTable)
 
@@ -137,12 +151,14 @@ class UiSystem(
 
         val btnShoot = createButton("SHOOT") { touchShoot = it }
         val btnReload = createButton("RELOAD") { touchReload = it }
+        val btnWeapon = createButton("GUN") { if (it) touchSwitchWeapon = true }
         val btnJump = createButton("JUMP") { touchJump = it }
         val btnGrenade = createButton("GRENADE") { touchGrenade = it }
 
-        rightTable.add(btnReload).size(btnSize).padBottom(30f).row()
-        rightTable.add(btnJump).size(btnSize).padBottom(30f).row()
-        rightTable.add(btnGrenade).size(btnSize).padBottom(30f).row()
+        rightTable.add(btnWeapon).size(btnSize).padBottom(20f).row()
+        rightTable.add(btnReload).size(btnSize).padBottom(20f).row()
+        rightTable.add(btnJump).size(btnSize).padBottom(20f).row()
+        rightTable.add(btnGrenade).size(btnSize).padBottom(20f).row()
         rightTable.add(btnShoot).size(btnSize * 1.6f).pad(60f)
         uiStage.addActor(rightTable)
     }
@@ -216,7 +232,16 @@ class UiSystem(
             healthLabel.setText("Health: ${health.currentHealth.toInt()} / ${health.maxHealth.toInt()}")
 
             val attackCmp = attackCmps.getOrNull(player) ?: return@forEach
-            ammoLabel.setText("Ammo: ${attackCmp.ammo} / ${attackCmp.maxAmmo}${if (attackCmp.isReloading) " (Reloading...)" else ""}")
+            val weaponCmp = weaponCmps.getOrNull(player)
+            val currentWeapon = weaponCmp?.currentWeapon
+
+            if (weaponCmp != null && currentWeapon != null) {
+                val currentAmmo = weaponCmp.ammoMap[currentWeapon] ?: currentWeapon.maxAmmo
+                weaponLabel.setText("Weapon: ${currentWeapon.displayName} [1-4 / Q,E]")
+                ammoLabel.setText("Ammo: $currentAmmo / ${currentWeapon.maxAmmo}${if (attackCmp.isReloading) " (Reloading...)" else ""}")
+            } else {
+                ammoLabel.setText("Ammo: ${attackCmp.ammo} / ${attackCmp.maxAmmo}${if (attackCmp.isReloading) " (Reloading...)" else ""}")
+            }
             fragLabel.setText("Frag: ${attackCmp.fragAmmo}")
         }
     }
