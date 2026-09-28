@@ -13,6 +13,8 @@ import com.badlogic.gdx.utils.Align
 import com.github.quillraven.fleks.ComponentMapper
 import com.github.quillraven.fleks.IntervalSystem
 import com.github.quillraven.fleks.Qualifier
+import io.github.shootgame.audio.AudioService
+import io.github.shootgame.audio.SoundType
 import io.github.shootgame.component.AttackComponent
 import io.github.shootgame.component.HealthComponent
 import io.github.shootgame.component.PlayerComponent
@@ -20,7 +22,8 @@ import io.github.shootgame.component.PlayerComponent
 class UiSystem(
     @Qualifier("uiStage") private val uiStage: Stage,
     private val attackCmps: ComponentMapper<AttackComponent>,
-    private val healthCmps: ComponentMapper<HealthComponent>
+    private val healthCmps: ComponentMapper<HealthComponent>,
+    private val audioService: AudioService
 ) : IntervalSystem() {
 
     var touchLeft = false
@@ -33,6 +36,8 @@ class UiSystem(
     private lateinit var healthLabel: Label
     private lateinit var ammoLabel: Label
     private lateinit var fragLabel: Label
+    private var sfxButtonLabel: Label? = null
+    private var bgmButtonLabel: Label? = null
 
     private var touchTexture: Texture? = null
     private var pressedTexture: Texture? = null
@@ -88,6 +93,24 @@ class UiSystem(
         hudTable.add(ammoLabel).padLeft(20f).row()
         hudTable.add(fragLabel).padLeft(20f)
         uiStage.addActor(hudTable)
+
+        // HUD - Top Right Audio Toggles
+        val audioTable = Table()
+        audioTable.setFillParent(true)
+        audioTable.top().right()
+
+        val sfxBtn = createToggleButton("SFX: ON") {
+            val enabled = audioService.toggleSound()
+            sfxButtonLabel?.setText(if (enabled) "SFX: ON" else "SFX: OFF")
+        }
+        val bgmBtn = createToggleButton("BGM: ON") {
+            val enabled = audioService.toggleMusic()
+            bgmButtonLabel?.setText(if (enabled) "BGM: ON" else "BGM: OFF")
+        }
+
+        audioTable.add(sfxBtn).size(110f, 50f).padTop(20f).padRight(15f)
+        audioTable.add(bgmBtn).size(110f, 50f).padTop(20f).padRight(20f)
+        uiStage.addActor(audioTable)
     }
 
     private fun setupTouchControls() {
@@ -138,6 +161,7 @@ class UiSystem(
 
         stack.addListener(object : ClickListener() {
             override fun touchDown(event: InputEvent?, x: Float, y: Float, pointer: Int, button: Int): Boolean {
+                audioService.play(SoundType.CLICK, volumeModifier = 0.5f)
                 action(true)
                 image.drawable = TextureRegionDrawable(getTouchTexture(true))
                 return true
@@ -146,6 +170,39 @@ class UiSystem(
             override fun touchUp(event: InputEvent?, x: Float, y: Float, pointer: Int, button: Int) {
                 action(false)
                 image.drawable = TextureRegionDrawable(getTouchTexture(false))
+            }
+        })
+        return stack
+    }
+
+    private fun createToggleButton(initialText: String, onToggle: () -> Unit): Stack {
+        val stack = Stack()
+        val image = Image(getTouchTexture())
+
+        val label = Label(initialText, Label.LabelStyle().apply {
+            font = com.badlogic.gdx.graphics.g2d.BitmapFont()
+        })
+        label.setAlignment(Align.center)
+
+        if (initialText.startsWith("SFX")) {
+            sfxButtonLabel = label
+        } else if (initialText.startsWith("BGM")) {
+            bgmButtonLabel = label
+        }
+
+        stack.add(image)
+        stack.add(label)
+
+        stack.addListener(object : ClickListener() {
+            override fun touchDown(event: InputEvent?, x: Float, y: Float, pointer: Int, button: Int): Boolean {
+                audioService.play(SoundType.CLICK, volumeModifier = 0.5f)
+                image.drawable = TextureRegionDrawable(getTouchTexture(true))
+                return true
+            }
+
+            override fun touchUp(event: InputEvent?, x: Float, y: Float, pointer: Int, button: Int) {
+                image.drawable = TextureRegionDrawable(getTouchTexture(false))
+                onToggle()
             }
         })
         return stack

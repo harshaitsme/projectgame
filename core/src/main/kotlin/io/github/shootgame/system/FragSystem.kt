@@ -4,12 +4,15 @@ import com.github.quillraven.fleks.AllOf
 import com.github.quillraven.fleks.ComponentMapper
 import com.github.quillraven.fleks.Entity
 import com.github.quillraven.fleks.IteratingSystem
+import io.github.shootgame.audio.AudioService
+import io.github.shootgame.audio.SoundType
 import io.github.shootgame.component.*
 
 @AllOf([FragComponent::class, PhysicComponent::class])
 class FragSystem(
     private val fragCmps: ComponentMapper<FragComponent>,
-    private val physicCmps: ComponentMapper<PhysicComponent>
+    private val physicCmps: ComponentMapper<PhysicComponent>,
+    private val audioService: AudioService
 ) : IteratingSystem() {
 
     override fun onTickEntity(entity: Entity) {
@@ -29,6 +32,7 @@ class FragSystem(
                     location.set(posX, posY)
                 }
             }
+            audioService.play(SoundType.EXPLOSION, pitchVariation = 0.05f)
             world.remove(entity)
         }
     }
