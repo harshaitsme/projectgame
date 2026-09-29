@@ -36,7 +36,9 @@ class EntitySpawnSystem(
     private val atlas: TextureAtlas,
     private val spawnCmps: ComponentMapper<SpawnComponent>,
     private val moveCmps: ComponentMapper<MoveComponent>,
-    private val ownerCmps: ComponentMapper<OwnerComponent>
+    private val ownerCmps: ComponentMapper<OwnerComponent>,
+    private val damageCmps: ComponentMapper<DamageComponent>,
+    private val bulletCmps: ComponentMapper<BulletComponent>
 ) : EventListener, IteratingSystem() {
 
     private val cachedCfgs = mutableMapOf<String, SpawnCfg>()
@@ -62,16 +64,34 @@ class EntitySpawnSystem(
 
     override fun onTickEntity(entity: Entity) {
         val spawnCmp = spawnCmps[entity]
+
+        if (spawnCmp.type.startsWith("Pickup")) {
+            val pickupType = when (spawnCmp.type) {
+                "Pickup_Health", "PickupHealth" -> PickupType.HEALTH
+                "Pickup_Ammo", "PickupAmmo" -> PickupType.AMMO
+                "Pickup_Grenade", "PickupGrenade" -> PickupType.GRENADE
+                "Pickup_Coin", "PickupCoin" -> PickupType.COIN
+                else -> PickupType.HEALTH
+            }
+            PickupSystem.spawn(world, phWorld, pickupType, spawnCmp.location.x, spawnCmp.location.y)
+            world.remove(entity)
+            return
+        }
+
         val cfg = spawnCfg(spawnCmp.type)
         val originalMoveCmp = if (entity in moveCmps) moveCmps[entity] else null
         val originalOwnerCmp = if (entity in ownerCmps) ownerCmps[entity] else null
+        val originalDamageCmp = if (entity in damageCmps) damageCmps[entity] else null
+        val originalBulletCmp = if (entity in bulletCmps) bulletCmps[entity] else null
 
         world.entity { spawnedEntity ->
             val imageCmp = add<ImageComponent> {
                 image = Image().apply {
                     if (spawnCmp.type == "Bullet") {
                         drawable = TextureRegionDrawable(bulletRegion)
-                        setSize(0.2f, 0.2f)
+                        val bWidth = originalBulletCmp?.width ?: 0.2f
+                        val bHeight = originalBulletCmp?.height ?: 0.2f
+                        setSize(bWidth, bHeight)
                     } else if (spawnCmp.type == "Frag") {
                         drawable = TextureRegionDrawable(grenadeRegion)
                         setSize(0.4f, 0.4f)
@@ -84,10 +104,12 @@ class EntitySpawnSystem(
                     }
 
                     if (spawnCmp.type == "Bullet" || spawnCmp.type == "Frag" || spawnCmp.type == "Explosion") {
-                        val finalWidth = if (spawnCmp.type == "Bullet") 0.2f
+                        val bWidth = originalBulletCmp?.width ?: 0.2f
+                        val bHeight = originalBulletCmp?.height ?: 0.2f
+                        val finalWidth = if (spawnCmp.type == "Bullet") bWidth
                                         else if (spawnCmp.type == "Frag") 0.4f
                                         else size(cfg.model, cfg.type).x * 2.5f
-                        val finalHeight = if (spawnCmp.type == "Bullet") 0.2f
+                        val finalHeight = if (spawnCmp.type == "Bullet") bHeight
                                          else if (spawnCmp.type == "Frag") 0.4f
                                          else size(cfg.model, cfg.type).y * 2.5f
                         val positionX = spawnCmp.location.x - finalWidth * 0.5f
@@ -121,6 +143,7 @@ class EntitySpawnSystem(
                 add<PlayerComponent>()
                 add<MoveComponent>()
                 add<AttackComponent>()
+                add<WeaponComponent>()
                 add<HealthComponent>()
                 add<OwnerComponent> {
                     owner = spawnedEntity
@@ -128,8 +151,18 @@ class EntitySpawnSystem(
             }
 
             if (spawnCmp.type == "Bullet") {
-                add<BulletComponent>()
-                add<DamageComponent>()
+                add<BulletComponent> {
+                    if (originalBulletCmp != null) {
+                        lifeTime = originalBulletCmp.lifeTime
+                        width = originalBulletCmp.width
+                        height = originalBulletCmp.height
+                    }
+                }
+                add<DamageComponent> {
+                    if (originalDamageCmp != null) {
+                        amount = originalDamageCmp.amount
+                    }
+                }
                 if (originalOwnerCmp != null) {
                     add<OwnerComponent> {
                         owner = originalOwnerCmp.owner

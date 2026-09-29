@@ -1,5 +1,6 @@
 package io.github.shootgame.system
 
+import com.badlogic.gdx.math.MathUtils
 import com.github.quillraven.fleks.AllOf
 import com.github.quillraven.fleks.ComponentMapper
 import com.github.quillraven.fleks.Entity
@@ -16,9 +17,11 @@ class CombatSystem(
     private val moveCmps: ComponentMapper<MoveComponent>,
     private val imageCmps: ComponentMapper<ImageComponent>,
     private val animationCmps: ComponentMapper<AnimationComponent>,
+    private val weaponCmps: ComponentMapper<WeaponComponent>,
     private val audioService: AudioService
 ) : IteratingSystem() {
 
+    private val cameraShakeSystem: CameraShakeSystem by lazy { world.system<CameraShakeSystem>() }
     private val reloadingEntities = mutableSetOf<Entity>()
 
     override fun onTickEntity(entity: Entity) {
@@ -26,6 +29,17 @@ class CombatSystem(
         val moveCmp = moveCmps[entity]
         val imageCmp = imageCmps[entity]
         val animationCmp = animationCmps[entity]
+        val weaponCmp = weaponCmps.getOrNull(entity)
+        val currentWeapon = weaponCmp?.currentWeapon
+
+        val maxAmmo = currentWeapon?.maxAmmo ?: attackCmp.maxAmmo
+        val currentAmmo = if (weaponCmp != null && currentWeapon != null) {
+            weaponCmp.ammoMap.getOrPut(currentWeapon) { maxAmmo }
+        } else {
+            attackCmp.ammo
+        }
+        val reloadDuration = currentWeapon?.reloadTime ?: attackCmp.reloadTime
+        val fireRate = currentWeapon?.fireRate ?: attackCmp.fireRate
 
         if (attackCmp.isReloading) {
             if (entity !in reloadingEntities) {
@@ -33,8 +47,12 @@ class CombatSystem(
                 audioService.play(SoundType.RELOAD)
             }
             attackCmp.stateTime += deltaTime
-            if (attackCmp.stateTime >= attackCmp.reloadTime) {
-                attackCmp.ammo = attackCmp.maxAmmo
+            if (attackCmp.stateTime >= reloadDuration) {
+                if (weaponCmp != null && currentWeapon != null) {
+                    weaponCmp.ammoMap[currentWeapon] = maxAmmo
+                } else {
+                    attackCmp.ammo = attackCmp.maxAmmo
+                }
                 attackCmp.isReloading = false
                 attackCmp.stateTime = 0f
                 reloadingEntities.remove(entity)
@@ -49,13 +67,22 @@ class CombatSystem(
         }
 
         if (attackCmp.isAttacking && attackCmp.stateTime <= 0) {
-            if (attackCmp.ammo > 0) {
-                // Wait for the fire frame in SHOT1 animation (e.g., 0.15s delay)
-                if (animationCmp.type == AnimationType.SHOT1 && animationCmp.stateTime >= 0.15f) {
-                    spawnBullet(entity, imageCmp, moveCmp)
-                    attackCmp.ammo--
-                    attackCmp.stateTime = attackCmp.fireRate
-                    audioService.play(SoundType.SHOT, pitchVariation = 0.08f)
+            if (currentAmmo > 0) {
+                // Wait for the fire frame in SHOT1 animation (faster response for automatic weapons)
+                val minAnimDelay = if (currentWeapon == WeaponType.MACHINE_GUN) 0.05f else 0.15f
+                if (animationCmp.type == AnimationType.SHOT1 && animationCmp.stateTime >= minAnimDelay) {
+                    spawnBulletsForWeapon(entity, imageCmp, currentWeapon)
+                    if (weaponCmp != null && currentWeapon != null) {
+                        weaponCmp.ammoMap[currentWeapon] = currentAmmo - 1
+                    } else {
+                        attackCmp.ammo--
+                    }
+                    attackCmp.stateTime = fireRate
+
+                    playWeaponSound(currentWeapon)
+                    if (currentWeapon != null && currentWeapon.cameraShake > 0f) {
+                        cameraShakeSystem.trigger(amount = currentWeapon.cameraShake)
+                    }
                 }
             } else {
                 attackCmp.isReloading = true
@@ -95,31 +122,105 @@ class CombatSystem(
         }
     }
 
-    private fun spawnBullet(shooter: Entity, imageCmp: ImageComponent, moveCmp: MoveComponent) {
+    private fun spawnBulletsForWeapon(
+        shooter: Entity,
+        imageCmp: ImageComponent,
+        weapon: WeaponType?
+    ) {
         val image = imageCmp.image
         val facingRight = image.scaleX > 0
 
-        // Define offsets in world units (relative to player center)
-        // Adjust these values to perfectly align with your gun's nozzle
         val offsetX = if (facingRight) 0.6f else -0.6f
         val offsetY = -0.9f
 
-        val x = image.x + image.width * 0.5f + offsetX
-        val y = image.y + image.height * 0.5f + offsetY
+        val startX = image.x + image.width * 0.5f + offsetX
+        val startY = image.y + image.height * 0.5f + offsetY
 
-        world.entity {
-            add<SpawnComponent> {
-                type = "Bullet"
-                location.set(x, y)
+        val baseSpeed = weapon?.bulletSpeed ?: 15f
+        val bulletDamage = weapon?.damage ?: 50f
+        val lifeTime = weapon?.bulletLifeTime ?: 3f
+        val bulletCount = weapon?.bulletCount ?: 1
+        val spreadAngle = weapon?.spreadAngle ?: 0f
+
+        val bulletWidth = when (weapon) {
+            WeaponType.SHOTGUN -> 0.14f
+            WeaponType.SNIPER -> 0.35f
+            WeaponType.MACHINE_GUN -> 0.18f
+            else -> 0.2f
+        }
+        val bulletHeight = when (weapon) {
+            WeaponType.SHOTGUN -> 0.14f
+            WeaponType.SNIPER -> 0.12f
+            else -> 0.2f
+        }
+
+        val baseAngleDeg = if (facingRight) 0f else 180f
+
+        for (i in 0 until bulletCount) {
+            val angleOffset = if (bulletCount > 1) {
+                -spreadAngle / 2f + (spreadAngle / (bulletCount - 1)) * i
+            } else if (spreadAngle > 0f) {
+                MathUtils.random(-spreadAngle / 2f, spreadAngle / 2f)
+            } else {
+                0f
             }
-            add<OwnerComponent> {
-                owner = shooter
+
+            val finalAngleDeg = baseAngleDeg + angleOffset
+            val rad = MathUtils.degreesToRadians * finalAngleDeg
+            val bulletCos = MathUtils.cos(rad)
+            val bulletSin = MathUtils.sin(rad)
+
+            world.entity {
+                add<SpawnComponent> {
+                    type = "Bullet"
+                    location.set(startX, startY)
+                }
+                add<OwnerComponent> {
+                    owner = shooter
+                }
+                add<MoveComponent> {
+                    cos = bulletCos
+                    sin = bulletSin
+                    speed = baseSpeed
+                }
+                add<DamageComponent> {
+                    amount = bulletDamage
+                }
+                add<BulletComponent> {
+                    this.lifeTime = lifeTime
+                    this.width = bulletWidth
+                    this.height = bulletHeight
+                }
             }
-            add<MoveComponent> {
-                cos = moveCmp.lastCos
-                sin = moveCmp.lastSin
-                speed = 15f
-            }
+        }
+    }
+
+    private fun playWeaponSound(weapon: WeaponType?) {
+        when (weapon) {
+            WeaponType.SHOTGUN -> audioService.play(
+                SoundType.SHOT,
+                volumeModifier = 1.0f,
+                pitchVariation = 0.05f,
+                basePitch = 0.72f
+            )
+            WeaponType.MACHINE_GUN -> audioService.play(
+                SoundType.SHOT,
+                volumeModifier = 0.75f,
+                pitchVariation = 0.12f,
+                basePitch = 1.25f
+            )
+            WeaponType.SNIPER -> audioService.play(
+                SoundType.SHOT,
+                volumeModifier = 1.0f,
+                pitchVariation = 0.02f,
+                basePitch = 0.55f
+            )
+            else -> audioService.play(
+                SoundType.SHOT,
+                volumeModifier = 0.9f,
+                pitchVariation = 0.08f,
+                basePitch = 1.0f
+            )
         }
     }
 }
