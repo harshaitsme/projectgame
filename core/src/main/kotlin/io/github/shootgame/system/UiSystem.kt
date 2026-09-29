@@ -25,6 +25,7 @@ class UiSystem(
     private val attackCmps: ComponentMapper<AttackComponent>,
     private val healthCmps: ComponentMapper<HealthComponent>,
     private val weaponCmps: ComponentMapper<WeaponComponent>,
+    private val playerCmps: ComponentMapper<PlayerComponent>,
     private val audioService: AudioService
 ) : IntervalSystem() {
 
@@ -46,6 +47,7 @@ class UiSystem(
     private lateinit var weaponLabel: Label
     private lateinit var ammoLabel: Label
     private lateinit var fragLabel: Label
+    private lateinit var scoreLabel: Label
     private var sfxButtonLabel: Label? = null
     private var bgmButtonLabel: Label? = null
 
@@ -102,10 +104,14 @@ class UiSystem(
         fragLabel = Label("Frag: 0", Label.LabelStyle().apply {
             font = com.badlogic.gdx.graphics.g2d.BitmapFont()
         })
+        scoreLabel = Label("Score: 0", Label.LabelStyle().apply {
+            font = com.badlogic.gdx.graphics.g2d.BitmapFont()
+        })
         hudTable.add(healthLabel).pad(20f).row()
         hudTable.add(weaponLabel).padLeft(20f).padBottom(5f).row()
         hudTable.add(ammoLabel).padLeft(20f).padBottom(5f).row()
-        hudTable.add(fragLabel).padLeft(20f)
+        hudTable.add(fragLabel).padLeft(20f).padBottom(5f).row()
+        hudTable.add(scoreLabel).padLeft(20f)
         uiStage.addActor(hudTable)
 
         // HUD - Top Right Audio Toggles
@@ -243,6 +249,8 @@ class UiSystem(
                 ammoLabel.setText("Ammo: ${attackCmp.ammo} / ${attackCmp.maxAmmo}${if (attackCmp.isReloading) " (Reloading...)" else ""}")
             }
             fragLabel.setText("Frag: ${attackCmp.fragAmmo}")
+            val playerCmp = playerCmps.getOrNull(player)
+            scoreLabel.setText("Score: ${playerCmp?.score ?: 0}")
         }
     }
 

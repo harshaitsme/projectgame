@@ -32,6 +32,7 @@ import io.github.shootgame.system.FragSystem
 import io.github.shootgame.system.HealthSystem
 import io.github.shootgame.system.MoveSystem
 import io.github.shootgame.system.PhysicSystem
+import io.github.shootgame.system.PickupSystem
 import io.github.shootgame.system.PlayerInputSystem
 import io.github.shootgame.system.RenderSystem
 import io.github.shootgame.system.UiSystem
@@ -77,6 +78,7 @@ class GameScreen : KtxScreen {
         system<DamageSystem>()
         system<HealthSystem>()
         system<DeathSystem>()
+        system<PickupSystem>()
         system<UiSystem>()
         system<BulletSystem>()
         system<AnimationSystem>()

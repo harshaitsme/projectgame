@@ -64,6 +64,20 @@ class EntitySpawnSystem(
 
     override fun onTickEntity(entity: Entity) {
         val spawnCmp = spawnCmps[entity]
+
+        if (spawnCmp.type.startsWith("Pickup")) {
+            val pickupType = when (spawnCmp.type) {
+                "Pickup_Health", "PickupHealth" -> PickupType.HEALTH
+                "Pickup_Ammo", "PickupAmmo" -> PickupType.AMMO
+                "Pickup_Grenade", "PickupGrenade" -> PickupType.GRENADE
+                "Pickup_Coin", "PickupCoin" -> PickupType.COIN
+                else -> PickupType.HEALTH
+            }
+            PickupSystem.spawn(world, phWorld, pickupType, spawnCmp.location.x, spawnCmp.location.y)
+            world.remove(entity)
+            return
+        }
+
         val cfg = spawnCfg(spawnCmp.type)
         val originalMoveCmp = if (entity in moveCmps) moveCmps[entity] else null
         val originalOwnerCmp = if (entity in ownerCmps) ownerCmps[entity] else null
