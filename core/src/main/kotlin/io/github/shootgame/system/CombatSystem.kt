@@ -18,6 +18,7 @@ class CombatSystem(
     private val imageCmps: ComponentMapper<ImageComponent>,
     private val animationCmps: ComponentMapper<AnimationComponent>,
     private val weaponCmps: ComponentMapper<WeaponComponent>,
+    private val playerCmps: ComponentMapper<PlayerComponent>,
     private val audioService: AudioService
 ) : IteratingSystem() {
 
@@ -80,7 +81,7 @@ class CombatSystem(
                     attackCmp.stateTime = fireRate
 
                     playWeaponSound(currentWeapon)
-                    if (currentWeapon != null && currentWeapon.cameraShake > 0f) {
+                    if (entity in playerCmps && currentWeapon != null && currentWeapon.cameraShake > 0f) {
                         cameraShakeSystem.trigger(amount = currentWeapon.cameraShake)
                     }
                 }
@@ -136,8 +137,8 @@ class CombatSystem(
         val startX = image.x + image.width * 0.5f + offsetX
         val startY = image.y + image.height * 0.5f + offsetY
 
-        val baseSpeed = weapon?.bulletSpeed ?: 15f
-        val bulletDamage = weapon?.damage ?: 50f
+        val baseSpeed = weapon?.bulletSpeed ?: 12f
+        val bulletDamage = weapon?.damage ?: 15f
         val lifeTime = weapon?.bulletLifeTime ?: 3f
         val bulletCount = weapon?.bulletCount ?: 1
         val spreadAngle = weapon?.spreadAngle ?: 0f
