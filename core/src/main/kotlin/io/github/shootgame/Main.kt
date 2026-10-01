@@ -6,7 +6,7 @@ import io.github.shootgame.screen.GameScreen
 import ktx.app.KtxGame
 import ktx.app.KtxScreen
 
-// main start point here
+/** Application entry point for the game. */
 class Main : KtxGame<KtxScreen>() {
 
     override fun create() {
@@ -16,8 +16,8 @@ class Main : KtxGame<KtxScreen>() {
         setScreen<GameScreen>()
     }
 
-    companion object{
-        const val UNIT_SCALE = 1/32f
+    companion object {
+        /** Converts the game's 32-pixel tile units into world units. */
+        const val UNIT_SCALE = 1 / 32f
     }
 }
-
