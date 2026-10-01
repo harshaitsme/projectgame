@@ -20,6 +20,7 @@ import io.github.shootgame.component.PhysicComponent
 import io.github.shootgame.component.PlayerComponent
 import io.github.shootgame.event.MapChangeEvent
 import io.github.shootgame.event.fire
+import io.github.shootgame.system.AiSystem
 import io.github.shootgame.system.AnimationSystem
 import io.github.shootgame.system.BulletSystem
 import io.github.shootgame.system.CameraShakeSystem
@@ -69,6 +70,7 @@ class GameScreen : KtxScreen {
         componentListener<PlayerComponent.Companion.PlayerComponentListener>()
 
         system<PlayerInputSystem>()
+        system<AiSystem>()
         system<CombatSystem>()
         system<CollisionSystem>()
         system<FragSystem>()

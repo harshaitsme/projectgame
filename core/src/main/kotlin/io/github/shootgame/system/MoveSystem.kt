@@ -71,8 +71,8 @@ class MoveSystem(
             moveCmp.doJump = false
         }
 
-        // Update animation and flipping (Player only)
-        if (entity in playerCmps && entity in animationCmps) {
+        // Update animation for all humanoid entities (Player & Enemies)
+        if (entity in animationCmps && !isBullet && !isFrag) {
             val aniCmp = animationCmps[entity]
             val attackCmp = attackCmps.getOrNull(entity)
 

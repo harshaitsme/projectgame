@@ -1,5 +1,6 @@
 package io.github.shootgame.system
 
+import com.badlogic.gdx.graphics.Color
 import com.badlogic.gdx.graphics.Pixmap
 import com.badlogic.gdx.graphics.Texture
 import com.badlogic.gdx.graphics.g2d.TextureAtlas
@@ -150,6 +151,28 @@ class EntitySpawnSystem(
                 }
             }
 
+            if (spawnCmp.type == "Enemy") {
+                println("SPAWNING ENEMY at: ${spawnCmp.location}")
+                imageCmp.image.color = Color(1f, 0.35f, 0.35f, 1f) // Crimson red hostile tint
+                add<EnemyComponent>()
+                add<AiComponent>()
+                add<MoveComponent> {
+                    speed = 3.5f
+                }
+                add<AttackComponent> {
+                    ammo = 999
+                    maxAmmo = 999
+                    fireRate = 0.8f
+                }
+                add<HealthComponent> {
+                    maxHealth = 60f
+                    currentHealth = 60f
+                }
+                add<OwnerComponent> {
+                    owner = spawnedEntity
+                }
+            }
+
             if (spawnCmp.type == "Bullet") {
                 add<BulletComponent> {
                     if (originalBulletCmp != null) {
@@ -227,7 +250,7 @@ class EntitySpawnSystem(
             }
 else if (spawnCmp.type == "Explosion") {
                 // No physics for explosion, just visuals
-            } else if (spawnCmp.type == "Player") {
+            } else if (spawnCmp.type == "Player" || spawnCmp.type == "Enemy") {
                 physicCmpFromImage(phWorld, imageCmp.image, BodyDef.BodyType.DynamicBody) { _, width, height ->
                     // Narrower box (25% width) to fit the character and not the whitespace
                     box(width = width * 0.25f, height = height * 0.85f) {
@@ -249,6 +272,7 @@ else if (spawnCmp.type == "Explosion") {
     private fun spawnCfg(type: String): SpawnCfg = cachedCfgs.getOrPut(type) {
         when (type) {
             "Player" -> SpawnCfg(AnimationModel.PLAYER, AnimationType.IDLE)
+            "Enemy" -> SpawnCfg(AnimationModel.PLAYER, AnimationType.IDLE)
             "Bullet" -> SpawnCfg(AnimationModel.BULLET, AnimationType.UNDEFINED)
             "Frag" -> SpawnCfg(AnimationModel.BULLET, AnimationType.UNDEFINED)
             "Explosion" -> SpawnCfg(AnimationModel.PLAYER, AnimationType.EXPLOSION)
@@ -267,10 +291,10 @@ else if (spawnCmp.type == "Explosion") {
     }
 
     override fun handle(event: Event?): Boolean {
-        when(event){
+        when (event) {
             is MapChangeEvent -> {
-
-               val entitiesLayer = event.map.layer("entities")
+                val entitiesLayer = event.map.layer("entities")
+                var enemyCount = 0
                 entitiesLayer.objects.forEach { mapObject ->
                     var type = mapObject.type
                     if (type == null && mapObject is TiledMapTileMapObject) {
@@ -282,6 +306,10 @@ else if (spawnCmp.type == "Explosion") {
                         return@forEach
                     }
 
+                    if (type == "Enemy") {
+                        enemyCount++
+                    }
+
                     world.entity {
                         add <SpawnComponent>{
                             this.type = type
@@ -290,9 +318,26 @@ else if (spawnCmp.type == "Explosion") {
                     }
                 }
 
-            return true
+                if (enemyCount == 0) {
+                    println("Spawning default test enemies on map platforms...")
+                    val defaultEnemyPositions = listOf(
+                        Vector2(16f, 14.6f),
+                        Vector2(22f, 8.5f),
+                        Vector2(6f, 9.5f)
+                    )
+                    defaultEnemyPositions.forEach { pos ->
+                        world.entity {
+                            add<SpawnComponent> {
+                                this.type = "Enemy"
+                                this.location.set(pos.x, pos.y)
+                            }
+                        }
+                    }
+                }
+
+                return true
+            }
         }
-    }
         return false
     }
 

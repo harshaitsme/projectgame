@@ -9,9 +9,11 @@ import io.github.shootgame.component.AnimationComponent
 import io.github.shootgame.component.AnimationModel
 import io.github.shootgame.component.AnimationType
 import io.github.shootgame.component.DeadComponent
+import io.github.shootgame.component.EnemyComponent
 import io.github.shootgame.component.HealthComponent
 import io.github.shootgame.component.MoveComponent
 import io.github.shootgame.component.PhysicComponent
+import io.github.shootgame.component.PlayerComponent
 
 @AllOf([HealthComponent::class])
 class HealthSystem(
@@ -19,7 +21,9 @@ class HealthSystem(
     private val deadCmps: ComponentMapper<DeadComponent>,
     private val animationCmps: ComponentMapper<AnimationComponent>,
     private val moveCmps: ComponentMapper<MoveComponent>,
-    private val physicCmps: ComponentMapper<PhysicComponent>
+    private val physicCmps: ComponentMapper<PhysicComponent>,
+    private val enemyCmps: ComponentMapper<EnemyComponent>,
+    private val playerCmps: ComponentMapper<PlayerComponent>
 ) : IteratingSystem() {
 
     override fun onTickEntity(entity: Entity) {
@@ -51,6 +55,13 @@ class HealthSystem(
     }
 
     private fun kill(entity: Entity) {
+        val enemy = enemyCmps.getOrNull(entity)
+        if (enemy != null) {
+            world.family(allOf = arrayOf(PlayerComponent::class)).forEach { player ->
+                playerCmps[player].score += enemy.scoreValue
+            }
+        }
+
         world.configureEntity(entity) {
             deadCmps.add(entity) {
                 time = 0f
