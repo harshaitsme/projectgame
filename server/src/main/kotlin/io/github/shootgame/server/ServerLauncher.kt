@@ -16,8 +16,12 @@ data class ConnectedClient(
     var sin: Float = 0f
 )
 
-fun main() {
-    println("Starting ShootGame Dedicated Server on TCP ${NetworkConfig.TCP_PORT}, UDP ${NetworkConfig.UDP_PORT}...")
+/** Launches the server application. */
+fun main(args: Array<String> = emptyArray()) {
+    val tcpPort = args.getOrNull(0)?.toIntOrNull() ?: NetworkConfig.TCP_PORT
+    val udpPort = args.getOrNull(1)?.toIntOrNull() ?: NetworkConfig.UDP_PORT
+
+    println("🎮 Starting ShootGame Dedicated Server on TCP $tcpPort, UDP $udpPort...")
 
     val server = Server()
     NetworkConfig.register(server.kryo)
@@ -98,7 +102,7 @@ fun main() {
         }
     })
 
-    server.bind(NetworkConfig.TCP_PORT, NetworkConfig.UDP_PORT)
+    server.bind(tcpPort, udpPort)
     server.start()
 
     println("ShootGame Server running successfully.")
