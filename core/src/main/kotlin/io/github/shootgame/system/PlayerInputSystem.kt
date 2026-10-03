@@ -11,6 +11,7 @@ import io.github.shootgame.component.AttackComponent
 import io.github.shootgame.component.DeadComponent
 import io.github.shootgame.component.MoveComponent
 import io.github.shootgame.component.PlayerComponent
+import io.github.shootgame.component.RemotePlayerComponent
 import io.github.shootgame.component.WeaponComponent
 import io.github.shootgame.component.WeaponType
 
@@ -19,7 +20,7 @@ import io.github.shootgame.component.PhysicComponent
 import io.github.shootgame.component.PickupType
 
 @AllOf([PlayerComponent::class, MoveComponent::class, AttackComponent::class, PhysicComponent::class])
-@NoneOf([DeadComponent::class])
+@NoneOf([DeadComponent::class, RemotePlayerComponent::class])
 class PlayerInputSystem(
     private val phWorld: PhWorld,
     private val moveCmps: ComponentMapper<MoveComponent>,
