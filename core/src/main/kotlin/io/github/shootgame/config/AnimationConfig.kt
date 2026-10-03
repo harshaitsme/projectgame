@@ -6,26 +6,18 @@ package io.github.shootgame.config
  */
 object AnimationConfig {
     // Frame timing
-    const val FRAME_DURATION = 1 / 8f
     const val FRAME_RATE_FPS = 8
+    const val FRAME_DURATION = 1f / FRAME_RATE_FPS
 
     // Player animations
-    object Player {
-        const val IDLE = "Idle"
-        const val WALK = "Walk"
-        const val RUN = "Run"
-        const val SHOT1 = "Shot1"
-        const val SHOT2 = "Shot2"
-        const val ATTACK = "Attack"
-        const val RECHARGE = "Recharge"
-        const val GRENADE = "Grenade"
-        const val HURT = "Hurt"
-        const val DEAD = "Dead"
-        const val EXPLOSION = "Explosion"
+    enum class PlayerAnimation {
+        IDLE, WALK, RUN, SHOT1, SHOT2, ATTACK, RECHARGE, GRENADE, HURT, DEAD, EXPLOSION;
+
+        val key: String get() = name.capitalize() // Or just name if you prefer uppercase
     }
 
     /**
      * Get animation key in format "Model/Type"
      */
-    fun getAnimationKey(model: String, type: String): String = "$model/$type"
+    fun getAnimationKey(model: String, type: PlayerAnimation): String = "$model/${type.key}"
 }
