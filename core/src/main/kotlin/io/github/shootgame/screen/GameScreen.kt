@@ -37,6 +37,7 @@ import io.github.shootgame.system.PickupSystem
 import io.github.shootgame.system.PlayerInputSystem
 import io.github.shootgame.system.RenderSystem
 import io.github.shootgame.system.UiSystem
+import io.github.shootgame.system.NetworkSystem
 import ktx.app.KtxScreen
 import ktx.assets.disposeSafely
 import ktx.box2d.createWorld
@@ -87,6 +88,7 @@ class GameScreen : KtxScreen {
         system<CameraShakeSystem>()
         system<RenderSystem>()
         system<EntitySpawnSystem>()
+        system<NetworkSystem>()
     }
 
   // ==================================================================================
@@ -107,6 +109,9 @@ class GameScreen : KtxScreen {
         currentMap = TmxMapLoader().load("map/map1.tmx")
         stage.fire(MapChangeEvent(currentMap!!))
         audioService.playMusic()
+
+        // Connect to multiplayer server if available
+        eWorld.system<NetworkSystem>().connect()
     }
 
     override fun pause() {

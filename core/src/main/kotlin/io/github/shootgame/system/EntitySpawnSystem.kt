@@ -151,6 +151,20 @@ class EntitySpawnSystem(
                 }
             }
 
+            if (spawnCmp.type == "RemotePlayer") {
+                println("SPAWNING REMOTE PLAYER at: ${spawnCmp.location}")
+                imageCmp.image.color = Color(0.4f, 0.7f, 1f, 1f) // Distinct ally cyan/blue tint
+                add<PlayerComponent>()
+                add<RemotePlayerComponent>()
+                add<MoveComponent>()
+                add<AttackComponent>()
+                add<WeaponComponent>()
+                add<HealthComponent>()
+                add<OwnerComponent> {
+                    owner = spawnedEntity
+                }
+            }
+
             if (spawnCmp.type == "Enemy") {
                 println("SPAWNING ENEMY at: ${spawnCmp.location}")
                 imageCmp.image.color = Color(1f, 0.35f, 0.35f, 1f) // Crimson red hostile tint
@@ -250,7 +264,7 @@ class EntitySpawnSystem(
             }
 else if (spawnCmp.type == "Explosion") {
                 // No physics for explosion, just visuals
-            } else if (spawnCmp.type == "Player" || spawnCmp.type == "Enemy") {
+            } else if (spawnCmp.type == "Player" || spawnCmp.type == "RemotePlayer" || spawnCmp.type == "Enemy") {
                 physicCmpFromImage(phWorld, imageCmp.image, BodyDef.BodyType.DynamicBody) { _, width, height ->
                     // Narrower box (25% width) to fit the character and not the whitespace
                     box(width = width * 0.25f, height = height * 0.85f) {
@@ -271,7 +285,7 @@ else if (spawnCmp.type == "Explosion") {
 
     private fun spawnCfg(type: String): SpawnCfg = cachedCfgs.getOrPut(type) {
         when (type) {
-            "Player" -> SpawnCfg(AnimationModel.PLAYER, AnimationType.IDLE)
+            "Player", "RemotePlayer" -> SpawnCfg(AnimationModel.PLAYER, AnimationType.IDLE)
             "Enemy" -> SpawnCfg(AnimationModel.PLAYER, AnimationType.IDLE)
             "Bullet" -> SpawnCfg(AnimationModel.BULLET, AnimationType.UNDEFINED)
             "Frag" -> SpawnCfg(AnimationModel.BULLET, AnimationType.UNDEFINED)
