@@ -53,6 +53,7 @@ class GameScreen : KtxScreen {
     private val stage: Stage = Stage(ExtendViewport(16f, 9f), spriteBatch)
     private val uiStage: Stage = Stage(ScreenViewport(), spriteBatch)
     private val textureAtlas = TextureAtlas("graphics/PlayerObject.atlas")
+    private val mapLoader = TmxMapLoader()
 
     private var currentMap: TiledMap? = null
     private val phWorld = createWorld(gravity = vec2(0f, -20f)).apply {
@@ -106,7 +107,7 @@ class GameScreen : KtxScreen {
                 stage.addListener(system)
             }
         }
-        currentMap = TmxMapLoader().load("map/map1.tmx")
+        currentMap = mapLoader.load("map/map1.tmx")
         stage.fire(MapChangeEvent(currentMap!!))
         audioService.playMusic()
 
@@ -139,6 +140,7 @@ class GameScreen : KtxScreen {
         textureAtlas.disposeSafely()
         eWorld.dispose()
         currentMap?.disposeSafely()
+        mapLoader.disposeSafely()
         phWorld.disposeSafely()
     }
 
