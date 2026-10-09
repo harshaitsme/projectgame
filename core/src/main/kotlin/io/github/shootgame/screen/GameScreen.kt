@@ -140,7 +140,6 @@ class GameScreen : KtxScreen {
         textureAtlas.disposeSafely()
         eWorld.dispose()
         currentMap?.disposeSafely()
-        mapLoader.disposeSafely()
         phWorld.disposeSafely()
     }
 
