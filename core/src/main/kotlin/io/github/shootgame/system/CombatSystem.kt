@@ -199,10 +199,9 @@ class CombatSystem(
     private fun playWeaponSound(weapon: WeaponType?) {
         when (weapon) {
             WeaponType.SHOTGUN -> audioService.play(
-                SoundType.SHOT,
+                SoundType.SHOTGUN,
                 volumeModifier = 1.0f,
-                pitchVariation = 0.05f,
-                basePitch = 0.72f
+                pitchVariation = 0.05f
             )
             WeaponType.MACHINE_GUN -> audioService.play(
                 SoundType.SHOT,

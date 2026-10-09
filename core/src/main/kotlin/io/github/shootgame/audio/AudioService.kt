@@ -8,12 +8,13 @@ import ktx.assets.disposeSafely
 import ktx.log.logger
 
 enum class SoundType(val fileName: String) {
-    SHOT("sounds/shot.wav"),
-    RELOAD("sounds/reload.wav"),
-    THROW("sounds/throw.wav"),
+    SHOT("sounds/shot.mp3"),
+    SHOTGUN("sounds/shotgun.mp3"),
+    RELOAD("sounds/reload.mp3"),
+    THROW("sounds/throw.mp3"),
     EXPLOSION("sounds/explosion.wav"),
-    JUMP("sounds/jump.wav"),
-    CLICK("sounds/click.wav")
+    JUMP("sounds/jump.mp3"),
+    CLICK("sounds/click.mp3")
 }
 
 class AudioService {
@@ -53,15 +54,15 @@ class AudioService {
 
     private fun loadMusic() {
         try {
-            val musicFile = Gdx.files.internal("sounds/bgm.wav")
+            val musicFile = Gdx.files.internal("sounds/bgm.mp3")
             if (musicFile.exists()) {
                 music = Gdx.audio.newMusic(musicFile).apply {
                     isLooping = true
                     volume = if (isMusicEnabled) musicVolume else 0f
                 }
-                log.info { "Loaded background music: sounds/bgm.wav" }
+                log.info { "Loaded background music: sounds/bgm.mp3" }
             } else {
-                log.error { "Background music file not found: sounds/bgm.wav" }
+                log.error { "Background music file not found: sounds/bgm.mp3" }
             }
         } catch (e: Exception) {
             log.error(e) { "Failed to load background music: sounds/bgm.wav" }
