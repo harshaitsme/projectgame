@@ -27,11 +27,12 @@ class DeathSystem(
 ) : IteratingSystem() {
 
     private var respawnIndex = 0
+    // Indoor arena spawn points (Box2D body center coordinates inside map1.tmx room, below the y=10 ceiling)
     private val spawnLocations = listOf(
-        12.5f to 16.0f,
-        18.0f to 16.0f,
-        7.5f to 11.5f,
-        22.5f to 10.5f
+        12.47f to 5.2f,
+        6.5f to 5.2f,
+        15.5f to 5.2f,
+        22.5f to 6.2f
     )
 
     override fun onTickEntity(entity: Entity) {
@@ -62,6 +63,7 @@ class DeathSystem(
                         val (sx, sy) = spawnLocations[(respawnIndex++) % spawnLocations.size]
                         physic.body.setTransform(sx, sy, 0f)
                         physic.body.setLinearVelocity(0f, 0f)
+                        physic.body.isAwake = true
                     }
                 }
             }

@@ -236,12 +236,15 @@ class NetworkSystem(
                                 movingByDelta -> netCmp.targetSin = if (dx < 0f) -1f else 1f
                             }
 
-                            netCmp.targetX = packet.x
-                            netCmp.targetY = packet.y
+                            val safeTargetX = if (packet.x in 2.5f..29.5f) packet.x else netCmp.targetX.coerceIn(4.0f, 27.0f)
+                            val safeTargetY = if (packet.y in 2.5f..9.2f) packet.y else 5.34f
+
+                            netCmp.targetX = safeTargetX
+                            netCmp.targetY = safeTargetY
                             netCmp.targetCos = packet.cos
 
                             if (!netCmp.hasInitializedPos && remote in physicCmps) {
-                                physicCmps[remote].body.setTransform(packet.x, packet.y, 0f)
+                                physicCmps[remote].body.setTransform(safeTargetX, safeTargetY, 0f)
                                 netCmp.hasInitializedPos = true
                             }
 
@@ -513,15 +516,17 @@ class NetworkSystem(
     }
 
     private fun spawnRemotePlayer(netId: Int, startX: Float, startY: Float) {
+        val safeX = if (startX in 3.5f..28.5f) startX else 12.47f
+        val safeY = if (startY in 3.5f..8.5f) startY else 5.34f
         world.entity {
             add<SpawnComponent> {
                 type = "RemotePlayer"
-                location.set(startX, startY)
+                location.set(safeX, safeY)
                 networkId = netId
             }
         }
         pendingSpawnNetIds.add(netId)
-        println("Remote player spawn requested for network ID $netId at ($startX, $startY)")
+        println("Remote player spawn requested for network ID $netId at ($safeX, $safeY)")
     }
 
     override fun onDispose() {

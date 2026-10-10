@@ -54,11 +54,17 @@ class MoveSystem(
                 currentVelocity.y
             )
         } else if (entity !in remotePlayerCmps) {
-            // Non-projectiles (Local Player & Enemies) move horizontally via input
-            body.setLinearVelocity(
-                moveCmp.cos * moveCmp.speed,
-                currentVelocity.y
-            )
+            // Keep local player & enemies inside the indoor map arena (prevent roof/void trapping)
+            if (body.position.y > 9.5f || body.position.y < 1.0f) {
+                body.setTransform(12.47f, 5.2f, 0f)
+                body.setLinearVelocity(0f, 0f)
+            } else {
+                // Non-projectiles (Local Player & Enemies) move horizontally via input
+                body.setLinearVelocity(
+                    moveCmp.cos * moveCmp.speed,
+                    currentVelocity.y
+                )
+            }
         }
 
         // Jump logic (only for local player / enemies)

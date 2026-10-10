@@ -368,9 +368,9 @@ else if (spawnCmp.type == "Explosion") {
                 if (enemyCount == 0 && config.mode == GameMode.OFFLINE) {
                     println("Spawning default practice enemies on map platforms...")
                     val defaultEnemyPositions = listOf(
-                        Vector2(16f, 14.6f),
-                        Vector2(22f, 8.5f),
-                        Vector2(6f, 9.5f)
+                        Vector2(5.5f, 3.34f),
+                        Vector2(15.0f, 3.34f),
+                        Vector2(22.0f, 4.34f)
                     )
                     defaultEnemyPositions.forEach { pos ->
                         world.entity {
