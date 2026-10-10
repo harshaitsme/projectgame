@@ -137,6 +137,17 @@ impl Component for Cooldown {
     type Storage = VecStorage<Cooldown>;
 }
 
+/// Player action/animation state.
+#[derive(Debug, Clone, Copy, Default)]
+struct ActionState {
+    is_attacking: bool,
+    is_reloading: bool,
+    is_throwing: bool,
+}
+impl Component for ActionState {
+    type Storage = VecStorage<ActionState>;
+}
+
 /// Default spawn position for a given client id (kept on the server).
 fn spawn_pos(id: u32) -> (f32, f32) {
     (3.0f32 + (id % 5) as f32 * 1.5, 4.0f32)
@@ -374,6 +385,7 @@ fn handle_message(
                         max: START_HEALTH,
                     })
                     .with(Cooldown { next_tick: 0 })
+                    .with(ActionState::default())
                     .build();
                 entities.insert(player_id, entity);
             }
@@ -388,7 +400,7 @@ fn handle_message(
         }
 
         ServerMessage::State(pkt) => {
-            // Update the matching player's Position/Rotation.
+            // Update the matching player's Position/Rotation/ActionState.
             let entity = match entities.get(&pkt.id) {
                 Some(&e) => e,
                 None => return,
@@ -405,6 +417,14 @@ fn handle_message(
                 if let Some(rot) = rotations.get_mut(entity) {
                     rot.cos = pkt.cos;
                     rot.sin = pkt.sin;
+                }
+            }
+            {
+                let mut actions = world.write::<ActionState>();
+                if let Some(act) = actions.get_mut(entity) {
+                    act.is_attacking = pkt.is_attacking;
+                    act.is_reloading = pkt.is_reloading;
+                    act.is_throwing = pkt.is_throwing;
                 }
             }
         }
@@ -638,6 +658,9 @@ struct PlayerSnapshot {
     y: f32,
     cos: f32,
     sin: f32,
+    is_attacking: bool,
+    is_reloading: bool,
+    is_throwing: bool,
 }
 
 /// Collect every player's authoritative state for this tick.
@@ -645,14 +668,20 @@ fn build_player_snapshot(world: &World) -> Vec<PlayerSnapshot> {
     let player_ids = world.read::<PlayerId>();
     let positions = world.read::<Position>();
     let rotations = world.read::<Rotation>();
-    (&player_ids, &positions, &rotations)
+    let actions = world.read::<ActionState>();
+    (&player_ids, &positions, &rotations, &actions)
         .join()
-        .map(|(pid, pos, rot)| PlayerSnapshot {
-            id: pid.id,
-            x: pos.x,
-            y: pos.y,
-            cos: rot.cos,
-            sin: rot.sin,
+        .map(|(pid, pos, rot, act)| {
+            PlayerSnapshot {
+                id: pid.id,
+                x: pos.x,
+                y: pos.y,
+                cos: rot.cos,
+                sin: rot.sin,
+                is_attacking: act.is_attacking,
+                is_reloading: act.is_reloading,
+                is_throwing: act.is_throwing,
+            }
         })
         .collect()
 }
@@ -687,9 +716,9 @@ async fn broadcast(
                 y: p.y,
                 cos: p.cos,
                 sin: p.sin,
-                is_attacking: false,
-                is_reloading: false,
-                is_throwing: false,
+                is_attacking: p.is_attacking,
+                is_reloading: p.is_reloading,
+                is_throwing: p.is_throwing,
             };
             let bytes = net::udp_datagram(TYPE_PLAYER_STATE, &pkt);
             if let Err(e) = udp.send_to(&bytes, addr).await {
@@ -765,6 +794,7 @@ async fn main() {
     world.register::<Health>();
     world.register::<Owner>();
     world.register::<Cooldown>();
+    world.register::<ActionState>();
 
     let mut entities: HashMap<u32, Entity> = HashMap::new();
     let mut addrs: HashMap<u32, SocketAddr> = HashMap::new();

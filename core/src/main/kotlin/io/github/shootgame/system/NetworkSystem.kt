@@ -16,6 +16,7 @@ class NetworkSystem(
     private val moveCmps: ComponentMapper<MoveComponent>,
     private val physicCmps: ComponentMapper<PhysicComponent>,
     private val attackCmps: ComponentMapper<AttackComponent>,
+    private val animationCmps: ComponentMapper<AnimationComponent>,
     private val imageCmps: ComponentMapper<ImageComponent>,
     private val playerCmps: ComponentMapper<PlayerComponent>,
     private val remotePlayerCmps: ComponentMapper<RemotePlayerComponent>
@@ -23,6 +24,7 @@ class NetworkSystem(
 
     private var client: GameClient? = null
     private val remoteEntities = mutableMapOf<Int, Entity>()
+    private val pendingSpawnNetIds = mutableSetOf<Int>()
 
     var myNetworkId: Int = -1
         private set
@@ -51,7 +53,16 @@ class NetworkSystem(
     override fun onTick() {
         val currentClient = client ?: return
 
-        // 1. Process received network packets on the main render thread
+        // 1. Sync remoteEntities map with actual live spawned entities
+        world.family(allOf = arrayOf(RemotePlayerComponent::class, NetworkComponent::class)).forEach { remoteEntity ->
+            val net = netCmps[remoteEntity]
+            if (net.networkId != -1) {
+                remoteEntities[net.networkId] = remoteEntity
+                pendingSpawnNetIds.remove(net.networkId)
+            }
+        }
+
+        // 2. Process received network packets on the main render thread
         while (currentClient.packetQueue.isNotEmpty()) {
             when (val packet = currentClient.packetQueue.poll()) {
                 is LoginResponsePacket -> {
@@ -73,7 +84,7 @@ class NetworkSystem(
 
                 is PlayerConnectedPacket -> {
                     val id = packet.id
-                    if (id != myNetworkId && !remoteEntities.containsKey(id)) {
+                    if (id != myNetworkId && !remoteEntities.containsKey(id) && !pendingSpawnNetIds.contains(id)) {
                         spawnRemotePlayer(id, packet.x, packet.y)
                     }
                 }
@@ -81,6 +92,7 @@ class NetworkSystem(
                 is PlayerDisconnectedPacket -> {
                     val id = packet.id
                     val remote = remoteEntities.remove(id)
+                    pendingSpawnNetIds.remove(id)
                     if (remote != null) {
                         world.remove(remote)
                         println("Removed remote player: $id")
@@ -98,13 +110,41 @@ class NetworkSystem(
                             netCmp.targetCos = packet.cos
                             netCmp.targetSin = packet.sin
 
+                            val move = moveCmps.getOrNull(remote)
+                            if (move != null) {
+                                move.cos = packet.cos
+                                move.sin = packet.sin
+                                if (packet.cos != 0f) {
+                                    move.lastCos = packet.cos
+                                }
+                            }
+
                             val attack = attackCmps.getOrNull(remote)
                             if (attack != null) {
                                 attack.isAttacking = packet.isAttacking
                                 attack.isReloading = packet.isReloading
                                 attack.isThrowing = packet.isThrowing
                             }
-                        } else if (!remoteEntities.containsKey(id)) {
+
+                            // Sync animation state
+                            val anim = animationCmps.getOrNull(remote)
+                            if (anim != null) {
+                                when {
+                                    packet.isReloading -> anim.nextAnimation(anim.model, AnimationType.RECHARGE)
+                                    packet.isThrowing -> anim.nextAnimation(anim.model, AnimationType.GRENADE)
+                                    packet.isAttacking -> anim.nextAnimation(anim.model, AnimationType.SHOT1)
+                                    abs(packet.cos) > 0.01f || abs(packet.sin) > 0.01f -> anim.nextAnimation(anim.model, AnimationType.RUN)
+                                    else -> anim.nextAnimation(anim.model, AnimationType.IDLE)
+                                }
+                            }
+
+                            // Flip sprite facing direction
+                            val img = imageCmps.getOrNull(remote)
+                            if (img != null && packet.cos != 0f) {
+                                img.image.originX = img.image.width * 0.5f
+                                img.image.scaleX = if (packet.cos < 0f) -1f else 1f
+                            }
+                        } else if (!remoteEntities.containsKey(id) && !pendingSpawnNetIds.contains(id)) {
                             spawnRemotePlayer(id, packet.x, packet.y)
                         }
                     }
@@ -130,34 +170,32 @@ class NetworkSystem(
             }
         }
 
-        // 2. Interpolate position and sync movement for remote player entities
+        // 3. Interpolate position smoothly for remote player entities
         remoteEntities.values.forEach { remote ->
-            if (remote in netCmps && remote in moveCmps && remote in physicCmps) {
+            if (remote in netCmps && remote in physicCmps) {
                 val net = netCmps[remote]
-                val move = moveCmps[remote]
                 val physic = physicCmps[remote]
-
-                move.cos = net.targetCos
-                move.sin = net.targetSin
-                if (net.targetCos != 0f) {
-                    move.lastCos = net.targetCos
-                }
-
-                // Smooth position correction toward target position
                 val body = physic.body
+
                 val dx = net.targetX - body.position.x
                 val dy = net.targetY - body.position.y
-                if (abs(dx) > 0.05f || abs(dy) > 0.1f) {
+
+                // If teleport / large delta (e.g. spawn), snap instantly
+                if (abs(dx) > 3f || abs(dy) > 3f) {
+                    body.setTransform(net.targetX, net.targetY, body.angle)
+                    body.setLinearVelocity(0f, 0f)
+                } else if (abs(dx) > 0.02f || abs(dy) > 0.02f) {
+                    val lerpFactor = 0.35f
                     body.setTransform(
-                        body.position.x + dx * 0.25f,
-                        body.position.y + dy * 0.25f,
+                        body.position.x + dx * lerpFactor,
+                        body.position.y + dy * lerpFactor,
                         body.angle
                     )
                 }
             }
         }
 
-        // 3. Send local player state to server periodically
+        // 4. Send local player state to server periodically
         if (currentClient.isConnected && myNetworkId != -1) {
             syncTimer += deltaTime
             if (syncTimer >= syncRate) {
@@ -184,18 +222,21 @@ class NetworkSystem(
     }
 
     private fun spawnRemotePlayer(netId: Int, startX: Float, startY: Float) {
-        val spawnEntity = world.entity {
+        world.entity {
             add<SpawnComponent> {
                 type = "RemotePlayer"
                 location.set(startX, startY)
+                networkId = netId
             }
         }
-        remoteEntities[netId] = spawnEntity
-        println("Remote player entity spawned for network ID $netId at ($startX, $startY)")
+        pendingSpawnNetIds.add(netId)
+        println("Remote player spawn requested for network ID $netId at ($startX, $startY)")
     }
 
     override fun onDispose() {
         client?.close()
         client = null
+        remoteEntities.clear()
+        pendingSpawnNetIds.clear()
     }
 }

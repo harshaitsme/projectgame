@@ -152,7 +152,7 @@ class EntitySpawnSystem(
             }
 
             if (spawnCmp.type == "RemotePlayer") {
-                println("SPAWNING REMOTE PLAYER at: ${spawnCmp.location}")
+                println("SPAWNING REMOTE PLAYER at: ${spawnCmp.location} (netId=${spawnCmp.networkId})")
                 imageCmp.image.color = Color(0.4f, 0.7f, 1f, 1f) // Distinct ally cyan/blue tint
                 add<PlayerComponent>()
                 add<RemotePlayerComponent>()
@@ -160,6 +160,14 @@ class EntitySpawnSystem(
                 add<AttackComponent>()
                 add<WeaponComponent>()
                 add<HealthComponent>()
+                add<NetworkComponent> {
+                    networkId = spawnCmp.networkId
+                    isLocal = false
+                    targetX = spawnCmp.location.x
+                    targetY = spawnCmp.location.y
+                    targetCos = 0f
+                    targetSin = 0f
+                }
                 add<OwnerComponent> {
                     owner = spawnedEntity
                 }
@@ -264,7 +272,15 @@ class EntitySpawnSystem(
             }
 else if (spawnCmp.type == "Explosion") {
                 // No physics for explosion, just visuals
-            } else if (spawnCmp.type == "Player" || spawnCmp.type == "RemotePlayer" || spawnCmp.type == "Enemy") {
+            } else if (spawnCmp.type == "RemotePlayer") {
+                physicCmpFromImage(phWorld, imageCmp.image, BodyDef.BodyType.DynamicBody) { _, width, height ->
+                    gravityScale = 0f
+                    box(width = width * 0.25f, height = height * 0.85f) {
+                        isSensor = false
+                        friction = 0f
+                    }
+                }
+            } else if (spawnCmp.type == "Player" || spawnCmp.type == "Enemy") {
                 physicCmpFromImage(phWorld, imageCmp.image, BodyDef.BodyType.DynamicBody) { _, width, height ->
                     // Narrower box (25% width) to fit the character and not the whitespace
                     box(width = width * 0.25f, height = height * 0.85f) {

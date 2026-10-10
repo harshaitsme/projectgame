@@ -10,5 +10,6 @@ data class SpawnCfg(
 
 data class SpawnComponent (
     var type: String = "",
-    var location: Vector2 = vec2()
+    var location: Vector2 = vec2(),
+    var networkId: Int = -1
 )
