@@ -1,0 +1,37 @@
+[Unit]
+Description=ShootGame Rust Dedicated Server
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=shootgame
+Group=shootgame
+
+# Where you deployed the binary + working directory.
+WorkingDirectory=/opt/shootgame
+ExecStart=/opt/shootgame/shootgame-server
+
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=10
+KillSignal=SIGTERM
+
+# Ports via environment (matches the server's env config).
+Environment=SHOOTGAME_TCP_PORT=54555
+Environment=SHOOTGAME_UDP_PORT=54777
+# Uncomment to raise log verbosity if you switch to tracing later:
+# Environment=RUST_LOG=info
+
+# Resource + security hardening.
+LimitNOFILE=65535
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/opt/shootgame
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+[Install]
+WantedBy=multi-user.target

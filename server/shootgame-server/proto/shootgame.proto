@@ -1,0 +1,68 @@
+syntax = "proto3";
+// No Rust `package`: generated Rust types live at the top level, so they map
+// 1:1 to the names used across the server (LoginPacket, PlayerStatePacket, ...).
+//
+// proto3 singular scalars are non-optional in Rust (default 0/false/""), which
+// is exactly our semantics: every field is always present on the wire.
+//
+// The Java/Kotlin options only affect the protobuf-java codegen used by the
+// game client; prost ignores them.
+option java_multiple_files = true;
+option java_package = "io.github.shootgame.proto";
+
+// Client -> server (TCP): request login. On reconnect, echo the last token.
+message LoginPacket {
+  string player_name = 1;
+  string session_token = 2;
+}
+
+// Server -> client (TCP): assigned identity + session token to persist.
+message LoginResponsePacket {
+  uint32 assigned_id = 1;
+  float spawn_x = 2;
+  float spawn_y = 3;
+  string session_token = 4;
+}
+
+// Bidirectional (server->client UDP broadcast, client->server TCP input).
+message PlayerStatePacket {
+  uint32 id = 1;
+  float x = 2;
+  float y = 3;
+  float cos = 4;
+  float sin = 5;
+  bool is_attacking = 6;
+  bool is_reloading = 7;
+  bool is_throwing = 8;
+}
+
+// Client -> server (TCP): a player fired.
+message PlayerShootPacket {
+  uint32 id = 1;
+  uint32 weapon_index = 2;
+  float origin_x = 3;
+  float origin_y = 4;
+  float direction_x = 5;
+  float direction_y = 6;
+}
+
+// Server -> client (UDP): authoritative combat resolution.
+message PlayerHitPacket {
+  uint32 from_id = 1;
+  uint32 to_id = 2;
+  float damage = 3;
+  float x = 4;
+  float y = 5;
+}
+
+// Server -> client: a player joined.
+message PlayerConnectedPacket {
+  uint32 id = 1;
+  float x = 2;
+  float y = 3;
+}
+
+// Server -> client: a player left.
+message PlayerDisconnectedPacket {
+  uint32 id = 1;
+}
