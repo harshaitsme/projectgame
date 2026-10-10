@@ -19,6 +19,8 @@ import io.github.shootgame.component.AttackComponent
 import io.github.shootgame.component.HealthComponent
 import io.github.shootgame.component.PlayerComponent
 import io.github.shootgame.component.WeaponComponent
+import io.github.shootgame.screen.GameConfig
+import io.github.shootgame.screen.GameMode
 
 class UiSystem(
     @Qualifier("uiStage") private val uiStage: Stage,
@@ -26,8 +28,11 @@ class UiSystem(
     private val healthCmps: ComponentMapper<HealthComponent>,
     private val weaponCmps: ComponentMapper<WeaponComponent>,
     private val playerCmps: ComponentMapper<PlayerComponent>,
-    private val audioService: AudioService
+    private val audioService: AudioService,
+    private val config: GameConfig
 ) : IntervalSystem() {
+
+    private val networkSystem: NetworkSystem by lazy { world.system<NetworkSystem>() }
 
     var touchLeft = false
     var touchRight = false
@@ -48,6 +53,7 @@ class UiSystem(
     private lateinit var ammoLabel: Label
     private lateinit var fragLabel: Label
     private lateinit var scoreLabel: Label
+    private lateinit var modeLabel: Label
     private var sfxButtonLabel: Label? = null
     private var bgmButtonLabel: Label? = null
 
@@ -92,6 +98,9 @@ class UiSystem(
         hudTable.setFillParent(true)
         hudTable.top().left()
 
+        modeLabel = Label("Mode: ${config.mode.displayName}", Label.LabelStyle().apply {
+            font = com.badlogic.gdx.graphics.g2d.BitmapFont()
+        })
         healthLabel = Label("Health: 100 / 100", Label.LabelStyle().apply {
             font = com.badlogic.gdx.graphics.g2d.BitmapFont()
         })
@@ -107,10 +116,11 @@ class UiSystem(
         scoreLabel = Label("Score: 0", Label.LabelStyle().apply {
             font = com.badlogic.gdx.graphics.g2d.BitmapFont()
         })
-        hudTable.add(healthLabel).pad(20f).row()
-        hudTable.add(weaponLabel).padLeft(20f).padBottom(5f).row()
-        hudTable.add(ammoLabel).padLeft(20f).padBottom(5f).row()
-        hudTable.add(fragLabel).padLeft(20f).padBottom(5f).row()
+        hudTable.add(modeLabel).padLeft(20f).padTop(15f).padBottom(3f).row()
+        hudTable.add(healthLabel).padLeft(20f).padBottom(3f).row()
+        hudTable.add(weaponLabel).padLeft(20f).padBottom(3f).row()
+        hudTable.add(ammoLabel).padLeft(20f).padBottom(3f).row()
+        hudTable.add(fragLabel).padLeft(20f).padBottom(3f).row()
         hudTable.add(scoreLabel).padLeft(20f)
         uiStage.addActor(hudTable)
 
@@ -251,6 +261,13 @@ class UiSystem(
             fragLabel.setText("Frag: ${attackCmp.fragAmmo}")
             val playerCmp = playerCmps.getOrNull(player)
             scoreLabel.setText("Score: ${playerCmp?.score ?: 0}")
+
+            if (config.mode != io.github.shootgame.screen.GameMode.OFFLINE) {
+                val connStatus = if (networkSystem.isConnected) "Online" else "Connecting..."
+                modeLabel.setText("[${config.mode.displayName}] ${config.playerName} | Players: ${networkSystem.activePlayerCount}/${config.mode.maxPlayers} ($connStatus)")
+            } else {
+                modeLabel.setText("[Solo Practice] ${config.playerName}")
+            }
         }
     }
 

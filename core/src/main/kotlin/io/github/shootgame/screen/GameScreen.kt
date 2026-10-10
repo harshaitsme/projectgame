@@ -65,6 +65,7 @@ class GameScreen(private val config: GameConfig = GameConfig()) : KtxScreen {
         inject(textureAtlas)
         inject(phWorld)
         inject(audioService)
+        inject(config)
 
         componentListener<ImageComponent.Companion.ImageComponentListener>()
         componentListener<PhysicComponent.Companion.PhysicComponentListener>()
@@ -110,9 +111,11 @@ class GameScreen(private val config: GameConfig = GameConfig()) : KtxScreen {
         stage.fire(MapChangeEvent(currentMap!!))
         audioService.playMusic()
 
-        // Connect to multiplayer server if available
-        val host = System.getProperty("shootgame.host", config.serverHost)
-        eWorld.system<NetworkSystem>().connect(host)
+        // Connect to multiplayer server if multiplayer mode selected
+        if (config.mode != GameMode.OFFLINE) {
+            val host = System.getProperty("shootgame.host", config.serverHost)
+            eWorld.system<NetworkSystem>().connect(host, config.playerName)
+        }
     }
 
     override fun pause() {

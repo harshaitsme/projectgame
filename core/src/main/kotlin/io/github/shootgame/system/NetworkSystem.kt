@@ -35,10 +35,13 @@ class NetworkSystem(
 
     private val healthSystem: HealthSystem by lazy { world.system<HealthSystem>() }
 
-    fun connect(host: String = NetworkConfig.serverHost, timeoutMs: Int = 4000) {
+    val activePlayerCount: Int
+        get() = remoteEntities.size + (if (myNetworkId != -1) 1 else 0)
+
+    fun connect(host: String = NetworkConfig.serverHost, playerName: String = "Player", timeoutMs: Int = 4000) {
         val gameClient = GameClient(host, NetworkConfig.TCP_PORT, NetworkConfig.UDP_PORT)
         client = gameClient
-        gameClient.connect("Player_${System.currentTimeMillis() % 1000}", timeoutMs)
+        gameClient.connect(playerName, timeoutMs)
     }
 
     fun sendShoot(originX: Float, originY: Float, dirX: Float, dirY: Float, weaponIndex: Int = 0) {
