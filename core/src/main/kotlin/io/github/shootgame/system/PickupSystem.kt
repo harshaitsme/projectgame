@@ -175,11 +175,7 @@ class PickupSystem(
             }
             PickupType.AMMO -> {
                 val weaponCmp = weaponCmps.getOrNull(player)
-                if (weaponCmp != null) {
-                    weaponCmp.weapons.forEach { weapon ->
-                        weaponCmp.ammoMap[weapon] = weapon.maxAmmo
-                    }
-                }
+                weaponCmp?.refillAllAmmo()
                 val attackCmp = attackCmps.getOrNull(player)
                 if (attackCmp != null) {
                     attackCmp.ammo = attackCmp.maxAmmo

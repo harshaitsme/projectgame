@@ -6,6 +6,7 @@ enum class WeaponType(
     val fireRate: Float,
     val reloadTime: Float,
     val maxAmmo: Int,
+    val maxReserveAmmo: Int,
     val bulletSpeed: Float,
     val bulletCount: Int,
     val spreadAngle: Float,
@@ -18,6 +19,7 @@ enum class WeaponType(
         fireRate = 0.25f,
         reloadTime = 1.2f,
         maxAmmo = 12,
+        maxReserveAmmo = 60,
         bulletSpeed = 16f,
         bulletCount = 1,
         spreadAngle = 0f,
@@ -30,6 +32,7 @@ enum class WeaponType(
         fireRate = 0.65f,
         reloadTime = 2.0f,
         maxAmmo = 6,
+        maxReserveAmmo = 30,
         bulletSpeed = 14f,
         bulletCount = 5,
         spreadAngle = 20f,
@@ -42,23 +45,12 @@ enum class WeaponType(
         fireRate = 0.10f,
         reloadTime = 1.8f,
         maxAmmo = 30,
+        maxReserveAmmo = 120,
         bulletSpeed = 18f,
         bulletCount = 1,
         spreadAngle = 5f,
         bulletLifeTime = 2.0f,
         cameraShake = 0.08f
-    ),
-    SNIPER(
-        displayName = "Sniper",
-        damage = 120f,
-        fireRate = 1.0f,
-        reloadTime = 2.2f,
-        maxAmmo = 4,
-        bulletSpeed = 28f,
-        bulletCount = 1,
-        spreadAngle = 0f,
-        bulletLifeTime = 3.0f,
-        cameraShake = 0.28f
     );
 }
 
@@ -66,18 +58,23 @@ class WeaponComponent {
     val weapons: MutableList<WeaponType> = mutableListOf(
         WeaponType.PISTOL,
         WeaponType.SHOTGUN,
-        WeaponType.MACHINE_GUN,
-        WeaponType.SNIPER
+        WeaponType.MACHINE_GUN
     )
     var currentIndex: Int = 0
     val ammoMap: MutableMap<WeaponType, Int> = mutableMapOf()
+    val reserveAmmoMap: MutableMap<WeaponType, Int> = mutableMapOf()
 
     val currentWeapon: WeaponType
         get() = weapons[currentIndex.coerceIn(0, weapons.lastIndex)]
 
     init {
+        refillAllAmmo()
+    }
+
+    fun refillAllAmmo() {
         WeaponType.values().forEach { weapon ->
             ammoMap[weapon] = weapon.maxAmmo
+            reserveAmmoMap[weapon] = weapon.maxReserveAmmo
         }
     }
 

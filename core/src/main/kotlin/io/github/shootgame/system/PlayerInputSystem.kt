@@ -52,7 +52,7 @@ class PlayerInputSystem(
             moveCmp.sin = 0f
         }
 
-        // Weapon switching (1-4 keys, Q/E cycle, or touch button)
+        // Weapon switching (1-3 keys, Q/E cycle, or touch button)
         val weaponCmp = weaponCmps.getOrNull(entity)
         if (weaponCmp != null) {
             val previousWeapon = weaponCmp.currentWeapon
@@ -60,7 +60,6 @@ class PlayerInputSystem(
                 Gdx.input.isKeyJustPressed(Input.Keys.NUM_1) -> weaponCmp.selectWeapon(WeaponType.PISTOL)
                 Gdx.input.isKeyJustPressed(Input.Keys.NUM_2) -> weaponCmp.selectWeapon(WeaponType.SHOTGUN)
                 Gdx.input.isKeyJustPressed(Input.Keys.NUM_3) -> weaponCmp.selectWeapon(WeaponType.MACHINE_GUN)
-                Gdx.input.isKeyJustPressed(Input.Keys.NUM_4) -> weaponCmp.selectWeapon(WeaponType.SNIPER)
                 Gdx.input.isKeyJustPressed(Input.Keys.Q) -> weaponCmp.switchPrevious()
                 Gdx.input.isKeyJustPressed(Input.Keys.E) || uiSystem.consumeWeaponSwitch() -> weaponCmp.switchNext()
             }

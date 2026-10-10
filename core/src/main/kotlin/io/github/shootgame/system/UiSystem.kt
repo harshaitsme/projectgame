@@ -152,12 +152,12 @@ class UiSystem(
         healthRow.add(barContainer).width(160f).height(14f).left()
         hudCard.add(healthRow).left().padBottom(6f).row()
 
-        weaponLabel = VisLabel("Weapon: Pistol").apply {
+        weaponLabel = VisLabel("Weapon: Pistol  [1-3 / Q,E]").apply {
             color = Color(1f, 0.9f, 0.4f, 1f)
         }
         hudCard.add(weaponLabel).left().padBottom(4f).row()
 
-        ammoLabel = VisLabel("Ammo: 12 / 12   |   Frag: 3").apply {
+        ammoLabel = VisLabel("Ammo: 12 / 12 (Reserve: 60)   |   Frag: 3").apply {
             color = Color.WHITE
         }
         hudCard.add(ammoLabel).left().padBottom(4f).row()
@@ -167,14 +167,13 @@ class UiSystem(
         }
         hudCard.add(statsLabel).left().padBottom(8f).row()
 
-        // Weapon quick-select buttons [1-4]
+        // Weapon quick-select buttons [1-3]
         val weaponBar = VisTable(false)
         WeaponType.values().forEachIndexed { idx, wType ->
             val shortName = when (wType) {
-                WeaponType.PISTOL -> "1:Pistol"
-                WeaponType.SHOTGUN -> "2:Shotgun"
-                WeaponType.MACHINE_GUN -> "3:MG"
-                WeaponType.SNIPER -> "4:Sniper"
+                WeaponType.PISTOL -> "1:Pistol [${wType.maxAmmo}]"
+                WeaponType.SHOTGUN -> "2:Shotgun [${wType.maxAmmo}]"
+                WeaponType.MACHINE_GUN -> "3:MG [${wType.maxAmmo}]"
             }
             val btn = VisTextButton(shortName).apply {
                 addListener(object : ClickListener() {
@@ -185,7 +184,7 @@ class UiSystem(
                 })
             }
             weaponButtons[wType] = btn
-            weaponBar.add(btn).height(28f).padRight(if (idx < 3) 6f else 0f)
+            weaponBar.add(btn).height(28f).padRight(if (idx < WeaponType.values().lastIndex) 6f else 0f)
         }
         hudCard.add(weaponBar).left()
 
@@ -387,11 +386,20 @@ class UiSystem(
 
             if (weaponCmp != null && currentWeapon != null) {
                 val currentAmmo = weaponCmp.ammoMap[currentWeapon] ?: currentWeapon.maxAmmo
-                weaponLabel.setText("Weapon: ${currentWeapon.displayName}  [1-4 / Q,E]")
+                val reserveAmmo = weaponCmp.reserveAmmoMap[currentWeapon] ?: currentWeapon.maxReserveAmmo
+                weaponLabel.setText("Weapon: ${currentWeapon.displayName}  [1-3 / Q,E]")
                 val reloadTag = if (attackCmp.isReloading) " (RELOADING...)" else ""
-                ammoLabel.setText("Ammo: $currentAmmo / ${currentWeapon.maxAmmo}$reloadTag   |   Frag: ${attackCmp.fragAmmo}")
+                ammoLabel.setText("Ammo: $currentAmmo / ${currentWeapon.maxAmmo} (Total: $reserveAmmo)$reloadTag   |   Frag: ${attackCmp.fragAmmo}")
 
                 weaponButtons.forEach { (wType, btn) ->
+                    val wClip = weaponCmp.ammoMap[wType] ?: wType.maxAmmo
+                    val wRes = weaponCmp.reserveAmmoMap[wType] ?: wType.maxReserveAmmo
+                    val labelTxt = when (wType) {
+                        WeaponType.PISTOL -> "1:Pistol [$wClip/$wRes]"
+                        WeaponType.SHOTGUN -> "2:Shotgun [$wClip/$wRes]"
+                        WeaponType.MACHINE_GUN -> "3:MG [$wClip/$wRes]"
+                    }
+                    btn.setText(labelTxt)
                     btn.color = if (wType == currentWeapon) {
                         Color(0.25f, 0.95f, 1f, 1f)
                     } else {

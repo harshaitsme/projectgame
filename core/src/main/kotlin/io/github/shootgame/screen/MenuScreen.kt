@@ -191,7 +191,7 @@ class MenuScreen(private val game: Main) : KtxScreen {
         }
         cardTable.add(startButton).width(300f).height(54f).padBottom(10f).row()
 
-        val footerLabel = VisLabel("Controls: A/D Move • W Jump • SPACE Shoot • R Reload • G Frag • 1-4 Weapons • ESC Menu").apply {
+        val footerLabel = VisLabel("Controls: A/D Move • W Jump • SPACE Shoot • R Reload • G Frag • 1-3 Weapons • ESC Menu").apply {
             setAlignment(Align.center)
             color = Color(0.55f, 0.62f, 0.72f, 0.9f)
             setFontScale(0.85f)

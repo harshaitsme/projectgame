@@ -52,7 +52,16 @@ class CombatSystem(
             attackCmp.stateTime += deltaTime
             if (attackCmp.stateTime >= reloadDuration) {
                 if (weaponCmp != null && currentWeapon != null) {
-                    weaponCmp.ammoMap[currentWeapon] = maxAmmo
+                    val needed = (maxAmmo - currentAmmo).coerceAtLeast(0)
+                    val reserve = weaponCmp.reserveAmmoMap.getOrPut(currentWeapon) { currentWeapon.maxReserveAmmo }
+                    if (reserve > 0) {
+                        val toLoad = needed.coerceAtMost(reserve)
+                        weaponCmp.ammoMap[currentWeapon] = currentAmmo + toLoad
+                        weaponCmp.reserveAmmoMap[currentWeapon] = (reserve - toLoad).coerceAtLeast(0)
+                    } else if (currentAmmo == 0) {
+                        // Emergency mag if completely out of reserve ammo
+                        weaponCmp.ammoMap[currentWeapon] = maxAmmo
+                    }
                 } else {
                     attackCmp.ammo = attackCmp.maxAmmo
                 }
@@ -169,15 +178,14 @@ class CombatSystem(
         val spreadAngle = weapon?.spreadAngle ?: 0f
 
         val bulletWidth = when (weapon) {
-            WeaponType.SHOTGUN -> 0.14f
-            WeaponType.SNIPER -> 0.35f
-            WeaponType.MACHINE_GUN -> 0.18f
-            else -> 0.2f
+            WeaponType.SHOTGUN -> 0.07f
+            WeaponType.MACHINE_GUN -> 0.10f
+            else -> 0.09f
         }
         val bulletHeight = when (weapon) {
-            WeaponType.SHOTGUN -> 0.14f
-            WeaponType.SNIPER -> 0.12f
-            else -> 0.2f
+            WeaponType.SHOTGUN -> 0.06f
+            WeaponType.MACHINE_GUN -> 0.06f
+            else -> 0.06f
         }
 
         val baseAngleDeg = if (facingRight) 0f else 180f
@@ -234,12 +242,6 @@ class CombatSystem(
                 volumeModifier = 0.75f,
                 pitchVariation = 0.12f,
                 basePitch = 1.25f
-            )
-            WeaponType.SNIPER -> audioService.play(
-                SoundType.SHOT,
-                volumeModifier = 1.0f,
-                pitchVariation = 0.02f,
-                basePitch = 0.55f
             )
             else -> audioService.play(
                 SoundType.SHOT,

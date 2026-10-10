@@ -32,7 +32,8 @@ class RenderSystem(
     private val enemyCmps: ComponentMapper<EnemyComponent>,
     private val healthCmps: ComponentMapper<HealthComponent>,
     private val netCmps: ComponentMapper<NetworkComponent>,
-    private val deadCmps: ComponentMapper<DeadComponent>
+    private val deadCmps: ComponentMapper<DeadComponent>,
+    private val weaponCmps: ComponentMapper<WeaponComponent>
 ) : EventListener, IteratingSystem(
     comparator = compareEntity { e1, e2 -> imageCmps[e1].compareTo(imageCmps[e2]) }
 ) {
@@ -140,10 +141,20 @@ class RenderSystem(
                     tmpVec3.set(worldX, worldY, 0f)
                     stage.viewport.project(tmpVec3)
 
+                    val weaponCmp = weaponCmps.getOrNull(entity)
+                    val ammoSuffix = if (weaponCmp != null && entity !in remotePlayerCmps) {
+                        val wType = weaponCmp.currentWeapon
+                        val clip = weaponCmp.ammoMap[wType] ?: 0
+                        val reserve = weaponCmp.reserveAmmoMap[wType] ?: 0
+                        " | Ammo $clip/$reserve"
+                    } else {
+                        ""
+                    }
+
                     val tagText = if (entity in deadCmps) {
                         "$displayName [DEAD]"
                     } else {
-                        "$displayName (${health.currentHealth.toInt()} HP)"
+                        "$displayName (${health.currentHealth.toInt()} HP$ammoSuffix)"
                     }
 
                     glyphLayout.setText(nameTagFont, tagText)

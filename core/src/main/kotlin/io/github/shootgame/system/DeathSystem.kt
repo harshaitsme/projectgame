@@ -13,6 +13,7 @@ import io.github.shootgame.component.HealthComponent
 import io.github.shootgame.component.PhysicComponent
 import io.github.shootgame.component.PlayerComponent
 import io.github.shootgame.component.RemotePlayerComponent
+import io.github.shootgame.component.WeaponComponent
 
 @AllOf([DeadComponent::class])
 class DeathSystem(
@@ -21,7 +22,8 @@ class DeathSystem(
     private val playerCmps: ComponentMapper<PlayerComponent>,
     private val remotePlayerCmps: ComponentMapper<RemotePlayerComponent>,
     private val physicCmps: ComponentMapper<PhysicComponent>,
-    private val animationCmps: ComponentMapper<AnimationComponent>
+    private val animationCmps: ComponentMapper<AnimationComponent>,
+    private val weaponCmps: ComponentMapper<WeaponComponent>
 ) : IteratingSystem() {
 
     private var respawnIndex = 0
@@ -48,6 +50,7 @@ class DeathSystem(
                     health.isDead = false
                     health.invulnerableTime = 1.0f // 1s spawn protection
                 }
+                weaponCmps.getOrNull(entity)?.refillAllAmmo()
                 val anim = animationCmps.getOrNull(entity)
                 if (anim != null) {
                     anim.playMode = Animation.PlayMode.LOOP

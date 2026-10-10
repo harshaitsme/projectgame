@@ -50,7 +50,7 @@ class EntitySpawnSystem(
 
     private val bulletRegion: TextureRegion by lazy {
         val pixmap = Pixmap(8, 8, Pixmap.Format.RGBA8888)
-        pixmap.setColor(1f, 1f, 0f, 1f) // Yellow bullet
+        pixmap.setColor(0.05f, 0.05f, 0.05f, 1f) // Solid black bullet
         pixmap.fill()
         val texture = Texture(pixmap)
         pixmap.dispose()
@@ -93,8 +93,8 @@ class EntitySpawnSystem(
                 image = Image().apply {
                     if (spawnCmp.type == "Bullet") {
                         drawable = TextureRegionDrawable(bulletRegion)
-                        val bWidth = originalBulletCmp?.width ?: 0.2f
-                        val bHeight = originalBulletCmp?.height ?: 0.2f
+                        val bWidth = originalBulletCmp?.width ?: 0.09f
+                        val bHeight = originalBulletCmp?.height ?: 0.06f
                         setSize(bWidth, bHeight)
                     } else if (spawnCmp.type == "Frag") {
                         drawable = TextureRegionDrawable(grenadeRegion)
@@ -108,8 +108,8 @@ class EntitySpawnSystem(
                     }
 
                     if (spawnCmp.type == "Bullet" || spawnCmp.type == "Frag" || spawnCmp.type == "Explosion") {
-                        val bWidth = originalBulletCmp?.width ?: 0.2f
-                        val bHeight = originalBulletCmp?.height ?: 0.2f
+                        val bWidth = originalBulletCmp?.width ?: 0.09f
+                        val bHeight = originalBulletCmp?.height ?: 0.06f
                         val finalWidth = if (spawnCmp.type == "Bullet") bWidth
                                         else if (spawnCmp.type == "Frag") 0.4f
                                         else size(cfg.model, cfg.type).x * 2.5f
