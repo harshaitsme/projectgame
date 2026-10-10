@@ -149,13 +149,13 @@ impl Component for PlayerMeta {
     type Storage = VecStorage<PlayerMeta>;
 }
 
-/// Default spawn position on map1.tmx platforms for a given client id.
+/// Default spawn position on map1.tmx indoor floor for a given client id.
 fn spawn_pos(id: u32) -> (f32, f32) {
     match (id.saturating_sub(1)) % 4 {
-        0 => (12.5, 16.0),
-        1 => (18.0, 16.0),
-        2 => (7.5, 11.5),
-        _ => (22.5, 10.5),
+        0 => (12.47, 5.2),
+        1 => (6.5, 5.2),
+        2 => (15.5, 5.2),
+        _ => (22.5, 6.2),
     }
 }
 
@@ -517,6 +517,12 @@ fn handle_message(
                         meta.name = pkt.player_name;
                     }
                     meta.weapon_index = pkt.weapon_index;
+                }
+            }
+            if pkt.health > 0.0 {
+                let mut healths = world.write::<Health>();
+                if let Some(h) = healths.get_mut(entity) {
+                    h.current = pkt.health.clamp(0.0, h.max);
                 }
             }
         }

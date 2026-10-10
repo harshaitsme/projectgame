@@ -52,9 +52,13 @@ class NetworkSystem(
 
     private var udpKeepAliveTimer = 0f
     private var lastSentCos = 0f
+    private var lastSentHealth = -1f
+    private var lastSentDead = false
     private var lastSentAttacking = false
     private var lastSentReloading = false
     private var lastSentThrowing = false
+    private var lastHitRemoteTimer = 0f
+    private var lastHitRemoteId = -1
 
     var combatFeedMessage: String = ""
         private set
@@ -70,6 +74,34 @@ class NetworkSystem(
     fun postFeed(msg: String, duration: Float = 3.5f) {
         combatFeedMessage = msg
         combatFeedTimer = duration
+    }
+
+    fun onLocalBulletHitRemote(remote: Entity) {
+        val net = netCmps.getOrNull(remote) ?: return
+        lastHitRemoteId = net.networkId
+        lastHitRemoteTimer = 3.0f
+    }
+
+    fun onLocalPlayerHitByRemote(attacker: Entity, died: Boolean) {
+        val attackerNet = netCmps.getOrNull(attacker)
+        val attackerName = attackerNet?.playerName?.ifEmpty { "Player_${attackerNet.networkId}" } ?: "Enemy"
+        if (died) {
+            world.family(allOf = arrayOf(PlayerComponent::class)).forEach { localPlayer ->
+                if (localPlayer !in remotePlayerCmps) {
+                    playerCmps[localPlayer].deaths += 1
+                }
+            }
+            if (attackerNet != null) {
+                attackerNet.kills += 1
+                playerCmps.getOrNull(attacker)?.kills = attackerNet.kills
+            }
+            postFeed("Eliminated by $attackerName! Respawning...")
+            // Force immediate state broadcast so all clients see our death right away
+            syncTimer = syncRate
+        } else {
+            postFeed("Hit by $attackerName!")
+            syncTimer = syncRate
+        }
     }
 
     fun getScoreboardEntries(): List<PlayerScoreEntry> {
@@ -139,6 +171,9 @@ class NetworkSystem(
             if (combatFeedTimer <= 0f) {
                 combatFeedMessage = ""
             }
+        }
+        if (lastHitRemoteTimer > 0f) {
+            lastHitRemoteTimer = (lastHitRemoteTimer - deltaTime).coerceAtLeast(0f)
         }
 
         val currentClient = client ?: return
@@ -254,7 +289,7 @@ class NetworkSystem(
                                 playerCmps.getOrNull(remote)?.playerName = packet.playerName
                             }
 
-                            // Update kills / deaths
+                            // Update kills / deaths if server provides them
                             if (packet.kills > netCmp.kills) {
                                 netCmp.kills = packet.kills
                                 playerCmps.getOrNull(remote)?.kills = packet.kills
@@ -271,22 +306,52 @@ class NetworkSystem(
                                 weaponCmps.getOrNull(remote)?.selectWeapon(weapons[packet.weaponIndex])
                             }
 
-                            // Sync authoritative health if server provides it (> 0)
-                            if (packet.health > 0f) {
-                                healthSystem.setAuthoritativeHealth(remote, packet.health)
+                            // Decode continuous authoritative health from packet.sin (or packet.health)
+                            val absSin = abs(packet.sin)
+                            val wasDead = remote in deadCmps || (healthCmps.getOrNull(remote)?.isDead == true)
+                            when {
+                                absSin >= 1.5f -> {
+                                    val syncedHp = (absSin - 1f).coerceIn(1f, 100f)
+                                    healthSystem.setAuthoritativeHealth(remote, syncedHp)
+                                }
+                                absSin in 0.25f..0.75f -> {
+                                    // Remote player is DEAD on their screen
+                                    healthSystem.setAuthoritativeHealth(remote, 0f)
+                                    if (!wasDead) {
+                                        netCmp.deaths += 1
+                                        playerCmps.getOrNull(remote)?.deaths = netCmp.deaths
+                                        val victimName = netCmp.playerName.ifEmpty { "Player_$id" }
+                                        if (lastHitRemoteTimer > 0f && (lastHitRemoteId == id || remoteEntities.size == 1)) {
+                                            lastHitRemoteTimer = 0f
+                                            world.family(allOf = arrayOf(PlayerComponent::class)).forEach { localPlayer ->
+                                                if (localPlayer !in remotePlayerCmps) {
+                                                    val p = playerCmps[localPlayer]
+                                                    p.kills += 1
+                                                    p.score = p.kills * 100
+                                                }
+                                            }
+                                            postFeed("Eliminated $victimName! (+100 Score)")
+                                        } else {
+                                            postFeed("$victimName was eliminated!")
+                                        }
+                                    }
+                                }
+                                packet.health > 0f -> {
+                                    healthSystem.setAuthoritativeHealth(remote, packet.health)
+                                }
                             }
 
-                            // Sync combat action timers
-                            if (packet.isAttacking) {
-                                if (netCmp.attackHoldTimer <= 0f) {
-                                    // Fallback visual shot if server doesn't broadcast PlayerShootPacket
-                                    val w = weaponCmps.getOrNull(remote)?.currentWeapon ?: WeaponType.PISTOL
-                                    combatSystem.spawnRemoteShot(remote, w, netCmp.targetSin)
-                                }
-                                netCmp.attackHoldTimer = 0.35f
-                            }
+                            // Sync combat action timers with weapon fire-rate cooldown
                             if (packet.isReloading) {
                                 netCmp.reloadHoldTimer = 0.45f
+                                netCmp.attackHoldTimer = 0f
+                            } else if (packet.isAttacking && remote !in deadCmps) {
+                                val w = weaponCmps.getOrNull(remote)?.currentWeapon ?: WeaponType.PISTOL
+                                if (netCmp.remoteShootCooldown <= 0f) {
+                                    combatSystem.spawnRemoteShot(remote, w, netCmp.targetSin)
+                                    netCmp.remoteShootCooldown = w.fireRate
+                                }
+                                netCmp.attackHoldTimer = 0.25f
                             }
                             if (packet.isThrowing) {
                                 netCmp.throwHoldTimer = 0.45f
@@ -301,9 +366,9 @@ class NetworkSystem(
                     val id = packet.id
                     if (id != myNetworkId) {
                         val remote = remoteEntities[id]
-                        if (remote != null && remote in netCmps) {
+                        if (remote != null && remote in netCmps && remote !in deadCmps) {
                             val netCmp = netCmps[remote]
-                            netCmp.attackHoldTimer = 0.35f
+                            netCmp.attackHoldTimer = 0.25f
                             if (packet.directionX != 0f) {
                                 netCmp.targetSin = if (packet.directionX < 0f) -1f else 1f
                             }
@@ -314,90 +379,55 @@ class NetworkSystem(
                                 WeaponType.PISTOL
                             }
                             weaponCmps.getOrNull(remote)?.selectWeapon(weapon)
-                            combatSystem.spawnRemoteShot(remote, weapon, netCmp.targetSin)
+                            if (netCmp.remoteShootCooldown <= 0f) {
+                                combatSystem.spawnRemoteShot(remote, weapon, netCmp.targetSin)
+                                netCmp.remoteShootCooldown = weapon.fireRate
+                            }
                         }
                     }
                 }
 
                 is PlayerHitPacket -> {
-                    println("Server authoritative HIT: from=${packet.fromId} to=${packet.toId} dmg=${packet.damage} kill=${packet.isKill}")
                     val attackerName = if (packet.fromId == myNetworkId) {
                         "You"
                     } else {
                         remoteEntities[packet.fromId]?.let { netCmps.getOrNull(it)?.playerName } ?: "Player_${packet.fromId}"
                     }
-                    val victimName = if (packet.toId == myNetworkId) {
-                        "You"
-                    } else {
-                        remoteEntities[packet.toId]?.let { netCmps.getOrNull(it)?.playerName } ?: "Player_${packet.toId}"
-                    }
 
                     if (packet.toId == myNetworkId) {
-                        // Local player took damage
+                        // Local player took damage from server projectile (deduplicated with Box2D via invulnerableTime)
                         world.family(allOf = arrayOf(PlayerComponent::class, HealthComponent::class)).forEach { localPlayer ->
                             if (localPlayer !in remotePlayerCmps) {
                                 val h = healthCmps[localPlayer]
                                 val p = playerCmps[localPlayer]
-                                val died = if (packet.isKill) {
-                                    healthSystem.forceKill(localPlayer)
-                                    true
-                                } else {
-                                    healthSystem.damage(localPlayer, packet.damage, fromNetwork = true)
-                                    h.currentHealth <= 0f
-                                }
-                                if (died) {
-                                    p.deaths = if (packet.victimDeaths > p.deaths) packet.victimDeaths else p.deaths + 1
-                                    postFeed("Eliminated by $attackerName! Respawning...")
-                                } else {
-                                    postFeed("Hit by $attackerName (-${packet.damage.toInt()} HP)")
-                                }
-                            }
-                        }
-                        // Also update remote attacker's kill count if they eliminated us
-                        val attackerRemote = remoteEntities[packet.fromId]
-                        if (attackerRemote != null && attackerRemote in netCmps) {
-                            if (packet.isKill) {
-                                val net = netCmps[attackerRemote]
-                                net.kills = if (packet.attackerKills > net.kills) packet.attackerKills else net.kills + 1
-                            }
-                        }
-                    } else {
-                        // Remote player took damage
-                        val targetRemote = remoteEntities[packet.toId]
-                        var remoteDied = packet.isKill
-                        if (targetRemote != null && targetRemote in healthCmps) {
-                            val h = healthCmps[targetRemote]
-                            if (packet.isKill) {
-                                healthSystem.forceKill(targetRemote)
-                                remoteDied = true
-                            } else {
-                                healthSystem.damage(targetRemote, packet.damage, fromNetwork = true)
-                                if (h.currentHealth <= 0f) {
-                                    remoteDied = true
-                                }
-                            }
-                            if (remoteDied && targetRemote in netCmps) {
-                                val net = netCmps[targetRemote]
-                                net.deaths = if (packet.victimDeaths > net.deaths) packet.victimDeaths else net.deaths + 1
-                            }
-                        }
+                                val wasAlive = !h.isDead && h.currentHealth > 0f && localPlayer !in deadCmps
+                                if (!wasAlive) return@forEach
 
-                        if (packet.fromId == myNetworkId) {
-                            world.family(allOf = arrayOf(PlayerComponent::class)).forEach { localPlayer ->
-                                if (localPlayer !in remotePlayerCmps) {
-                                    val p = playerCmps[localPlayer]
-                                    if (remoteDied) {
-                                        p.kills = if (packet.attackerKills > p.kills) packet.attackerKills else p.kills + 1
-                                        p.score = p.kills * 100
-                                        postFeed("Eliminated $victimName! (+100 Score)")
+                                val attackerRemote = remoteEntities[packet.fromId]
+                                val weaponDmg = attackerRemote?.let { weaponCmps.getOrNull(it)?.currentWeapon?.damage } ?: 20f
+                                val damaged = healthSystem.damage(localPlayer, weaponDmg, fromNetwork = true)
+                                if (damaged) {
+                                    val died = h.currentHealth <= 0f || h.isDead
+                                    if (died) {
+                                        p.deaths = if (packet.victimDeaths > p.deaths) packet.victimDeaths else p.deaths + 1
+                                        if (attackerRemote != null && attackerRemote in netCmps) {
+                                            val net = netCmps[attackerRemote]
+                                            net.kills = if (packet.attackerKills > net.kills) packet.attackerKills else net.kills + 1
+                                            playerCmps.getOrNull(attackerRemote)?.kills = net.kills
+                                        }
+                                        postFeed("Eliminated by $attackerName! Respawning...")
                                     } else {
-                                        postFeed("Hit $victimName (-${packet.damage.toInt()} HP)")
+                                        postFeed("Hit by $attackerName (-${weaponDmg.toInt()} HP)")
                                     }
+                                    // Immediately broadcast updated local health to all players
+                                    syncTimer = syncRate
                                 }
                             }
-                        } else if (remoteDied) {
-                            postFeed("$attackerName eliminated $victimName!")
                         }
+                    } else if (packet.fromId == myNetworkId) {
+                        // Record that we hit this remote player so if their broadcast health hits 0 we credit the kill
+                        lastHitRemoteId = packet.toId
+                        lastHitRemoteTimer = 3.0f
                     }
                 }
             }
@@ -410,7 +440,8 @@ class NetworkSystem(
                 val physic = physicCmps[remote]
                 val body = physic.body
 
-                // Tick down animation hold timers
+                // Tick down animation hold timers & shoot cooldown
+                if (net.remoteShootCooldown > 0f) net.remoteShootCooldown = (net.remoteShootCooldown - deltaTime).coerceAtLeast(0f)
                 if (net.attackHoldTimer > 0f) net.attackHoldTimer = (net.attackHoldTimer - deltaTime).coerceAtLeast(0f)
                 if (net.reloadHoldTimer > 0f) net.reloadHoldTimer = (net.reloadHoldTimer - deltaTime).coerceAtLeast(0f)
                 if (net.throwHoldTimer > 0f) net.throwHoldTimer = (net.throwHoldTimer - deltaTime).coerceAtLeast(0f)
@@ -482,10 +513,22 @@ class NetworkSystem(
                     val health = healthCmps.getOrNull(localPlayer)
                     val weapon = weaponCmps.getOrNull(localPlayer)
 
-                    val isAttacking = attack?.isAttacking ?: false
-                    val isReloading = attack?.isReloading ?: false
-                    val isThrowing = attack?.isThrowing ?: false
+                    val currentWeapon = weapon?.currentWeapon
+                    val currentAmmo = if (weapon != null && currentWeapon != null) {
+                        weapon.ammoMap[currentWeapon] ?: currentWeapon.maxAmmo
+                    } else {
+                        attack?.ammo ?: 0
+                    }
+
+                    val isDead = localPlayer in deadCmps || (health?.isDead == true) || (health?.currentHealth ?: 100f) <= 0f
+                    val currentHp = if (isDead) 0f else (health?.currentHealth ?: 100f)
+                    val isReloading = !isDead && (attack?.isReloading ?: false)
+                    val isAttacking = !isDead && !isReloading && (attack?.isAttacking ?: false) && currentAmmo > 0
+                    val isThrowing = !isDead && (attack?.isThrowing ?: false)
+
                     val stateChanged = move.cos != lastSentCos ||
+                        currentHp != lastSentHealth ||
+                        isDead != lastSentDead ||
                         isAttacking != lastSentAttacking ||
                         isReloading != lastSentReloading ||
                         isThrowing != lastSentThrowing
@@ -493,20 +536,29 @@ class NetworkSystem(
                     if (syncTimer >= syncRate || stateChanged) {
                         syncTimer = 0f
                         lastSentCos = move.cos
+                        lastSentHealth = currentHp
+                        lastSentDead = isDead
                         lastSentAttacking = isAttacking
                         lastSentReloading = isReloading
                         lastSentThrowing = isThrowing
 
                         val facingSign = if ((img?.image?.scaleX ?: 1f) < 0f) -1f else 1f
+                        // Encode live health (1..100 -> ±(1 + hp), or 0/dead -> ±0.5f) into sin so all servers forward it untouched
+                        val encodedSin = if (isDead) {
+                            facingSign * 0.5f
+                        } else {
+                            facingSign * (1f + currentHp.toInt().coerceIn(1, 100).toFloat())
+                        }
+
                         currentClient.sendState(
                             x = physic.body.position.x,
                             y = physic.body.position.y,
                             cos = move.cos,
-                            sin = facingSign,
+                            sin = encodedSin,
                             isAttacking = isAttacking,
                             isReloading = isReloading,
                             isThrowing = isThrowing,
-                            health = health?.currentHealth ?: 100f,
+                            health = currentHp,
                             weaponIndex = weapon?.currentWeapon?.ordinal ?: 0
                         )
                     }

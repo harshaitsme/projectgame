@@ -15,5 +15,6 @@ class NetworkComponent(
     var kills: Int = 0,
     var deaths: Int = 0,
     var weaponIndex: Int = 0,
+    var remoteShootCooldown: Float = 0f,
     var hasInitializedPos: Boolean = false
 )

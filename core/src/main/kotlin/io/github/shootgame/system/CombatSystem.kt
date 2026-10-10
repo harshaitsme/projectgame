@@ -41,10 +41,21 @@ class CombatSystem(
         } else {
             attackCmp.ammo
         }
+        val reserveAmmo = if (weaponCmp != null && currentWeapon != null) {
+            weaponCmp.reserveAmmoMap.getOrPut(currentWeapon) { currentWeapon.maxReserveAmmo }
+        } else {
+            0
+        }
         val reloadDuration = currentWeapon?.reloadTime ?: attackCmp.reloadTime
         val fireRate = currentWeapon?.fireRate ?: attackCmp.fireRate
 
         if (attackCmp.isReloading) {
+            if (weaponCmp != null && currentWeapon != null && (reserveAmmo <= 0 || currentAmmo >= maxAmmo)) {
+                attackCmp.isReloading = false
+                attackCmp.stateTime = 0f
+                reloadingEntities.remove(entity)
+                return
+            }
             if (entity !in reloadingEntities) {
                 reloadingEntities.add(entity)
                 audioService.play(SoundType.RELOAD)
@@ -54,13 +65,10 @@ class CombatSystem(
                 if (weaponCmp != null && currentWeapon != null) {
                     val needed = (maxAmmo - currentAmmo).coerceAtLeast(0)
                     val reserve = weaponCmp.reserveAmmoMap.getOrPut(currentWeapon) { currentWeapon.maxReserveAmmo }
-                    if (reserve > 0) {
+                    if (reserve > 0 && needed > 0) {
                         val toLoad = needed.coerceAtMost(reserve)
                         weaponCmp.ammoMap[currentWeapon] = currentAmmo + toLoad
                         weaponCmp.reserveAmmoMap[currentWeapon] = (reserve - toLoad).coerceAtLeast(0)
-                    } else if (currentAmmo == 0) {
-                        // Emergency mag if completely out of reserve ammo
-                        weaponCmp.ammoMap[currentWeapon] = maxAmmo
                     }
                 } else {
                     attackCmp.ammo = attackCmp.maxAmmo
@@ -85,9 +93,9 @@ class CombatSystem(
                 if (animationCmp.type == AnimationType.SHOT1 && animationCmp.stateTime >= minAnimDelay) {
                     spawnBulletsForWeapon(entity, imageCmp, currentWeapon)
                     if (weaponCmp != null && currentWeapon != null) {
-                        weaponCmp.ammoMap[currentWeapon] = currentAmmo - 1
+                        weaponCmp.ammoMap[currentWeapon] = (currentAmmo - 1).coerceAtLeast(0)
                     } else {
-                        attackCmp.ammo--
+                        attackCmp.ammo = (attackCmp.ammo - 1).coerceAtLeast(0)
                     }
                     attackCmp.stateTime = fireRate
 
@@ -96,9 +104,14 @@ class CombatSystem(
                         cameraShakeSystem.trigger(amount = currentWeapon.cameraShake)
                     }
                 }
-            } else {
+            } else if (reserveAmmo > 0) {
+                attackCmp.isAttacking = false
                 attackCmp.isReloading = true
                 attackCmp.stateTime = 0f
+            } else {
+                // Out of both clip and reserve ammo: cannot shoot or reload
+                attackCmp.isAttacking = false
+                attackCmp.isReloading = false
             }
         } else if (attackCmp.isThrowing && attackCmp.stateTime <= 0) {
             if (attackCmp.fragAmmo > 0) {

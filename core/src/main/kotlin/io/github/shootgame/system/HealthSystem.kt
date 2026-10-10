@@ -43,8 +43,8 @@ class HealthSystem(
 
     fun damage(entity: Entity, amount: Float, fromNetwork: Boolean = false): Boolean {
         val health = healthCmps.getOrNull(entity) ?: return false
-        if (health.isDead || amount <= 0f) return false
-        if (!fromNetwork && health.invulnerableTime > 0f) return false
+        if (health.isDead || entity in deadCmps || amount <= 0f) return false
+        if (health.invulnerableTime > 0f) return false
 
         health.currentHealth = (health.currentHealth - amount).coerceAtLeast(0f)
         health.invulnerableTime = INVULNERABILITY_DURATION
@@ -66,22 +66,36 @@ class HealthSystem(
     fun setAuthoritativeHealth(entity: Entity, targetHealth: Float) {
         val health = healthCmps.getOrNull(entity) ?: return
         val clamped = targetHealth.coerceIn(0f, health.maxHealth)
-        if (clamped <= 0f && !health.isDead) {
-            health.currentHealth = 0f
-            health.isDead = true
-            kill(entity)
-        } else if (clamped > 0f) {
+        if (clamped <= 0f) {
+            if (!health.isDead || entity !in deadCmps) {
+                health.currentHealth = 0f
+                health.isDead = true
+                kill(entity)
+            } else {
+                health.currentHealth = 0f
+            }
+        } else {
             health.currentHealth = clamped
-            if (health.isDead && entity !in deadCmps) {
+            if (health.isDead || entity in deadCmps) {
                 health.isDead = false
+                if (entity in deadCmps) {
+                    world.configureEntity(entity) {
+                        deadCmps.remove(entity)
+                    }
+                }
+                val anim = animationCmps.getOrNull(entity)
+                if (anim != null) {
+                    anim.playMode = Animation.PlayMode.LOOP
+                    anim.nextAnimation(AnimationModel.PLAYER, AnimationType.IDLE)
+                }
             }
         }
     }
 
     fun forceKill(entity: Entity) {
         val health = healthCmps.getOrNull(entity) ?: return
-        if (!health.isDead) {
-            health.currentHealth = 0f
+        health.currentHealth = 0f
+        if (!health.isDead || entity !in deadCmps) {
             health.isDead = true
             kill(entity)
         }
@@ -131,6 +145,6 @@ class HealthSystem(
     }
 
     companion object {
-        const val INVULNERABILITY_DURATION = 0.05f
+        const val INVULNERABILITY_DURATION = 0.16f
     }
 }

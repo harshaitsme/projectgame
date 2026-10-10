@@ -13,6 +13,7 @@ import io.github.shootgame.component.DamageComponent
 import io.github.shootgame.component.HealthComponent
 import io.github.shootgame.component.OwnerComponent
 import io.github.shootgame.component.PlayerComponent
+import io.github.shootgame.component.RemotePlayerComponent
 
 class DamageSystem(
     private val phWorld: PhWorld,
@@ -20,12 +21,14 @@ class DamageSystem(
     private val healthCmps: ComponentMapper<HealthComponent>,
     private val ownerCmps: ComponentMapper<OwnerComponent>,
     private val bulletCmps: ComponentMapper<BulletComponent>,
-    private val playerCmps: ComponentMapper<PlayerComponent>
+    private val playerCmps: ComponentMapper<PlayerComponent>,
+    private val remotePlayerCmps: ComponentMapper<RemotePlayerComponent>
 ) : IntervalSystem(), ContactListener {
 
     private data class PendingDamage(val source: Entity, val target: Entity, val amount: Float)
 
     private val pendingDamage = mutableListOf<PendingDamage>()
+    private val bulletsHitWall = mutableSetOf<Entity>()
     private val queuedHits = mutableSetOf<Pair<Entity, Entity>>()
     private val networkSystem: NetworkSystem by lazy { world.system<NetworkSystem>() }
 
@@ -34,6 +37,16 @@ class DamageSystem(
     }
 
     override fun onTick() {
+        if (bulletsHitWall.isNotEmpty()) {
+            val toRemove = bulletsHitWall.toList()
+            bulletsHitWall.clear()
+            toRemove.forEach { bullet ->
+                if (bullet in bulletCmps) {
+                    world.remove(bullet)
+                }
+            }
+        }
+
         val damageRequests = pendingDamage.toList()
         pendingDamage.clear()
         queuedHits.clear()
@@ -42,13 +55,23 @@ class DamageSystem(
         damageRequests.forEach { request ->
             if (request.source !in damageCmps || request.target !in healthCmps) return@forEach
 
-            // In online multiplayer, player bullet damage is authoritative via Server PlayerHitPacket
-            val isOnlinePlayerHit = networkSystem.isConnected &&
-                request.source in bulletCmps &&
-                request.target in playerCmps
-
-            if (!isOnlinePlayerHit) {
-                healthSystem.damage(request.target, request.amount)
+            // Remote players broadcast their own authoritative health; local player & AI enemies take damage directly
+            if (request.target !in remotePlayerCmps) {
+                val h = healthCmps[request.target]
+                val wasAlive = !h.isDead && h.currentHealth > 0f
+                val damaged = healthSystem.damage(request.target, request.amount)
+                if (damaged && request.target in playerCmps) {
+                    val attacker = ownerCmps.getOrNull(request.source)?.owner
+                    if (attacker != null && attacker in remotePlayerCmps) {
+                        networkSystem.onLocalPlayerHitByRemote(attacker, wasAlive && h.currentHealth <= 0f)
+                    }
+                }
+            } else {
+                // Record that we hit this remote player so if their broadcast health drops to 0 we credit the kill
+                val shooter = ownerCmps.getOrNull(request.source)?.owner
+                if (shooter != null && shooter in playerCmps && shooter !in remotePlayerCmps) {
+                    networkSystem.onLocalBulletHitRemote(request.target)
+                }
             }
 
             if (request.source in bulletCmps) {
@@ -60,6 +83,17 @@ class DamageSystem(
     override fun beginContact(contact: Contact) {
         val entityA = contact.fixtureA.body.userData as? Entity
         val entityB = contact.fixtureB.body.userData as? Entity
+
+        // Destroy bullets when they hit static world geometry (walls/floors/ceilings where userData == null)
+        if (entityA != null && entityA in bulletCmps && entityB == null && !contact.fixtureB.isSensor) {
+            bulletsHitWall.add(entityA)
+            return
+        }
+        if (entityB != null && entityB in bulletCmps && entityA == null && !contact.fixtureA.isSensor) {
+            bulletsHitWall.add(entityB)
+            return
+        }
+
         queueDamage(entityA, entityB)
         queueDamage(entityB, entityA)
     }
