@@ -22,18 +22,21 @@ class Main : KtxGame<KtxScreen>() {
     }
 
     fun startGame(config: GameConfig) {
+        config.onExitToMenu = { showMenu() }
         if (containsScreen<GameScreen>()) {
-            removeScreen<GameScreen>()
+            val old = removeScreen<GameScreen>()
+            old?.dispose()
         }
         addScreen(GameScreen(config))
         setScreen<GameScreen>()
     }
 
     fun showMenu() {
-        if (containsScreen<GameScreen>()) {
-            removeScreen<GameScreen>()
-        }
         setScreen<MenuScreen>()
+        if (containsScreen<GameScreen>()) {
+            val old = removeScreen<GameScreen>()
+            old?.dispose()
+        }
     }
 
     override fun dispose() {

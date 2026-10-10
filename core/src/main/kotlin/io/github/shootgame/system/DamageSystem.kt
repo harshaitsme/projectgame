@@ -12,19 +12,22 @@ import io.github.shootgame.component.BulletComponent
 import io.github.shootgame.component.DamageComponent
 import io.github.shootgame.component.HealthComponent
 import io.github.shootgame.component.OwnerComponent
+import io.github.shootgame.component.PlayerComponent
 
 class DamageSystem(
     private val phWorld: PhWorld,
     private val damageCmps: ComponentMapper<DamageComponent>,
     private val healthCmps: ComponentMapper<HealthComponent>,
     private val ownerCmps: ComponentMapper<OwnerComponent>,
-    private val bulletCmps: ComponentMapper<BulletComponent>
+    private val bulletCmps: ComponentMapper<BulletComponent>,
+    private val playerCmps: ComponentMapper<PlayerComponent>
 ) : IntervalSystem(), ContactListener {
 
     private data class PendingDamage(val source: Entity, val target: Entity, val amount: Float)
 
     private val pendingDamage = mutableListOf<PendingDamage>()
     private val queuedHits = mutableSetOf<Pair<Entity, Entity>>()
+    private val networkSystem: NetworkSystem by lazy { world.system<NetworkSystem>() }
 
     init {
         phWorld.setContactListener(this)
@@ -39,7 +42,15 @@ class DamageSystem(
         damageRequests.forEach { request ->
             if (request.source !in damageCmps || request.target !in healthCmps) return@forEach
 
-            healthSystem.damage(request.target, request.amount)
+            // In online multiplayer, player bullet damage is authoritative via Server PlayerHitPacket
+            val isOnlinePlayerHit = networkSystem.isConnected &&
+                request.source in bulletCmps &&
+                request.target in playerCmps
+
+            if (!isOnlinePlayerHit) {
+                healthSystem.damage(request.target, request.amount)
+            }
+
             if (request.source in bulletCmps) {
                 world.remove(request.source)
             }

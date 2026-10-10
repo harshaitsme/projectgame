@@ -18,7 +18,7 @@ import io.github.shootgame.component.*
 import kotlin.math.abs
 
 @AllOf([MoveComponent::class, PhysicComponent::class])
-@NoneOf([DeadComponent::class])
+@NoneOf([DeadComponent::class, RemotePlayerComponent::class])
 class MoveSystem(
     private val moveCmps: ComponentMapper<MoveComponent>,
     private val physicCmps: ComponentMapper<PhysicComponent>,

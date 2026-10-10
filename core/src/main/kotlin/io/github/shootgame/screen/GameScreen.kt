@@ -71,6 +71,8 @@ class GameScreen(private val config: GameConfig = GameConfig()) : KtxScreen {
         componentListener<PhysicComponent.Companion.PhysicComponentListener>()
         componentListener<PlayerComponent.Companion.PlayerComponentListener>()
 
+        system<EntitySpawnSystem>()
+        system<NetworkSystem>()
         system<PlayerInputSystem>()
         system<AiSystem>()
         system<CombatSystem>()
@@ -83,13 +85,11 @@ class GameScreen(private val config: GameConfig = GameConfig()) : KtxScreen {
         system<HealthSystem>()
         system<DeathSystem>()
         system<PickupSystem>()
-        system<UiSystem>()
         system<BulletSystem>()
         system<AnimationSystem>()
         system<CameraShakeSystem>()
+        system<UiSystem>()
         system<RenderSystem>()
-        system<EntitySpawnSystem>()
-        system<NetworkSystem>()
     }
 
   // ==================================================================================

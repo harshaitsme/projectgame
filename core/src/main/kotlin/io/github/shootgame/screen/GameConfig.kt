@@ -1,13 +1,14 @@
 package io.github.shootgame.screen
 
 enum class GameMode(val displayName: String, val maxPlayers: Int, val description: String) {
-    OFFLINE("Offline Mode", 1, "Play solo against AI enemies in offline mode."),
-    DUO("Duo Mode", 2, "2-Player Co-op / Duo squad match."),
-    SQUAD("Squad Mode", 4, "4-Player Squad battle mode.")
+    OFFLINE("Solo Practice", 1, "Play solo against AI bots on the arena map."),
+    DUO("2P Duo Arena", 2, "2-Player live multiplayer PvP arena match."),
+    SQUAD("4P Squad Arena", 4, "4-Player live multiplayer Free-For-All / Squad arena.")
 }
 
 data class GameConfig(
-    var mode: GameMode = GameMode.OFFLINE,
+    var mode: GameMode = GameMode.DUO,
     var playerName: String = "Player",
-    var serverHost: String = "161.118.255.172"
+    var serverHost: String = "161.118.255.172",
+    var onExitToMenu: () -> Unit = {}
 )

@@ -11,7 +11,7 @@ import io.github.shootgame.audio.SoundType
 import io.github.shootgame.component.*
 
 @AllOf([AttackComponent::class, MoveComponent::class, ImageComponent::class, AnimationComponent::class])
-@NoneOf([DeadComponent::class])
+@NoneOf([DeadComponent::class, RemotePlayerComponent::class])
 class CombatSystem(
     private val attackCmps: ComponentMapper<AttackComponent>,
     private val moveCmps: ComponentMapper<MoveComponent>,
@@ -125,10 +125,21 @@ class CombatSystem(
         }
     }
 
+    fun spawnRemoteShot(shooter: Entity, weapon: WeaponType?, dirX: Float) {
+        val imageCmp = imageCmps.getOrNull(shooter) ?: return
+        if (dirX != 0f) {
+            imageCmp.image.originX = imageCmp.image.width * 0.5f
+            imageCmp.image.scaleX = if (dirX < 0f) -1f else 1f
+        }
+        spawnBulletsForWeapon(shooter, imageCmp, weapon, isRemote = true)
+        playWeaponSound(weapon)
+    }
+
     private fun spawnBulletsForWeapon(
         shooter: Entity,
         imageCmp: ImageComponent,
-        weapon: WeaponType?
+        weapon: WeaponType?,
+        isRemote: Boolean = false
     ) {
         val image = imageCmp.image
         val facingRight = image.scaleX > 0
@@ -136,13 +147,15 @@ class CombatSystem(
         val offsetX = if (facingRight) 0.6f else -0.6f
         val offsetY = -0.9f
 
-        val startX = image.x + image.width * 0.5f + offsetX
-        val startY = image.y + image.height * 0.5f + offsetY
+        val bodyCenterX = image.x + image.width * 0.5f
+        val bodyCenterY = image.y + image.height * 0.5f
+        val startX = bodyCenterX + offsetX
+        val startY = bodyCenterY + offsetY
 
-        if (shooter in playerCmps && shooter !in remotePlayerCmps && networkSystem.isConnected) {
+        if (!isRemote && shooter in playerCmps && shooter !in remotePlayerCmps && networkSystem.isConnected) {
             networkSystem.sendShoot(
                 originX = startX,
-                originY = startY,
+                originY = bodyCenterY,
                 dirX = if (facingRight) 1f else -1f,
                 dirY = 0f,
                 weaponIndex = weapon?.ordinal ?: 0

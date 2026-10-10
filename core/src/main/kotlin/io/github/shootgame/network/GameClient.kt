@@ -1,6 +1,5 @@
 package io.github.shootgame.network
 
-import com.badlogic.gdx.Gdx
 import io.github.shootgame.proto.*
 import java.io.InputStream
 import java.io.OutputStream
@@ -20,6 +19,7 @@ class GameClient(
     private var tcpIn: InputStream? = null
     private var tcpOut: OutputStream? = null
     private var udpSocket: DatagramSocket? = null
+    private var serverInetAddress: InetAddress? = null
 
     private val sendLock = Any()
     @Volatile var isConnected: Boolean = false
@@ -31,14 +31,26 @@ class GameClient(
     @Volatile var sessionToken: String = ""
         private set
 
+    @Volatile var localPlayerName: String = "Player"
+        private set
+
     val packetQueue = ConcurrentLinkedQueue<Any>()
 
     fun connect(name: String, timeoutMs: Int = 4000) {
+        localPlayerName = name
         Thread {
             try {
                 println("Connecting to ShootGame server at $host: TCP=$tcpPort, UDP=$udpPort...")
+                val inetAddr = InetAddress.getByName(host)
+                serverInetAddress = inetAddr
+
+                // 1. Setup UDP socket first so it is ready before LoginResponse arrives
+                val udp = DatagramSocket()
+                udpSocket = udp
+
+                // 2. Connect TCP socket
                 val socket = Socket()
-                socket.connect(InetSocketAddress(host, tcpPort), timeoutMs)
+                socket.connect(InetSocketAddress(inetAddr, tcpPort), timeoutMs)
                 socket.tcpNoDelay = true
 
                 tcpSocket = socket
@@ -46,35 +58,26 @@ class GameClient(
                 tcpOut = socket.getOutputStream()
                 isConnected = true
 
-                // Retrieve saved session token if available for seamless reconnect
-                val savedToken = try {
-                    Gdx.app?.getPreferences("shootgame")?.getString("session_token", "") ?: ""
-                } catch (_: Exception) {
-                    ""
-                }
-
-                // Send login packet over TCP
-                val login = LoginPacket.newBuilder()
-                    .setPlayerName(name)
-                    .setSessionToken(savedToken)
-                    .build()
-                sendTcp(Wire.TYPE_LOGIN, login)
-
-                // Start TCP read loop
-                Thread { runTcpLoop() }.apply {
-                    isDaemon = true
-                    setName("ShootGame-TCP-Worker")
-                }.start()
-
-                // Setup UDP socket and start UDP receive loop
-                val udp = DatagramSocket()
-                udpSocket = udp
+                // 3. Start UDP receive loop
                 Thread { runUdpLoop(udp) }.apply {
                     isDaemon = true
                     setName("ShootGame-UDP-Worker")
                 }.start()
 
-                println("TCP connection established to $host:$tcpPort")
+                // 4. Start TCP read loop
+                Thread { runTcpLoop() }.apply {
+                    isDaemon = true
+                    setName("ShootGame-TCP-Worker")
+                }.start()
+
+                // 5. Send login packet over TCP (use in-memory sessionToken only for same-client reconnects)
+                val login = LoginPacket.newBuilder()
+                    .setPlayerName(name)
+                    .setSessionToken(sessionToken)
+                    .build()
+                sendTcp(Wire.TYPE_LOGIN, login)
+
+                println("TCP connection established to $host:$tcpPort as '$name'")
             } catch (e: Exception) {
                 println("Could not connect to multiplayer server at $host: ${e.message}. Running in offline mode.")
                 close()
@@ -97,14 +100,12 @@ class GameClient(
                         val resp = LoginResponsePacket.parseFrom(body)
                         playerId = resp.assignedId
                         sessionToken = resp.sessionToken
-                        try {
-                            Gdx.app?.getPreferences("shootgame")?.putString("session_token", sessionToken)?.flush()
-                        } catch (_: Exception) {}
 
-                        // Send UDP registration datagram so server learns our UDP address
+                        // Send UDP registration datagram immediately (twice for UDP reliability)
+                        sendUdpRegister(resp.assignedId)
                         sendUdpRegister(resp.assignedId)
                         packetQueue.add(resp)
-                        println("Logged into server: assignedId=${resp.assignedId}, token=${resp.sessionToken}")
+                        println("Logged into server: assignedId=${resp.assignedId}, spawn=(${resp.spawnX}, ${resp.spawnY})")
                     }
                     Wire.TYPE_PLAYER_CONNECTED -> {
                         packetQueue.add(PlayerConnectedPacket.parseFrom(body))
@@ -114,6 +115,12 @@ class GameClient(
                     }
                     Wire.TYPE_PLAYER_STATE -> {
                         packetQueue.add(PlayerStatePacket.parseFrom(body))
+                    }
+                    Wire.TYPE_PLAYER_HIT -> {
+                        packetQueue.add(PlayerHitPacket.parseFrom(body))
+                    }
+                    Wire.TYPE_PLAYER_SHOOT -> {
+                        packetQueue.add(PlayerShootPacket.parseFrom(body))
                     }
                 }
             }
@@ -140,6 +147,9 @@ class GameClient(
                     Wire.TYPE_PLAYER_HIT -> {
                         packetQueue.add(PlayerHitPacket.parseFrom(body))
                     }
+                    Wire.TYPE_PLAYER_SHOOT -> {
+                        packetQueue.add(PlayerShootPacket.parseFrom(body))
+                    }
                     Wire.TYPE_PLAYER_CONNECTED -> {
                         packetQueue.add(PlayerConnectedPacket.parseFrom(body))
                     }
@@ -155,20 +165,15 @@ class GameClient(
         }
     }
 
-    private fun sendUdpRegister(assignedId: Int) {
+    fun sendUdpRegister(assignedId: Int = playerId) {
+        if (assignedId < 0) return
         try {
             val udp = udpSocket ?: return
+            val addr = serverInetAddress ?: InetAddress.getByName(host)
             val regBytes = Wire.registerDatagram(assignedId)
-            val packet = DatagramPacket(
-                regBytes,
-                regBytes.size,
-                InetAddress.getByName(host),
-                udpPort
-            )
+            val packet = DatagramPacket(regBytes, regBytes.size, addr, udpPort)
             udp.send(packet)
-            println("Sent UDP registration packet for player $assignedId to $host:$udpPort")
-        } catch (e: Exception) {
-            println("Failed to send UDP registration: ${e.message}")
+        } catch (_: Exception) {
         }
     }
 
@@ -193,7 +198,9 @@ class GameClient(
         sin: Float,
         isAttacking: Boolean = false,
         isReloading: Boolean = false,
-        isThrowing: Boolean = false
+        isThrowing: Boolean = false,
+        health: Float = 100f,
+        weaponIndex: Int = 0
     ) {
         if (!isConnected || playerId < 0) return
         val packet = PlayerStatePacket.newBuilder()
@@ -205,6 +212,9 @@ class GameClient(
             .setIsAttacking(isAttacking)
             .setIsReloading(isReloading)
             .setIsThrowing(isThrowing)
+            .setHealth(health)
+            .setPlayerName(localPlayerName)
+            .setWeaponIndex(weaponIndex)
             .build()
         sendTcp(Wire.TYPE_PLAYER_STATE, packet)
     }

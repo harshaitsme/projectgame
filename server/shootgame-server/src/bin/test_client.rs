@@ -6,7 +6,7 @@ use std::time::Duration;
 use shootgame_server::network as net;
 use net::{LoginPacket, LoginResponsePacket, PlayerShootPacket};
 
-fn connect_and_login(name: &str, token: &str) -> (TcpStream, u32, String) {
+fn connect_and_login(name: &str, token: &str) -> (TcpStream, u32, f32, f32, String) {
     let mut stream = TcpStream::connect("127.0.0.1:54555").expect("connect failed");
     stream.set_read_timeout(Some(Duration::from_secs(3))).unwrap();
 
@@ -24,7 +24,7 @@ fn connect_and_login(name: &str, token: &str) -> (TcpStream, u32, String) {
         "{name}: id={}, spawn=({}, {}), token={}",
         resp.assigned_id, resp.spawn_x, resp.spawn_y, resp.session_token
     );
-    (stream, resp.assigned_id, resp.session_token)
+    (stream, resp.assigned_id, resp.spawn_x, resp.spawn_y, resp.session_token)
 }
 
 fn register_udp(id: u32) -> UdpSocket {
@@ -36,20 +36,20 @@ fn register_udp(id: u32) -> UdpSocket {
 }
 
 fn main() {
-    // 1. Client A logs in (id=1, spawn 4.5,4).
-    let (mut a_stream, a_id, _a_token) = connect_and_login("Alpha", "");
+    // 1. Client A logs in (id=1).
+    let (mut a_stream, a_id, a_x, a_y, _a_token) = connect_and_login("Alpha", "");
     let _a_udp = register_udp(a_id);
 
-    // 2. Client B logs in (id=2, spawn 6,4).
-    let (b_stream, b_id, b_token) = connect_and_login("Bravo", "");
+    // 2. Client B logs in (id=2).
+    let (b_stream, b_id, _b_x, _b_y, b_token) = connect_and_login("Bravo", "");
     let b_udp = register_udp(b_id);
 
     // 3. A fires toward +x at B. Send on A's stream so the server stamps owner=A.
     let shoot = PlayerShootPacket {
         id: a_id,
         weapon_index: 0,
-        origin_x: 4.5,
-        origin_y: 4.0,
+        origin_x: a_x,
+        origin_y: a_y,
         direction_x: 1.0,
         direction_y: 0.0,
     };
@@ -84,7 +84,7 @@ fn main() {
     // 5. Reconnection: B drops, then rejoins with its session token.
     drop(b_stream);
     std::thread::sleep(Duration::from_millis(200));
-    let (re_stream, re_id, re_token) = connect_and_login("Bravo-reconnect", &b_token);
+    let (re_stream, re_id, _, _, re_token) = connect_and_login("Bravo-reconnect", &b_token);
     println!("B reconnected: id={re_id}");
     assert_eq!(re_id, b_id, "reconnect should resume the same id");
     assert_eq!(re_token, b_token, "reconnect should echo the same token");
