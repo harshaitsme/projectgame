@@ -1,0 +1,14 @@
+# Build artifacts
+/target
+**/target
+
+# Local/editor/OS cruft
+.idea
+.vscode
+*.swp
+.DS_Store
+
+# Docker-related (avoid recursion)
+Dockerfile
+.dockerignore
+docker-compose.yml

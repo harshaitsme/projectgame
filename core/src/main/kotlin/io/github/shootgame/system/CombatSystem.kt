@@ -19,10 +19,12 @@ class CombatSystem(
     private val animationCmps: ComponentMapper<AnimationComponent>,
     private val weaponCmps: ComponentMapper<WeaponComponent>,
     private val playerCmps: ComponentMapper<PlayerComponent>,
+    private val remotePlayerCmps: ComponentMapper<RemotePlayerComponent>,
     private val audioService: AudioService
 ) : IteratingSystem() {
 
     private val cameraShakeSystem: CameraShakeSystem by lazy { world.system<CameraShakeSystem>() }
+    private val networkSystem: NetworkSystem by lazy { world.system<NetworkSystem>() }
     private val reloadingEntities = mutableSetOf<Entity>()
 
     override fun onTickEntity(entity: Entity) {
@@ -136,6 +138,16 @@ class CombatSystem(
 
         val startX = image.x + image.width * 0.5f + offsetX
         val startY = image.y + image.height * 0.5f + offsetY
+
+        if (shooter in playerCmps && shooter !in remotePlayerCmps && networkSystem.isConnected) {
+            networkSystem.sendShoot(
+                originX = startX,
+                originY = startY,
+                dirX = if (facingRight) 1f else -1f,
+                dirY = 0f,
+                weaponIndex = weapon?.ordinal ?: 0
+            )
+        }
 
         val baseSpeed = weapon?.bulletSpeed ?: 12f
         val bulletDamage = weapon?.damage ?: 15f
