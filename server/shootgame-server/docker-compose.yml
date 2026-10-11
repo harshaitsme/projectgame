@@ -1,0 +1,20 @@
+services:
+  shootgame-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: shootgame-server:latest
+    container_name: shootgame-server
+    restart: unless-stopped
+    ports:
+      - "54555:54555/tcp"
+      - "54777:54777/udp"
+    environment:
+      SHOOTGAME_TCP_PORT: "54555"
+      SHOOTGAME_UDP_PORT: "54777"
+    # Optional resource limits:
+    # deploy:
+    #   resources:
+    #     limits:
+    #       cpus: "2.0"
+    #       memory: 512M

@@ -1,0 +1,38 @@
+apply plugin: 'application'
+apply plugin: 'org.jetbrains.kotlin.jvm'
+
+java.sourceCompatibility = 8
+java.targetCompatibility = 8
+if (JavaVersion.current().isJava9Compatible()) {
+        compileJava.options.release.set(8)
+}
+kotlin.compilerOptions.jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_1_8)
+
+application.mainClass = 'io.github.shootgame.server.ServerLauncher'
+application.applicationName = appName
+eclipse.project.name = appName + '-server'
+
+dependencies {
+  implementation project(':core')
+  implementation "com.esotericsoftware:kryonet:2.22.0-RC1"
+}
+
+jar {
+  archiveBaseName.set(appName)
+  duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+  dependsOn configurations.runtimeClasspath
+  from { configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) } }
+  exclude('META-INF/INDEX.LIST', 'META-INF/*.SF', 'META-INF/*.DSA', 'META-INF/*.RSA')
+  dependencies {
+    exclude('META-INF/INDEX.LIST', 'META-INF/maven/**')
+  }
+  manifest {
+    attributes 'Main-Class': application.mainClass, 'Enable-Native-Access': 'ALL-UNNAMED', 'Multi-Release': 'true'
+  }
+  doLast {
+    file(archiveFile).setExecutable(true, false)
+  }
+}
+
+task dist(dependsOn: [jar]) {
+}

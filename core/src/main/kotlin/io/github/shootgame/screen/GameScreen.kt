@@ -46,7 +46,7 @@ import ktx.math.vec2
 
 
 //game screen shown and dispose things |
-class GameScreen : KtxScreen {
+class GameScreen(private val config: GameConfig = GameConfig()) : KtxScreen {
 
     private val audioService = AudioService()
     private val spriteBatch : Batch = SpriteBatch()
@@ -112,7 +112,8 @@ class GameScreen : KtxScreen {
         audioService.playMusic()
 
         // Connect to multiplayer server if available
-        eWorld.system<NetworkSystem>().connect()
+        val host = System.getProperty("shootgame.host", config.serverHost)
+        eWorld.system<NetworkSystem>().connect(host)
     }
 
     override fun pause() {

@@ -1,17 +1,14 @@
 package io.github.shootgame.system
 
-import com.badlogic.gdx.graphics.Color
 import com.badlogic.gdx.physics.box2d.World as PhWorld
-import com.esotericsoftware.kryonet.Client
-import com.esotericsoftware.kryonet.Connection
-import com.esotericsoftware.kryonet.Listener
-import com.github.quillraven.fleks.AllOf
 import com.github.quillraven.fleks.ComponentMapper
 import com.github.quillraven.fleks.Entity
 import com.github.quillraven.fleks.IntervalSystem
 import io.github.shootgame.component.*
-import io.github.shootgame.network.*
-import java.util.concurrent.ConcurrentLinkedQueue
+import io.github.shootgame.network.GameClient
+import io.github.shootgame.network.NetworkConfig
+import io.github.shootgame.proto.*
+import kotlin.math.abs
 
 class NetworkSystem(
     private val phWorld: PhWorld,
@@ -24,56 +21,43 @@ class NetworkSystem(
     private val remotePlayerCmps: ComponentMapper<RemotePlayerComponent>
 ) : IntervalSystem() {
 
-    private val client = Client()
-    private val packetQueue = ConcurrentLinkedQueue<Any>()
+    private var client: GameClient? = null
     private val remoteEntities = mutableMapOf<Int, Entity>()
 
     var myNetworkId: Int = -1
         private set
 
+    val isConnected: Boolean
+        get() = client?.isConnected == true
+
     private var syncTimer = 0f
     private val syncRate = 0.033f // ~30 updates/sec to server
 
-    init {
-        NetworkConfig.register(client.kryo)
-        client.addListener(object : Listener() {
-            override fun received(connection: Connection, obj: Any?) {
-                if (obj != null) {
-                    packetQueue.add(obj)
-                }
-            }
+    private val healthSystem: HealthSystem by lazy { world.system<HealthSystem>() }
 
-            override fun disconnected(connection: Connection) {
-                println("Disconnected from game server")
-            }
-        })
+    fun connect(host: String = NetworkConfig.serverHost, timeoutMs: Int = 4000) {
+        val gameClient = GameClient(host, NetworkConfig.TCP_PORT, NetworkConfig.UDP_PORT)
+        client = gameClient
+        gameClient.connect("Player_${System.currentTimeMillis() % 1000}", timeoutMs)
     }
 
-    fun connect(host: String = "localhost", timeoutMs: Int = 3000) {
-        Thread {
-            try {
-                client.start()
-                client.connect(timeoutMs, host, NetworkConfig.TCP_PORT, NetworkConfig.UDP_PORT)
-                val login = LoginPacket().apply { playerName = "Player_${System.currentTimeMillis() % 1000}" }
-                client.sendTCP(login)
-                println("Connected to game server at $host")
-            } catch (e: Exception) {
-                println("Multiplayer server not available at $host: ${e.message}. Running in offline mode.")
-            }
-        }.start()
+    fun sendShoot(originX: Float, originY: Float, dirX: Float, dirY: Float, weaponIndex: Int = 0) {
+        client?.sendShoot(originX, originY, dirX, dirY, weaponIndex)
     }
 
     override fun onTick() {
+        val currentClient = client ?: return
+
         // 1. Process received network packets on the main render thread
-        while (packetQueue.isNotEmpty()) {
-            when (val packet = packetQueue.poll()) {
+        while (currentClient.packetQueue.isNotEmpty()) {
+            when (val packet = currentClient.packetQueue.poll()) {
                 is LoginResponsePacket -> {
                     myNetworkId = packet.assignedId
-                    println("Assigned player network ID: $myNetworkId")
+                    println("Assigned player network ID: $myNetworkId at spawn (${packet.spawnX}, ${packet.spawnY})")
 
                     // Tag local player entity with its assigned network ID
                     world.family(allOf = arrayOf(PlayerComponent::class)).forEach { localPlayer ->
-                        if (localPlayer !in netCmps) {
+                        if (localPlayer !in remotePlayerCmps && localPlayer !in netCmps) {
                             world.configureEntity(localPlayer) {
                                 netCmps.add(localPlayer) {
                                     networkId = myNetworkId
@@ -85,22 +69,25 @@ class NetworkSystem(
                 }
 
                 is PlayerConnectedPacket -> {
-                    if (packet.id != myNetworkId && !remoteEntities.containsKey(packet.id)) {
-                        spawnRemotePlayer(packet.id, packet.x, packet.y)
+                    val id = packet.id
+                    if (id != myNetworkId && !remoteEntities.containsKey(id)) {
+                        spawnRemotePlayer(id, packet.x, packet.y)
                     }
                 }
 
                 is PlayerDisconnectedPacket -> {
-                    val remote = remoteEntities.remove(packet.id)
+                    val id = packet.id
+                    val remote = remoteEntities.remove(id)
                     if (remote != null) {
                         world.remove(remote)
-                        println("Removed remote player: ${packet.id}")
+                        println("Removed remote player: $id")
                     }
                 }
 
                 is PlayerStatePacket -> {
-                    if (packet.id != myNetworkId) {
-                        val remote = remoteEntities[packet.id]
+                    val id = packet.id
+                    if (id != myNetworkId) {
+                        val remote = remoteEntities[id]
                         if (remote != null && remote in netCmps) {
                             val netCmp = netCmps[remote]
                             netCmp.targetX = packet.x
@@ -114,8 +101,26 @@ class NetworkSystem(
                                 attack.isReloading = packet.isReloading
                                 attack.isThrowing = packet.isThrowing
                             }
-                        } else if (!remoteEntities.containsKey(packet.id)) {
-                            spawnRemotePlayer(packet.id, packet.x, packet.y)
+                        } else if (!remoteEntities.containsKey(id)) {
+                            spawnRemotePlayer(id, packet.x, packet.y)
+                        }
+                    }
+                }
+
+                is PlayerHitPacket -> {
+                    println("Server authoritative HIT: from=${packet.fromId} to=${packet.toId} dmg=${packet.damage}")
+                    if (packet.toId == myNetworkId) {
+                        // Local player took damage
+                        world.family(allOf = arrayOf(PlayerComponent::class)).forEach { localPlayer ->
+                            if (localPlayer !in remotePlayerCmps) {
+                                healthSystem.damage(localPlayer, packet.damage)
+                            }
+                        }
+                    } else {
+                        // Remote player took damage
+                        val targetRemote = remoteEntities[packet.toId]
+                        if (targetRemote != null) {
+                            healthSystem.damage(targetRemote, packet.damage)
                         }
                     }
                 }
@@ -139,7 +144,7 @@ class NetworkSystem(
                 val body = physic.body
                 val dx = net.targetX - body.position.x
                 val dy = net.targetY - body.position.y
-                if (Math.abs(dx) > 0.05f || Math.abs(dy) > 0.1f) {
+                if (abs(dx) > 0.05f || abs(dy) > 0.1f) {
                     body.setTransform(
                         body.position.x + dx * 0.25f,
                         body.position.y + dy * 0.25f,
@@ -150,26 +155,26 @@ class NetworkSystem(
         }
 
         // 3. Send local player state to server periodically
-        if (client.isConnected && myNetworkId != -1) {
+        if (currentClient.isConnected && myNetworkId != -1) {
             syncTimer += deltaTime
             if (syncTimer >= syncRate) {
                 syncTimer = 0f
                 world.family(allOf = arrayOf(PlayerComponent::class, MoveComponent::class, PhysicComponent::class)).forEach { localPlayer ->
-                    val physic = physicCmps[localPlayer]
-                    val move = moveCmps[localPlayer]
-                    val attack = attackCmps.getOrNull(localPlayer)
+                    if (localPlayer !in remotePlayerCmps) {
+                        val physic = physicCmps[localPlayer]
+                        val move = moveCmps[localPlayer]
+                        val attack = attackCmps.getOrNull(localPlayer)
 
-                    val packet = PlayerStatePacket().apply {
-                        this.id = myNetworkId
-                        this.x = physic.body.position.x
-                        this.y = physic.body.position.y
-                        this.cos = move.cos
-                        this.sin = move.sin
-                        this.isAttacking = attack?.isAttacking ?: false
-                        this.isReloading = attack?.isReloading ?: false
-                        this.isThrowing = attack?.isThrowing ?: false
+                        currentClient.sendState(
+                            x = physic.body.position.x,
+                            y = physic.body.position.y,
+                            cos = move.cos,
+                            sin = move.sin,
+                            isAttacking = attack?.isAttacking ?: false,
+                            isReloading = attack?.isReloading ?: false,
+                            isThrowing = attack?.isThrowing ?: false
+                        )
                     }
-                    client.sendUDP(packet)
                 }
             }
         }
@@ -183,12 +188,11 @@ class NetworkSystem(
             }
         }
         remoteEntities[netId] = spawnEntity
-        println("Remote player entity requested for ID $netId at ($startX, $startY)")
+        println("Remote player entity spawned for network ID $netId at ($startX, $startY)")
     }
 
     override fun onDispose() {
-        if (client.isConnected) {
-            client.stop()
-        }
+        client?.close()
+        client = null
     }
 }
