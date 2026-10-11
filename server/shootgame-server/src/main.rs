@@ -725,7 +725,7 @@ fn handle_message(
                     event_type: "PLAYER_JOIN".to_string(),
                     room_code: resolved_code.clone(),
                     game_mode: resolved_mode.clone(),
-                    actor: display_name,
+                    actor: display_name.clone(),
                     target: format!("Slot #{current_players}/{max_players}"),
                     weapon: "Pistol".to_string(),
                     damage: 0.0,
@@ -740,9 +740,11 @@ fn handle_message(
                 x: sx,
                 y: sy,
                 room_code: resolved_code.clone(),
+                player_name: display_name.clone(),
             };
             let conn_frame = net::tcp_frame(TYPE_PLAYER_CONNECTED, &conn_pkt);
             let positions = world.read::<Position>();
+            let metas = world.read::<PlayerMeta>();
             for (&other_id, tx) in tcp_senders.iter() {
                 if other_id != player_id
                     && player_rooms.get(&other_id) == Some(&resolved_code)
@@ -750,11 +752,16 @@ fn handle_message(
                     let _ = tx.send(conn_frame.clone());
                     if let Some(&other_ent) = entities.get(&other_id) {
                         if let Some(other_pos) = positions.get(other_ent) {
+                            let other_name = metas
+                                .get(other_ent)
+                                .map(|m| m.name.clone())
+                                .unwrap_or_else(|| format!("Player_{other_id}"));
                             let existing_pkt = PlayerConnectedPacket {
                                 id: other_id,
                                 x: other_pos.x,
                                 y: other_pos.y,
                                 room_code: resolved_code.clone(),
+                                player_name: other_name,
                             };
                             let _ = tcp_tx.send(net::tcp_frame(TYPE_PLAYER_CONNECTED, &existing_pkt));
                         }
