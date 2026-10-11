@@ -184,6 +184,32 @@ class RenderSystem(
 
             act(deltaTime)
             draw()
+
+            // Apply live Gamma / Brightness adjustment across the entire screen
+            val gamma = io.github.shootgame.screen.GameSettings.gamma
+            if (kotlin.math.abs(gamma - 1.0f) > 0.01f) {
+                uiStage.batch.use(uiStage.camera.combined) { batch ->
+                    val w = uiStage.viewport.worldWidth
+                    val h = uiStage.viewport.worldHeight
+                    if (gamma < 1.0f) {
+                        val alpha = ((1.0f - gamma) * 1.15f).coerceIn(0f, 0.65f)
+                        batch.setColor(0f, 0f, 0f, alpha)
+                        batch.draw(whitePixel, 0f, 0f, w, h)
+                    } else {
+                        val oldSrc = batch.blendSrcFunc
+                        val oldDst = batch.blendDstFunc
+                        batch.setBlendFunction(
+                            com.badlogic.gdx.graphics.GL20.GL_SRC_ALPHA,
+                            com.badlogic.gdx.graphics.GL20.GL_ONE
+                        )
+                        val alpha = ((gamma - 1.0f) * 0.65f).coerceIn(0f, 0.42f)
+                        batch.setColor(1f, 0.98f, 0.92f, alpha)
+                        batch.draw(whitePixel, 0f, 0f, w, h)
+                        batch.setBlendFunction(oldSrc, oldDst)
+                    }
+                    batch.setColor(Color.WHITE)
+                }
+            }
         }
     }
 

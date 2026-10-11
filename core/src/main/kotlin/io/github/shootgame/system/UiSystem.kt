@@ -11,6 +11,7 @@ import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator
 import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator.FreeTypeFontParameter
 import com.badlogic.gdx.scenes.scene2d.InputEvent
 import com.badlogic.gdx.scenes.scene2d.Stage
+import com.badlogic.gdx.scenes.scene2d.Touchable
 import com.badlogic.gdx.scenes.scene2d.ui.Cell
 import com.badlogic.gdx.scenes.scene2d.ui.Image
 import com.badlogic.gdx.scenes.scene2d.ui.Label
@@ -33,7 +34,9 @@ import io.github.shootgame.component.WeaponComponent
 import io.github.shootgame.component.WeaponType
 import io.github.shootgame.screen.GameConfig
 import io.github.shootgame.screen.GameMode
+import io.github.shootgame.screen.GameSettings
 import kotlin.math.max
+import kotlin.math.roundToInt
 
 class UiSystem(
     @Qualifier("uiStage") private val uiStage: Stage,
@@ -48,6 +51,10 @@ class UiSystem(
 ) : IntervalSystem() {
 
     private val networkSystem: NetworkSystem by lazy { world.system<NetworkSystem>() }
+    private val cameraShakeSystem: CameraShakeSystem by lazy { world.system<CameraShakeSystem>() }
+
+    var isPaused: Boolean = false
+        private set
 
     var touchLeft = false
     var touchRight = false
@@ -90,6 +97,7 @@ class UiSystem(
     private lateinit var fillYellowDrawable: TextureRegionDrawable
     private lateinit var fillDangerDrawable: TextureRegionDrawable
     private lateinit var fillAmberDrawable: TextureRegionDrawable
+    private lateinit var fillCyanDrawable: TextureRegionDrawable
 
     // HUD Elements
     private lateinit var modeStatusLabel: Label
@@ -109,15 +117,36 @@ class UiSystem(
     private var sfxButtonLabel: Label? = null
     private var bgmButtonLabel: Label? = null
 
+    // Pause Menu Elements
+    private lateinit var pauseOverlayRoot: Table
+    private var pauseRoomBadgeLabel: Label? = null
+    private var pauseSfxValueLabel: Label? = null
+    private var pauseSfxToggleLabel: Label? = null
+    private var pauseSfxFillImage: Image? = null
+    private var pauseSfxFillCell: Cell<Image>? = null
+    private var pauseBgmValueLabel: Label? = null
+    private var pauseBgmToggleLabel: Label? = null
+    private var pauseBgmFillImage: Image? = null
+    private var pauseBgmFillCell: Cell<Image>? = null
+    private var pauseVibValueLabel: Label? = null
+    private var pauseVibToggleLabel: Label? = null
+    private var pauseVibFillImage: Image? = null
+    private var pauseVibFillCell: Cell<Image>? = null
+    private var pauseGammaValueLabel: Label? = null
+    private var pauseGammaFillImage: Image? = null
+    private var pauseGammaFillCell: Cell<Image>? = null
+
     private var maxHealthBarWidth = 432f
     private var maxAmmoBarWidth = 432f
 
     init {
+        GameSettings.ensureLoaded()
         initFonts()
         setupHud()
         if (Gdx.app.type == Application.ApplicationType.Android) {
             setupTouchControls()
         }
+        setupPauseMenu()
     }
 
     private fun initFonts() {
@@ -388,6 +417,7 @@ class UiSystem(
         fillYellowDrawable = createFillDrawable(colCyberYellow)
         fillDangerDrawable = createFillDrawable(colCyberDanger)
         fillAmberDrawable = createFillDrawable(colCyberOrange)
+        fillCyanDrawable = createFillDrawable(colCyberCyan)
 
         // 1. Status Section: Health & Weapon Sci-Fi Progress Bars (Prominent & Large)
         val statusContainer = Table()
@@ -522,24 +552,25 @@ class UiSystem(
 
         rootTable.add(middleCol).expandX().left().top()
 
-        // 3. Top-Right Column: Audio Toggles + MENU Exit + Live Multiplayer Scoreboard
+        // 3. Top-Right Column: Audio Toggles + PAUSE Button + Live Multiplayer Scoreboard
         val topRightCol = Table()
         val audioTable = Table()
-        val sfxBtn = createModernButton("SFX", 82f, 52f) {
+        val sfxBtn = createModernButton(if (audioService.isSoundEnabled) "SFX" else "MUTED", 82f, 52f) {
             val enabled = audioService.toggleSound()
             sfxButtonLabel?.setText(if (enabled) "SFX" else "MUTED")
+            refreshPauseMenuUi()
         }
-        val bgmBtn = createModernButton("BGM", 82f, 52f) {
+        val bgmBtn = createModernButton(if (audioService.isMusicEnabled) "BGM" else "MUTED", 82f, 52f) {
             val enabled = audioService.toggleMusic()
             bgmButtonLabel?.setText(if (enabled) "BGM" else "MUTED")
+            refreshPauseMenuUi()
         }
-        val menuBtn = createModernButton("MENU", 88f, 52f) {
-            networkSystem.disconnect()
-            config.onExitToMenu()
+        val pauseBtn = createModernButton("PAUSE", 96f, 52f) {
+            togglePauseMenu()
         }
         audioTable.add(sfxBtn).padRight(8f)
         audioTable.add(bgmBtn).padRight(8f)
-        audioTable.add(menuBtn)
+        audioTable.add(pauseBtn)
         topRightCol.add(audioTable).right().top().row()
 
         // Live Scoreboard Card (shows per-player HP, K/D, Score, Roof Respawn status)
@@ -598,6 +629,432 @@ class UiSystem(
         uiStage.addActor(rightTable)
     }
 
+    private fun setupPauseMenu() {
+        val overlay = Table()
+        overlay.setFillParent(true)
+        overlay.touchable = Touchable.enabled
+        overlay.background = createFillDrawable(Color(0.02f, 0.03f, 0.05f, 0.82f))
+        overlay.isVisible = false
+        pauseOverlayRoot = overlay
+
+        val cardW = 790f
+        val cardH = 406f
+        val card = Table()
+        card.background = createRoundedDrawable(cardW.toInt(), cardH.toInt(), 12, colDarkChamber, colCyberYellow, 3)
+        card.pad(16f, 20f, 16f, 20f)
+
+        // Top Header Bar
+        val headerRow = Table()
+        val titleLbl = Label("// GAME PAUSED //", Label.LabelStyle(fontLarge, colCyberYellow))
+        val badgeLbl = Label("", Label.LabelStyle(fontTiny, colCyberCyan))
+        pauseRoomBadgeLabel = badgeLbl
+        headerRow.add(titleLbl).left().expandX()
+        headerRow.add(badgeLbl).right()
+        card.add(headerRow).fillX().padBottom(8f).row()
+
+        val divider = Image(fillAmberDrawable)
+        card.add(divider).height(2f).fillX().padBottom(12f).row()
+
+        // Main 2-Column Body: Left = Pause Actions, Right = Settings (FX Sound, Vibration/Camera Shake Boom, Gamma)
+        val bodyRow = Table()
+
+        // --- LEFT COLUMN: PAUSE MENU ACTIONS ---
+        val leftMenu = Table()
+        leftMenu.background = createRoundedDrawable(230, 312, 10, Color(0.06f, 0.07f, 0.10f, 0.95f), colCyberOrange, 2)
+        leftMenu.pad(12f)
+
+        val menuHeader = Label("COMMANDS", Label.LabelStyle(fontSmall, colCyberOrange))
+        leftMenu.add(menuHeader).left().padBottom(10f).row()
+
+        val resumeBtn = createStyledPauseButton("RESUME GAME", 202f, 48f, colCyberYellow, isPrimary = true) {
+            setPaused(false)
+        }
+        leftMenu.add(resumeBtn).padBottom(10f).row()
+
+        val settingsBtn = createStyledPauseButton("SETTINGS • TEST", 202f, 46f, colCyberCyan) {
+            cameraShakeSystem.triggerExplosionBoom(0.85f)
+            refreshPauseMenuUi()
+        }
+        leftMenu.add(settingsBtn).padBottom(10f).row()
+
+        val leaveText = if (config.mode != GameMode.OFFLINE) "LEAVE ROOM" else "LEAVE MATCH"
+        val leaveBtn = createStyledPauseButton(leaveText, 202f, 46f, colCyberOrange) {
+            setPaused(false)
+            networkSystem.disconnect()
+            config.onExitToMenu()
+        }
+        leftMenu.add(leaveBtn).padBottom(10f).row()
+
+        val exitBtn = createStyledPauseButton("EXIT GAME", 202f, 46f, colCyberDanger) {
+            networkSystem.disconnect()
+            Gdx.app.exit()
+        }
+        leftMenu.add(exitBtn).row()
+
+        bodyRow.add(leftMenu).width(230f).height(312f).top().padRight(14f)
+
+        // --- RIGHT COLUMN: SETTINGS (FX SOUND, BGM, VIBRATION / CAMERA SHAKE BOOM, GAMMA) ---
+        val settingsCard = Table()
+        settingsCard.background = createRoundedDrawable(504, 312, 10, Color(0.06f, 0.07f, 0.10f, 0.95f), colCyberOrange, 2)
+        settingsCard.pad(12f, 16f, 12f, 16f)
+
+        val settingsHeaderRow = Table()
+        val settingsTitle = Label("SETTINGS", Label.LabelStyle(fontSmall, colCyberYellow))
+        val resetAllBtn = createModernButton("DEFAULTS", 98f, 28f, fontTiny) {
+            GameSettings.resetDefaults()
+            audioService.setSoundVolumeLevel(GameSettings.sfxVolume)
+            audioService.setMusicVolumeLevel(GameSettings.bgmVolume)
+            cameraShakeSystem.trigger(duration = 0.25f, amount = 0.28f)
+            refreshPauseMenuUi()
+        }
+        settingsHeaderRow.add(settingsTitle).left().expandX()
+        settingsHeaderRow.add(resetAllBtn).right()
+        settingsCard.add(settingsHeaderRow).fillX().padBottom(10f).row()
+
+        val barTrackW = 186f
+        val barTrackH = 22f
+
+        // 1. FX SOUND (SFX) ROW
+        val sfxHeader = Table()
+        sfxHeader.add(Label("FX SOUND (SFX)", Label.LabelStyle(fontTiny, Color.WHITE))).left().expandX()
+        val sfxValLbl = Label("80%", Label.LabelStyle(fontTiny, colCyberYellow))
+        pauseSfxValueLabel = sfxValLbl
+        sfxHeader.add(sfxValLbl).right()
+        settingsCard.add(sfxHeader).fillX().padBottom(3f).row()
+
+        val sfxControls = Table()
+        val sfxToggleStack = createPauseToggleBtn("ON", 74f, 32f) {
+            audioService.toggleSound()
+            if (audioService.isSoundEnabled) {
+                audioService.play(SoundType.SHOT, volumeModifier = 0.65f)
+            }
+            refreshPauseMenuUi()
+        }
+        pauseSfxToggleLabel = sfxToggleStack.second
+
+        val sfxMinusBtn = createModernButton("-", 38f, 32f, fontMedium) {
+            val next = (if (audioService.isSoundEnabled) audioService.soundVolume - 0.10f else 0f).coerceIn(0f, 1f)
+            audioService.setSoundVolumeLevel(next)
+            audioService.play(SoundType.SHOT, volumeModifier = 0.65f)
+            refreshPauseMenuUi()
+        }
+        val (sfxBarTable, sfxFillImg, sfxCell) = createSettingProgressBar(barTrackW, barTrackH)
+        pauseSfxFillImage = sfxFillImg
+        pauseSfxFillCell = sfxCell
+        val sfxPlusBtn = createModernButton("+", 38f, 32f, fontMedium) {
+            val base = if (audioService.isSoundEnabled) audioService.soundVolume else 0f
+            val next = (base + 0.10f).coerceIn(0.10f, 1f)
+            audioService.setSoundVolumeLevel(next)
+            audioService.play(SoundType.SHOT, volumeModifier = 0.65f)
+            refreshPauseMenuUi()
+        }
+        val sfxTestBtn = createModernButton("TEST", 58f, 32f, fontTiny) {
+            if (!audioService.isSoundEnabled) audioService.toggleSound()
+            audioService.play(SoundType.SHOT, volumeModifier = 0.85f)
+            refreshPauseMenuUi()
+        }
+        sfxControls.add(sfxToggleStack.first).padRight(8f)
+        sfxControls.add(sfxMinusBtn).padRight(6f)
+        sfxControls.add(sfxBarTable).width(barTrackW).height(barTrackH).padRight(6f)
+        sfxControls.add(sfxPlusBtn).padRight(8f)
+        sfxControls.add(sfxTestBtn)
+        settingsCard.add(sfxControls).left().padBottom(9f).row()
+
+        // 2. MUSIC (BGM) ROW
+        val bgmHeader = Table()
+        bgmHeader.add(Label("BACKGROUND MUSIC (BGM)", Label.LabelStyle(fontTiny, Color.WHITE))).left().expandX()
+        val bgmValLbl = Label("50%", Label.LabelStyle(fontTiny, colCyberYellow))
+        pauseBgmValueLabel = bgmValLbl
+        bgmHeader.add(bgmValLbl).right()
+        settingsCard.add(bgmHeader).fillX().padBottom(3f).row()
+
+        val bgmControls = Table()
+        val bgmToggleStack = createPauseToggleBtn("ON", 74f, 32f) {
+            audioService.toggleMusic()
+            refreshPauseMenuUi()
+        }
+        pauseBgmToggleLabel = bgmToggleStack.second
+
+        val bgmMinusBtn = createModernButton("-", 38f, 32f, fontMedium) {
+            val next = (if (audioService.isMusicEnabled) audioService.musicVolume - 0.10f else 0f).coerceIn(0f, 1f)
+            audioService.setMusicVolumeLevel(next)
+            refreshPauseMenuUi()
+        }
+        val (bgmBarTable, bgmFillImg, bgmCell) = createSettingProgressBar(barTrackW, barTrackH)
+        pauseBgmFillImage = bgmFillImg
+        pauseBgmFillCell = bgmCell
+        val bgmPlusBtn = createModernButton("+", 38f, 32f, fontMedium) {
+            val base = if (audioService.isMusicEnabled) audioService.musicVolume else 0f
+            val next = (base + 0.10f).coerceIn(0.10f, 1f)
+            audioService.setMusicVolumeLevel(next)
+            refreshPauseMenuUi()
+        }
+        val bgmMuteBtn = createModernButton("50%", 58f, 32f, fontTiny) {
+            audioService.setMusicVolumeLevel(0.5f)
+            refreshPauseMenuUi()
+        }
+        bgmControls.add(bgmToggleStack.first).padRight(8f)
+        bgmControls.add(bgmMinusBtn).padRight(6f)
+        bgmControls.add(bgmBarTable).width(barTrackW).height(barTrackH).padRight(6f)
+        bgmControls.add(bgmPlusBtn).padRight(8f)
+        bgmControls.add(bgmMuteBtn)
+        settingsCard.add(bgmControls).left().padBottom(9f).row()
+
+        // 3. VIBRATION / CAMERA SHAKE (BOOM) ROW
+        val vibHeader = Table()
+        vibHeader.add(Label("VIBRATION & CAMERA SHAKE (BOOM)", Label.LabelStyle(fontTiny, Color.WHITE))).left().expandX()
+        val vibValLbl = Label("100%", Label.LabelStyle(fontTiny, colCyberCyan))
+        pauseVibValueLabel = vibValLbl
+        vibHeader.add(vibValLbl).right()
+        settingsCard.add(vibHeader).fillX().padBottom(3f).row()
+
+        val vibControls = Table()
+        val vibToggleStack = createPauseToggleBtn("ON", 74f, 32f) {
+            val newEnabled = !GameSettings.vibrationEnabled
+            val newIntensity = if (newEnabled && GameSettings.vibrationIntensity <= 0.05f) 1.0f else GameSettings.vibrationIntensity
+            GameSettings.updateVibration(newEnabled, newIntensity)
+            if (newEnabled) {
+                cameraShakeSystem.triggerExplosionBoom(0.85f)
+            }
+            refreshPauseMenuUi()
+        }
+        pauseVibToggleLabel = vibToggleStack.second
+
+        val vibMinusBtn = createModernButton("-", 38f, 32f, fontMedium) {
+            val next = (GameSettings.vibrationIntensity - 0.20f).coerceIn(0f, 2.0f)
+            GameSettings.updateVibration(enabled = next > 0.01f, intensity = next)
+            if (next > 0.01f) cameraShakeSystem.triggerExplosionBoom(0.75f)
+            refreshPauseMenuUi()
+        }
+        val (vibBarTable, vibFillImg, vibCell) = createSettingProgressBar(barTrackW, barTrackH)
+        pauseVibFillImage = vibFillImg
+        pauseVibFillCell = vibCell
+        val vibPlusBtn = createModernButton("+", 38f, 32f, fontMedium) {
+            val base = if (GameSettings.vibrationEnabled) GameSettings.vibrationIntensity else 0f
+            val next = (base + 0.20f).coerceIn(0.20f, 2.0f)
+            GameSettings.updateVibration(enabled = true, intensity = next)
+            cameraShakeSystem.triggerExplosionBoom(0.85f)
+            refreshPauseMenuUi()
+        }
+        val vibBoomBtn = createModernButton("BOOM!", 58f, 32f, fontTiny) {
+            if (!GameSettings.vibrationEnabled) {
+                GameSettings.updateVibration(enabled = true, intensity = GameSettings.vibrationIntensity.coerceAtLeast(1.0f))
+            }
+            cameraShakeSystem.triggerExplosionBoom(1.15f)
+            audioService.play(SoundType.EXPLOSION, volumeModifier = 0.85f)
+            refreshPauseMenuUi()
+        }
+        vibControls.add(vibToggleStack.first).padRight(8f)
+        vibControls.add(vibMinusBtn).padRight(6f)
+        vibControls.add(vibBarTable).width(barTrackW).height(barTrackH).padRight(6f)
+        vibControls.add(vibPlusBtn).padRight(8f)
+        vibControls.add(vibBoomBtn)
+        settingsCard.add(vibControls).left().padBottom(9f).row()
+
+        // 4. GAMMA (BRIGHTNESS) ROW
+        val gammaHeader = Table()
+        gammaHeader.add(Label("GAMMA / BRIGHTNESS", Label.LabelStyle(fontTiny, Color.WHITE))).left().expandX()
+        val gammaValLbl = Label("100%", Label.LabelStyle(fontTiny, colCyberYellow))
+        pauseGammaValueLabel = gammaValLbl
+        gammaHeader.add(gammaValLbl).right()
+        settingsCard.add(gammaHeader).fillX().padBottom(3f).row()
+
+        val gammaControls = Table()
+        val gammaResetBtn = createModernButton("100%", 74f, 32f, fontTiny) {
+            GameSettings.updateGamma(1.0f)
+            refreshPauseMenuUi()
+        }
+        val gammaMinusBtn = createModernButton("-", 38f, 32f, fontMedium) {
+            GameSettings.updateGamma((GameSettings.gamma - 0.10f).coerceIn(0.50f, 1.50f))
+            refreshPauseMenuUi()
+        }
+        val (gammaBarTable, gammaFillImg, gammaCell) = createSettingProgressBar(barTrackW, barTrackH)
+        pauseGammaFillImage = gammaFillImg
+        pauseGammaFillCell = gammaCell
+        val gammaPlusBtn = createModernButton("+", 38f, 32f, fontMedium) {
+            GameSettings.updateGamma((GameSettings.gamma + 0.10f).coerceIn(0.50f, 1.50f))
+            refreshPauseMenuUi()
+        }
+        val gammaMaxBtn = createModernButton("125%", 58f, 32f, fontTiny) {
+            GameSettings.updateGamma(1.25f)
+            refreshPauseMenuUi()
+        }
+        gammaControls.add(gammaResetBtn).padRight(8f)
+        gammaControls.add(gammaMinusBtn).padRight(6f)
+        gammaControls.add(gammaBarTable).width(barTrackW).height(barTrackH).padRight(6f)
+        gammaControls.add(gammaPlusBtn).padRight(8f)
+        gammaControls.add(gammaMaxBtn)
+        settingsCard.add(gammaControls).left().row()
+
+        bodyRow.add(settingsCard).width(504f).height(312f).top()
+        card.add(bodyRow).row()
+
+        overlay.add(card).size(cardW, cardH).center()
+        uiStage.addActor(overlay)
+        refreshPauseMenuUi(includeNetworkState = false)
+    }
+
+    private fun createStyledPauseButton(
+        text: String,
+        width: Float,
+        height: Float,
+        borderColor: Color,
+        isPrimary: Boolean = false,
+        onClick: () -> Unit
+    ): Stack {
+        val stack = Stack()
+        val bgCol = if (isPrimary) Color(0.24f, 0.18f, 0.04f, 0.96f) else colButtonBg
+        val normalDrawable = createRoundedDrawable(width.toInt(), height.toInt(), 8, bgCol, borderColor, 2)
+        val pressedDrawable = createRoundedDrawable(width.toInt(), height.toInt(), 8, colButtonPressed, colCyberYellow, 3)
+
+        val bgImage = Image(normalDrawable)
+        val label = Label(text, Label.LabelStyle(fontSmall, if (isPrimary) colCyberYellow else Color.WHITE))
+        label.setAlignment(Align.center)
+
+        stack.add(bgImage)
+        stack.add(label)
+
+        stack.addListener(object : ClickListener() {
+            override fun touchDown(event: InputEvent?, x: Float, y: Float, pointer: Int, button: Int): Boolean {
+                audioService.play(SoundType.CLICK, volumeModifier = 0.5f)
+                bgImage.drawable = pressedDrawable
+                return true
+            }
+
+            override fun touchUp(event: InputEvent?, x: Float, y: Float, pointer: Int, button: Int) {
+                bgImage.drawable = normalDrawable
+                onClick()
+            }
+        })
+        return stack
+    }
+
+    private fun createPauseToggleBtn(
+        initialText: String,
+        width: Float,
+        height: Float,
+        onClick: () -> Unit
+    ): Pair<Stack, Label> {
+        val stack = Stack()
+        val normalDrawable = createRoundedDrawable(width.toInt(), height.toInt(), 8, colButtonBg, colCyberOrange, 2)
+        val pressedDrawable = createRoundedDrawable(width.toInt(), height.toInt(), 8, colButtonPressed, colCyberYellow, 2)
+
+        val bgImage = Image(normalDrawable)
+        val label = Label(initialText, Label.LabelStyle(fontTiny, colCyberYellow))
+        label.setAlignment(Align.center)
+
+        stack.add(bgImage)
+        stack.add(label)
+
+        stack.addListener(object : ClickListener() {
+            override fun touchDown(event: InputEvent?, x: Float, y: Float, pointer: Int, button: Int): Boolean {
+                audioService.play(SoundType.CLICK, volumeModifier = 0.5f)
+                bgImage.drawable = pressedDrawable
+                return true
+            }
+
+            override fun touchUp(event: InputEvent?, x: Float, y: Float, pointer: Int, button: Int) {
+                bgImage.drawable = normalDrawable
+                onClick()
+            }
+        })
+        return stack to label
+    }
+
+    private fun createSettingProgressBar(width: Float, height: Float): Triple<Table, Image, Cell<Image>> {
+        val frame = Table()
+        frame.background = createRoundedDrawable(width.toInt(), height.toInt(), 5, colDarkTrack, colCyberOrange, 1)
+        frame.left().pad(3f)
+        val fillImg = Image(fillYellowDrawable)
+        val cell = frame.add(fillImg).size(width - 6f, height - 6f).left()
+        return Triple(frame, fillImg, cell)
+    }
+
+    fun togglePauseMenu() {
+        setPaused(!isPaused)
+    }
+
+    fun setPaused(paused: Boolean) {
+        isPaused = paused
+        if (paused) {
+            touchLeft = false
+            touchRight = false
+            touchShoot = false
+            touchReload = false
+            touchJump = false
+            touchGrenade = false
+            refreshPauseMenuUi(includeNetworkState = true)
+            pauseOverlayRoot.toFront()
+        }
+        pauseOverlayRoot.isVisible = paused
+    }
+
+    private fun refreshPauseMenuUi(includeNetworkState: Boolean = true) {
+        val maxInnerBarW = 180f
+
+        // Update HUD top-right SFX / BGM labels too
+        sfxButtonLabel?.setText(if (audioService.isSoundEnabled) "SFX" else "MUTED")
+        bgmButtonLabel?.setText(if (audioService.isMusicEnabled) "BGM" else "MUTED")
+
+        // Room / Mode badge in pause header
+        val netCode = if (includeNetworkState) {
+            runCatching { networkSystem.activeRoomCode }.getOrDefault("")
+        } else {
+            ""
+        }
+        val roomCode = netCode.ifEmpty { config.roomCode.ifEmpty { "---" } }
+        pauseRoomBadgeLabel?.setText(
+            if (config.mode != GameMode.OFFLINE) {
+                "ROOM [$roomCode] • ${config.mode.displayName.uppercase()}"
+            } else {
+                "SOLO PRACTICE ARENA"
+            }
+        )
+
+        // 1. SFX UI
+        val sfxRatio = if (audioService.isSoundEnabled) audioService.soundVolume.coerceIn(0f, 1f) else 0f
+        val sfxPct = (sfxRatio * 100f).roundToInt()
+        pauseSfxValueLabel?.setText(if (audioService.isSoundEnabled) "$sfxPct%" else "MUTED")
+        pauseSfxValueLabel?.color = if (audioService.isSoundEnabled) colCyberYellow else colCyberDanger
+        pauseSfxToggleLabel?.setText(if (audioService.isSoundEnabled) "ON" else "MUTED")
+        pauseSfxToggleLabel?.color = if (audioService.isSoundEnabled) colCyberYellow else colCyberDanger
+        pauseSfxFillImage?.drawable = if (audioService.isSoundEnabled) fillYellowDrawable else fillDangerDrawable
+        pauseSfxFillCell?.width(max(2f, maxInnerBarW * sfxRatio))
+        pauseSfxFillImage?.let { healthFrameTableInvalidate(it) }
+
+        // 2. BGM UI
+        val bgmRatio = if (audioService.isMusicEnabled) audioService.musicVolume.coerceIn(0f, 1f) else 0f
+        val bgmPct = (bgmRatio * 100f).roundToInt()
+        pauseBgmValueLabel?.setText(if (audioService.isMusicEnabled) "$bgmPct%" else "MUTED")
+        pauseBgmValueLabel?.color = if (audioService.isMusicEnabled) colCyberYellow else colCyberDanger
+        pauseBgmToggleLabel?.setText(if (audioService.isMusicEnabled) "ON" else "MUTED")
+        pauseBgmToggleLabel?.color = if (audioService.isMusicEnabled) colCyberYellow else colCyberDanger
+        pauseBgmFillImage?.drawable = if (audioService.isMusicEnabled) fillYellowDrawable else fillDangerDrawable
+        pauseBgmFillCell?.width(max(2f, maxInnerBarW * bgmRatio))
+        pauseBgmFillImage?.let { healthFrameTableInvalidate(it) }
+
+        // 3. Vibration / Camera Shake Boom UI (0% .. 200%)
+        val vibEnabled = GameSettings.vibrationEnabled && GameSettings.vibrationIntensity > 0.01f
+        val vibRatio = if (vibEnabled) (GameSettings.vibrationIntensity / 2.0f).coerceIn(0f, 1f) else 0f
+        val vibPct = if (vibEnabled) (GameSettings.vibrationIntensity * 100f).roundToInt() else 0
+        pauseVibValueLabel?.setText(if (vibEnabled) "$vibPct% SHAKE" else "OFF")
+        pauseVibValueLabel?.color = if (vibEnabled) colCyberCyan else colCyberDanger
+        pauseVibToggleLabel?.setText(if (vibEnabled) "ON" else "OFF")
+        pauseVibToggleLabel?.color = if (vibEnabled) colCyberCyan else colCyberDanger
+        pauseVibFillImage?.drawable = if (vibEnabled) fillCyanDrawable else fillDangerDrawable
+        pauseVibFillCell?.width(max(2f, maxInnerBarW * vibRatio))
+        pauseVibFillImage?.let { healthFrameTableInvalidate(it) }
+
+        // 4. Gamma UI (50% .. 150%)
+        val gammaVal = GameSettings.gamma.coerceIn(0.5f, 1.5f)
+        val gammaRatio = ((gammaVal - 0.5f) / 1.0f).coerceIn(0f, 1f)
+        val gammaPct = (gammaVal * 100f).roundToInt()
+        pauseGammaValueLabel?.setText("$gammaPct%")
+        pauseGammaFillImage?.drawable = fillAmberDrawable
+        pauseGammaFillCell?.width(max(2f, maxInnerBarW * gammaRatio))
+        pauseGammaFillImage?.let { healthFrameTableInvalidate(it) }
+    }
+
     private fun createModernButton(
         text: String,
         width: Float,
@@ -613,8 +1070,8 @@ class UiSystem(
         val label = Label(text, Label.LabelStyle(fontOverride, Color.WHITE))
         label.setAlignment(Align.center)
 
-        if (text == "SFX") sfxButtonLabel = label
-        if (text == "BGM") bgmButtonLabel = label
+        if (text == "SFX" || text == "MUTED" && sfxButtonLabel == null) sfxButtonLabel = label
+        else if (text == "BGM" || text == "MUTED" && bgmButtonLabel == null) bgmButtonLabel = label
 
         stack.add(bgImage)
         stack.add(label)
@@ -673,9 +1130,8 @@ class UiSystem(
     }
 
     override fun onTick() {
-        if (Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE)) {
-            networkSystem.disconnect()
-            config.onExitToMenu()
+        if (Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE) || Gdx.input.isKeyJustPressed(Input.Keys.BACK)) {
+            togglePauseMenu()
             return
         }
 

@@ -35,6 +35,15 @@ class PlayerInputSystem(
         val moveCmp = moveCmps[entity]
         val attackCmp = attackCmps[entity]
 
+        if (uiSystem.isPaused) {
+            moveCmp.cos = 0f
+            moveCmp.sin = 0f
+            moveCmp.doJump = false
+            attackCmp.isAttacking = false
+            attackCmp.isThrowing = false
+            return
+        }
+
         var x = 0f
 
         if (!attackCmp.isReloading && !attackCmp.isAttacking && !attackCmp.isThrowing) {

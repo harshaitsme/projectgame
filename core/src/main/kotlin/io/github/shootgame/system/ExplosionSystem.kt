@@ -60,6 +60,7 @@ class ExplosionSystem(
         val ownerEntity = ownerCmps.getOrNull(entity)?.owner
         val healthSystem = world.system<HealthSystem>()
         var playerInRange = false
+        var minLocalPlayerDist = Float.MAX_VALUE
 
         world.forEach { target ->
             if ((target in playerCmps || target in enemyCmps) && target in healthCmps) {
@@ -70,6 +71,10 @@ class ExplosionSystem(
                 val targetCenterY = targetPos?.y ?: ((targetImage?.y ?: 0f) + (targetImage?.height ?: 0f) * 0.5f)
 
                 val dist = distance(explosionCenterX, explosionCenterY, targetCenterX, targetCenterY)
+                if (target in playerCmps && target !in remotePlayerCmps && dist < minLocalPlayerDist) {
+                    minLocalPlayerDist = dist
+                }
+
                 if (dist <= range) {
                     val damageFraction = if (dist <= range * 0.5f) INNER_DAMAGE_FRACTION else OUTER_DAMAGE_FRACTION
                     when {
@@ -106,8 +111,14 @@ class ExplosionSystem(
             }
         }
 
+        // Trigger camera shake & haptic boom vibration for every bomb explosion based on proximity
         if (playerInRange) {
-            world.system<CameraShakeSystem>().trigger()
+            world.system<CameraShakeSystem>().triggerExplosionBoom(1.15f)
+        } else if (minLocalPlayerDist <= 22f) {
+            val proximityFactor = (1f - (minLocalPlayerDist / 22f)).coerceIn(0.35f, 0.90f)
+            world.system<CameraShakeSystem>().triggerExplosionBoom(proximityFactor)
+        } else {
+            world.system<CameraShakeSystem>().triggerExplosionBoom(0.45f)
         }
     }
 
