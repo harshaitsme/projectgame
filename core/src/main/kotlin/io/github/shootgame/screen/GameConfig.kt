@@ -12,6 +12,8 @@ data class GameConfig(
     var serverHost: String = "161.118.255.172",
     var roomCode: String = "",
     var createRoom: Boolean = false,
+    var jwtToken: String = "",
+    var sessionToken: String = "",
     var onExitToMenu: () -> Unit = {}
 ) {
     companion object {

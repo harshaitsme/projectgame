@@ -360,7 +360,7 @@ const DASHBOARD_HTML: &str = r#"<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>TELE STUDIOS — Real-Time Player & Room Analytics Dashboard</title>
+  <title>SHOOTGAME SERVER — Real-Time Player & Room Analytics Dashboard</title>
   <style>
     :root {
       --bg: #080d18;
@@ -398,7 +398,7 @@ const DASHBOARD_HTML: &str = r#"<!DOCTYPE html>
 <body>
   <header>
     <div class="brand">
-      <h1>TELE STUDIOS // REAL-TIME TELEMETRY DASHBOARD</h1>
+      <h1>SHOOTGAME SERVER — REAL-TIME TELEMETRY DASHBOARD</h1>
       <p>Live Match Rooms (Duo & Squad) • Player Combat Analytics • Firebase Realtime DB Sync</p>
     </div>
     <div id="statusBadge" class="badge">● LIVE TELEMETRY CONNECTED</div>

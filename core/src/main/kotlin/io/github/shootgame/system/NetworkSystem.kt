@@ -158,6 +158,7 @@ class NetworkSystem(
         roomCode: String = "",
         gameMode: String = "DUO",
         createRoom: Boolean = false,
+        sessionToken: String = "",
         timeoutMs: Int = 4000
     ) {
         val fallbackCode = roomCode.trim().uppercase().ifEmpty { GameConfig.generateRoomCode() }
@@ -169,6 +170,7 @@ class NetworkSystem(
             roomCode = if (createRoom || roomCode.isNotBlank()) fallbackCode else "",
             gameMode = gameMode,
             createRoom = createRoom,
+            initialSessionToken = sessionToken,
             timeoutMs = timeoutMs
         )
     }

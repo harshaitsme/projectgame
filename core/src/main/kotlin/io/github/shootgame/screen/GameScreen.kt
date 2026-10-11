@@ -119,7 +119,8 @@ class GameScreen(private val config: GameConfig = GameConfig()) : KtxScreen {
                 playerName = config.playerName,
                 roomCode = config.roomCode,
                 gameMode = config.mode.name,
-                createRoom = config.createRoom
+                createRoom = config.createRoom,
+                sessionToken = config.sessionToken
             )
         }
     }

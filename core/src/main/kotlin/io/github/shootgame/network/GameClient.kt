@@ -47,11 +47,15 @@ class GameClient(
         roomCode: String = "",
         gameMode: String = "DUO",
         createRoom: Boolean = false,
+        initialSessionToken: String = "",
         timeoutMs: Int = 4000
     ) {
         localPlayerName = name
         activeRoomCode = roomCode.trim().uppercase()
         activeGameMode = gameMode.trim().uppercase()
+        if (initialSessionToken.isNotBlank()) {
+            sessionToken = initialSessionToken
+        }
         Thread {
             try {
                 println("Connecting to ShootGame server at $host: TCP=$tcpPort, UDP=$udpPort (mode=$activeGameMode, room=$activeRoomCode, create=$createRoom)...")
