@@ -54,6 +54,8 @@ class UiSystem(
     }
 
     private lateinit var modeLabel: VisLabel
+    private var roomCodeLabel: VisLabel? = null
+    private lateinit var sbTitleLabel: VisLabel
     private lateinit var healthLabel: VisLabel
     private lateinit var healthBarFill: Image
     private lateinit var weaponLabel: VisLabel
@@ -134,7 +136,31 @@ class UiSystem(
         modeLabel = VisLabel("[${config.mode.displayName}] ${config.playerName}").apply {
             color = Color(0.3f, 0.9f, 1f, 1f)
         }
-        hudCard.add(modeLabel).left().padBottom(6f).row()
+        hudCard.add(modeLabel).left().padBottom(4f).row()
+
+        if (config.mode != GameMode.OFFLINE) {
+            val roomRow = VisTable(false)
+            val rLbl = VisLabel("ROOM CODE: ${config.roomCode.ifEmpty { "ASSIGNING..." }}").apply {
+                color = Color(1f, 0.88f, 0.32f, 1f)
+            }
+            roomCodeLabel = rLbl
+            val copyCodeBtn = VisTextButton("COPY CODE").apply {
+                color = Color(0.35f, 0.95f, 1f, 1f)
+                addListener(object : ClickListener() {
+                    override fun clicked(event: InputEvent?, x: Float, y: Float) {
+                        audioService.play(SoundType.CLICK, volumeModifier = 0.5f)
+                        val code = networkSystem.activeRoomCode.ifEmpty { config.roomCode }
+                        if (code.isNotEmpty()) {
+                            Gdx.app.clipboard.contents = code
+                            networkSystem.postFeed("✓ Room Code [$code] copied! Share with your ${config.mode.displayName} team!")
+                        }
+                    }
+                })
+            }
+            roomRow.add(rLbl).left().padRight(10f)
+            roomRow.add(copyCodeBtn).height(24f)
+            hudCard.add(roomRow).left().padBottom(6f).row()
+        }
 
         // Health bar + text row
         val healthRow = VisTable(false)
@@ -252,6 +278,7 @@ class UiSystem(
         val sbTitle = VisLabel("MATCH SCOREBOARD").apply {
             color = Color(0.3f, 0.9f, 1f, 1f)
         }
+        sbTitleLabel = sbTitle
         scoreboardCard.add(sbTitle).left().padBottom(4f).row()
 
         scoreboardLabel = VisLabel("Waiting for players...").apply {
@@ -415,10 +442,14 @@ class UiSystem(
 
             if (config.mode != GameMode.OFFLINE) {
                 val connStatus = if (networkSystem.isConnected) "ONLINE" else "CONNECTING..."
+                val roomCode = networkSystem.activeRoomCode.ifEmpty { config.roomCode.ifEmpty { "---" } }
                 modeLabel.setText("[${config.mode.displayName}] ${config.playerName} • $connStatus (${networkSystem.activePlayerCount}/${config.mode.maxPlayers})")
                 modeLabel.color = if (networkSystem.isConnected) Color(0.3f, 0.95f, 1f, 1f) else Color(1f, 0.8f, 0.3f, 1f)
+                roomCodeLabel?.setText("ROOM CODE: $roomCode")
+                sbTitleLabel.setText("ROOM [$roomCode] • ${config.mode.name} (${networkSystem.activePlayerCount}/${config.mode.maxPlayers})")
             } else {
                 modeLabel.setText("[Solo Practice] ${config.playerName}")
+                sbTitleLabel.setText("SOLO PRACTICE SCOREBOARD")
             }
         }
 

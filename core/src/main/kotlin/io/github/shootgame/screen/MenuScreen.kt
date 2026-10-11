@@ -452,20 +452,25 @@ class MenuScreen(private val game: Main) : KtxScreen {
         switchStep(MenuStep.MODE_SELECT)
     }
 
+    private var joinRoomCodeField: VisTextField? = null
+    private var roomPanelHintLabel: VisLabel? = null
+    private var generatedLobbyCode: String = GameConfig.generateRoomCode()
+    private var generatedCodeLabel: VisLabel? = null
+
     // =========================================================================
-    // 3. MATCH MODE SELECTION LOBBY (NO IP EXPOSED)
+    // 3. MATCH MODE SELECTION & GAME ROOM CODE LOBBY (NO IP EXPOSED)
     // =========================================================================
     private fun buildModeSelectScreen() {
         val root = VisTable(false)
         root.setFillParent(true)
-        root.pad(18f)
+        root.pad(14f)
 
         val lobbyCard = VisTable(false)
         lobbyCard.background = createPanelDrawable(
             0.06f, 0.09f, 0.16f, 0.96f,
             0.2f, 0.78f, 0.98f, 0.85f
         )
-        lobbyCard.pad(20f, 28f, 20f, 28f)
+        lobbyCard.pad(16f, 24f, 16f, 24f)
 
         // --- TOP BAR: TELE Badge + Lobby Title + Server Status + Operative Profile ---
         val topBar = VisTable(false)
@@ -477,23 +482,23 @@ class MenuScreen(private val game: Main) : KtxScreen {
         val brandTitles = VisTable(false)
         val lobbyTitle = VisLabel("TELE STRIKE // COMMAND LOBBY").apply {
             color = Color(0.25f, 0.95f, 1f, 1f)
-            setFontScale(1.3f)
+            setFontScale(1.25f)
         }
         val statusLbl = VisLabel(serverStatusText).apply {
             color = serverStatusColor
-            setFontScale(0.82f)
+            setFontScale(0.8f)
         }
         liveServerStatusLabel = statusLbl
         brandTitles.add(lobbyTitle).left().row()
         brandTitles.add(statusLbl).left().padTop(2f)
 
-        leftBrand.add(badgeImg).size(48f, 48f).padRight(12f)
+        leftBrand.add(badgeImg).size(44f, 44f).padRight(12f)
         leftBrand.add(brandTitles).left()
 
         val rightProfile = VisTable(false)
         val opLabel = VisLabel("OPERATIVE: $loggedInUsername").apply {
             color = Color(0.4f, 1f, 0.6f, 1f)
-            setFontScale(0.95f)
+            setFontScale(0.92f)
         }
         val logoutBtn = VisTextButton("SWITCH USER").apply {
             color = Color(0.85f, 0.75f, 0.4f, 1f)
@@ -505,40 +510,40 @@ class MenuScreen(private val game: Main) : KtxScreen {
             })
         }
         rightProfile.add(opLabel).padRight(12f)
-        rightProfile.add(logoutBtn).width(115f).height(34f)
+        rightProfile.add(logoutBtn).width(115f).height(32f)
 
         topBar.add(leftBrand).expandX().left()
         topBar.add(rightProfile).right()
-        lobbyCard.add(topBar).growX().padBottom(16f).row()
+        lobbyCard.add(topBar).growX().padBottom(10f).row()
 
         // --- SECTION HEADER ---
-        val selectHeader = VisLabel("SELECT COMBAT OPERATION MODE").apply {
+        val selectHeader = VisLabel("1. SELECT COMBAT OPERATION MODE (DUO 2P / SQUAD 4P)").apply {
             color = Color(1f, 0.86f, 0.32f, 1f)
-            setFontScale(1.05f)
+            setFontScale(0.98f)
         }
-        lobbyCard.add(selectHeader).left().padBottom(10f).row()
+        lobbyCard.add(selectHeader).left().padBottom(8f).row()
 
         // --- 3 MATCH MODE CARDS SIDE BY SIDE ---
         val modesRow = VisTable(false)
         modesRow.add(
             createModeCard(
                 mode = GameMode.DUO,
-                tag = "[ 1v1 / 2-PLAYER PVP ]",
-                title = "DUO SHOWDOWN",
-                capacity = "CAPACITY: 2 PLAYERS • ONLINE",
-                desc = "Fast-paced head-to-head tactical duel in the indoor arena."
+                tag = "[ 1v1 / 2-PLAYER ROOM ]",
+                title = "DUO ROOM (2P)",
+                capacity = "CAPACITY: 2 PLAYERS • ROOM CODE",
+                desc = "Create or join a 2-player Duo combat room using a unique Room Code."
             )
-        ).width(240f).height(195f).padRight(14f)
+        ).width(245f).height(168f).padRight(12f)
 
         modesRow.add(
             createModeCard(
                 mode = GameMode.SQUAD,
-                tag = "[ 4-PLAYER BATTLE ARENA ]",
-                title = "SQUAD WARFARE",
-                capacity = "CAPACITY: 4 PLAYERS • ONLINE",
-                desc = "High-intensity 4-player Free-For-All combat operation."
+                tag = "[ 4-PLAYER SQUAD ROOM ]",
+                title = "SQUAD ROOM (4P)",
+                capacity = "CAPACITY: 4 PLAYERS • ROOM CODE",
+                desc = "Create or join a 4-player Squad battle room with your friends."
             )
-        ).width(240f).height(195f).padRight(14f)
+        ).width(245f).height(168f).padRight(12f)
 
         modesRow.add(
             createModeCard(
@@ -548,9 +553,132 @@ class MenuScreen(private val game: Main) : KtxScreen {
                 capacity = "CAPACITY: 1 PLAYER • OFFLINE",
                 desc = "Sharpen your aim, weapon handling, and movement vs AI bots."
             )
-        ).width(240f).height(195f)
+        ).width(245f).height(168f)
 
-        lobbyCard.add(modesRow).padBottom(14f).row()
+        lobbyCard.add(modesRow).padBottom(10f).row()
+
+        // --- GAME ROOM CREATION & ROOM CODE JOIN PANEL ---
+        val roomBox = VisTable(false)
+        roomBox.background = createPanelDrawable(
+            0.05f, 0.08f, 0.14f, 0.96f,
+            0.22f, 0.82f, 1f, 0.8f
+        )
+        roomBox.pad(10f, 14f, 10f, 14f)
+
+        val roomHeaderRow = VisTable(false)
+        val roomHeaderTitle = VisLabel("2. MULTIPLAYER GAME ROOM • CREATE OR JOIN WITH ROOM CODE").apply {
+            color = Color(0.35f, 0.95f, 1f, 1f)
+            setFontScale(0.92f)
+        }
+        val roomHint = VisLabel("Share the 6-digit Room Code with your Duo/Squad").apply {
+            color = Color(0.68f, 0.8f, 0.92f, 0.9f)
+            setFontScale(0.8f)
+        }
+        roomPanelHintLabel = roomHint
+        roomHeaderRow.add(roomHeaderTitle).expandX().left()
+        roomHeaderRow.add(roomHint).right()
+        roomBox.add(roomHeaderRow).growX().padBottom(8f).row()
+
+        val roomActionsRow = VisTable(false)
+
+        // Left sub-box: Create Room with Generated Server Code
+        val createSubBox = VisTable(false)
+        val codeBadgeLbl = VisLabel("NEW ROOM CODE: $generatedLobbyCode").apply {
+            color = Color(1f, 0.88f, 0.32f, 1f)
+            setFontScale(0.9f)
+        }
+        generatedCodeLabel = codeBadgeLbl
+
+        val copyLobbyCodeBtn = VisTextButton("COPY").apply {
+            color = Color(0.4f, 0.9f, 1f, 1f)
+            addListener(object : ClickListener() {
+                override fun clicked(event: InputEvent?, x: Float, y: Float) {
+                    audioService.play(SoundType.CLICK, volumeModifier = 0.5f)
+                    Gdx.app.clipboard.contents = generatedLobbyCode
+                    roomPanelHintLabel?.setText("✓ Copied Room Code $generatedLobbyCode to clipboard!")
+                    roomPanelHintLabel?.color = Color(0.35f, 1f, 0.55f, 1f)
+                }
+            })
+        }
+
+        val regenCodeBtn = VisTextButton("NEW").apply {
+            addListener(object : ClickListener() {
+                override fun clicked(event: InputEvent?, x: Float, y: Float) {
+                    audioService.play(SoundType.CLICK, volumeModifier = 0.5f)
+                    generatedLobbyCode = GameConfig.generateRoomCode()
+                    generatedCodeLabel?.setText("NEW ROOM CODE: $generatedLobbyCode")
+                }
+            })
+        }
+
+        val createRoomBtn = VisTextButton("CREATE ROOM").apply {
+            color = Color(0.25f, 0.95f, 0.55f, 1f)
+            addListener(object : ClickListener() {
+                override fun clicked(event: InputEvent?, x: Float, y: Float) {
+                    audioService.play(SoundType.CLICK)
+                    if (selectedMode == GameMode.OFFLINE) {
+                        selectedMode = GameMode.DUO
+                    }
+                    Gdx.app.clipboard.contents = generatedLobbyCode
+                    launchMatch(roomCode = generatedLobbyCode, createRoom = true)
+                }
+            })
+        }
+
+        createSubBox.add(codeBadgeLbl).padRight(8f)
+        createSubBox.add(copyLobbyCodeBtn).width(58f).height(34f).padRight(6f)
+        createSubBox.add(regenCodeBtn).width(54f).height(34f).padRight(8f)
+        createSubBox.add(createRoomBtn).width(132f).height(36f)
+
+        // Right sub-box: Join Existing Room by Code
+        val joinSubBox = VisTable(false)
+        val codeInput = VisTextField("").apply {
+            messageText = "Enter Room Code..."
+            maxLength = 8
+        }
+        joinRoomCodeField = codeInput
+
+        val pasteBtn = VisTextButton("PASTE").apply {
+            addListener(object : ClickListener() {
+                override fun clicked(event: InputEvent?, x: Float, y: Float) {
+                    audioService.play(SoundType.CLICK, volumeModifier = 0.5f)
+                    val clip = Gdx.app.clipboard.contents?.trim()?.uppercase() ?: ""
+                    val clean = clip.filter { it.isLetterOrDigit() }.take(8)
+                    if (clean.isNotEmpty()) {
+                        codeInput.text = clean
+                    }
+                }
+            })
+        }
+
+        val joinCodeBtn = VisTextButton("JOIN BY CODE").apply {
+            color = Color(0.3f, 0.9f, 1f, 1f)
+            addListener(object : ClickListener() {
+                override fun clicked(event: InputEvent?, x: Float, y: Float) {
+                    audioService.play(SoundType.CLICK)
+                    val entered = codeInput.text.trim().uppercase().filter { it.isLetterOrDigit() }
+                    if (entered.length < 4) {
+                        roomPanelHintLabel?.setText("⚠ Enter a valid 4–6 character Room Code to join!")
+                        roomPanelHintLabel?.color = Color(1f, 0.45f, 0.35f, 1f)
+                        return
+                    }
+                    if (selectedMode == GameMode.OFFLINE) {
+                        selectedMode = GameMode.DUO
+                    }
+                    launchMatch(roomCode = entered, createRoom = false)
+                }
+            })
+        }
+
+        joinSubBox.add(codeInput).width(142f).height(36f).padRight(6f)
+        joinSubBox.add(pasteBtn).width(62f).height(36f).padRight(6f)
+        joinSubBox.add(joinCodeBtn).width(126f).height(36f)
+
+        roomActionsRow.add(createSubBox).expandX().left()
+        roomActionsRow.add(joinSubBox).right()
+        roomBox.add(roomActionsRow).growX()
+
+        lobbyCard.add(roomBox).growX().padBottom(10f).row()
 
         // --- LOADOUT & OPERATIVE STRIP ---
         val loadoutBar = VisTable(false)
@@ -558,7 +686,7 @@ class MenuScreen(private val game: Main) : KtxScreen {
             0.04f, 0.06f, 0.11f, 0.92f,
             0.14f, 0.38f, 0.58f, 0.65f
         )
-        loadoutBar.pad(10f, 16f, 10f, 16f)
+        loadoutBar.pad(8f, 14f, 8f, 14f)
 
         val firstFrame = idleAnimation?.getKeyFrame(0f)
         val previewImg = if (firstFrame != null) {
@@ -569,46 +697,46 @@ class MenuScreen(private val game: Main) : KtxScreen {
         soldierPreviewImage = previewImg
 
         val loadoutInfo = VisTable(false)
-        val loadoutTitle = VisLabel("ACTIVE COMBAT LOADOUT:").apply {
+        val loadoutTitle = VisLabel("ACTIVE COMBAT LOADOUT & CONTROLS:").apply {
             color = Color(0.4f, 0.9f, 1f, 1f)
-            setFontScale(0.88f)
+            setFontScale(0.84f)
         }
-        val weaponsText = VisLabel("1: PISTOL [12/60]   •   2: SHOTGUN [6/30]   •   3: MACHINE GUN [30/120]   •   G: FRAG GRENADE [x3]").apply {
-            color = Color(0.88f, 0.92f, 0.98f, 1f)
-            setFontScale(0.82f)
-        }
-        val controlsText = VisLabel("CONTROLS: A/D Move  •  W Jump  •  SPACE Fire  •  R Reload  •  1-3 Switch Gun  •  ESC Lobby").apply {
-            color = Color(0.58f, 0.68f, 0.8f, 0.9f)
+        val weaponsText = VisLabel("1: PISTOL [12/60]  •  2: SHOTGUN [6/30]  •  3: MACHINE GUN [30/120]  •  G: FRAG [x3]  |  A/D Move • W Jump • SPACE Fire • R Reload").apply {
+            color = Color(0.85f, 0.9f, 0.98f, 1f)
             setFontScale(0.78f)
         }
         loadoutInfo.add(loadoutTitle).left().row()
-        loadoutInfo.add(weaponsText).left().padTop(2f).row()
-        loadoutInfo.add(controlsText).left().padTop(3f)
+        loadoutInfo.add(weaponsText).left().padTop(2f)
 
-        loadoutBar.add(previewImg).size(56f, 56f).padRight(14f)
+        loadoutBar.add(previewImg).size(44f, 44f).padRight(12f)
         loadoutBar.add(loadoutInfo).expandX().left()
-        lobbyCard.add(loadoutBar).growX().padBottom(16f).row()
+        lobbyCard.add(loadoutBar).growX().padBottom(12f).row()
 
         // --- BOTTOM DEPLOY BAR ---
         val bottomBar = VisTable(false)
         val summaryLbl = VisLabel("").apply {
             color = Color(0.7f, 0.92f, 0.8f, 1f)
-            setFontScale(0.92f)
+            setFontScale(0.88f)
         }
         modeSummaryLabel = summaryLbl
 
-        val deployBtn = VisTextButton("DEPLOY TO MATCH").apply {
+        val deployBtn = VisTextButton("QUICK DEPLOY").apply {
             color = Color(0.25f, 1f, 0.5f, 1f)
             addListener(object : ClickListener() {
                 override fun clicked(event: InputEvent?, x: Float, y: Float) {
                     audioService.play(SoundType.CLICK)
-                    launchMatch()
+                    val typedCode = joinRoomCodeField?.text?.trim()?.uppercase()?.filter { it.isLetterOrDigit() } ?: ""
+                    if (typedCode.length >= 4 && selectedMode != GameMode.OFFLINE) {
+                        launchMatch(roomCode = typedCode, createRoom = false)
+                    } else {
+                        launchMatch(roomCode = "", createRoom = false)
+                    }
                 }
             })
         }
 
         bottomBar.add(summaryLbl).expandX().left()
-        bottomBar.add(deployBtn).width(250f).height(52f).right()
+        bottomBar.add(deployBtn).width(230f).height(46f).right()
         lobbyCard.add(bottomBar).growX()
 
         root.add(lobbyCard)
@@ -625,34 +753,34 @@ class MenuScreen(private val game: Main) : KtxScreen {
         desc: String
     ): VisTable {
         val card = VisTable(false)
-        card.pad(14f)
+        card.pad(12f)
 
         val tagLabel = VisLabel(tag).apply {
             color = Color(0.4f, 0.88f, 1f, 1f)
-            setFontScale(0.76f)
+            setFontScale(0.74f)
         }
         val titleLabel = VisLabel(title).apply {
             color = Color.WHITE
-            setFontScale(1.15f)
+            setFontScale(1.1f)
         }
         val capLabel = VisLabel(capacity).apply {
             color = Color(1f, 0.84f, 0.32f, 1f)
-            setFontScale(0.76f)
+            setFontScale(0.74f)
         }
         val descLabel = VisLabel(desc).apply {
             setWrap(true)
             color = Color(0.72f, 0.8f, 0.9f, 0.95f)
-            setFontScale(0.8f)
+            setFontScale(0.78f)
         }
 
         val selectBtn = VisTextButton(if (selectedMode == mode) "SELECTED" else "SELECT MODE")
         modeSelectButtons[mode] = selectBtn
 
-        card.add(tagLabel).left().padBottom(3f).row()
-        card.add(titleLabel).left().padBottom(3f).row()
-        card.add(capLabel).left().padBottom(8f).row()
-        card.add(descLabel).width(210f).left().expandY().top().padBottom(8f).row()
-        card.add(selectBtn).width(210f).height(34f)
+        card.add(tagLabel).left().padBottom(2f).row()
+        card.add(titleLabel).left().padBottom(2f).row()
+        card.add(capLabel).left().padBottom(6f).row()
+        card.add(descLabel).width(215f).left().expandY().top().padBottom(6f).row()
+        card.add(selectBtn).width(215f).height(30f)
 
         val clickListener = object : ClickListener() {
             override fun clicked(event: InputEvent?, x: Float, y: Float) {
@@ -690,7 +818,7 @@ class MenuScreen(private val game: Main) : KtxScreen {
         }
 
         modeSummaryLabel?.setText(
-            "MODE: ${selectedMode.displayName.uppercase()}  •  ${selectedMode.description}"
+            "MODE: ${selectedMode.displayName.uppercase()} (${selectedMode.maxPlayers}P MAX)  •  CREATE ROOM, JOIN CODE, OR QUICK DEPLOY"
         )
     }
 
@@ -731,12 +859,14 @@ class MenuScreen(private val game: Main) : KtxScreen {
         }
     }
 
-    private fun launchMatch() {
+    private fun launchMatch(roomCode: String = "", createRoom: Boolean = false) {
         val host = System.getProperty("shootgame.host", NetworkConfig.serverHost)
         val config = GameConfig(
             mode = selectedMode,
             playerName = loggedInUsername,
-            serverHost = host
+            serverHost = host,
+            roomCode = roomCode.trim().uppercase(),
+            createRoom = createRoom
         )
         game.startGame(config)
     }

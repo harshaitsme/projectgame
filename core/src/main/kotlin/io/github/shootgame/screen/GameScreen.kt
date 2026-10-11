@@ -114,7 +114,13 @@ class GameScreen(private val config: GameConfig = GameConfig()) : KtxScreen {
         // Connect to multiplayer server if multiplayer mode selected
         if (config.mode != GameMode.OFFLINE) {
             val host = System.getProperty("shootgame.host", config.serverHost)
-            eWorld.system<NetworkSystem>().connect(host, config.playerName)
+            eWorld.system<NetworkSystem>().connect(
+                host = host,
+                playerName = config.playerName,
+                roomCode = config.roomCode,
+                gameMode = config.mode.name,
+                createRoom = config.createRoom
+            )
         }
     }
 

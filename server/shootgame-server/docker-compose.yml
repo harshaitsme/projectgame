@@ -9,9 +9,13 @@ services:
     ports:
       - "54555:54555/tcp"
       - "54777:54777/udp"
+      - "54556:54556/tcp"
     environment:
       SHOOTGAME_TCP_PORT: "54555"
       SHOOTGAME_UDP_PORT: "54777"
+      SHOOTGAME_HTTP_PORT: "54556"
+      FIREBASE_DB_URL: "${FIREBASE_DB_URL:-}"
+      FIREBASE_DB_SECRET: "${FIREBASE_DB_SECRET:-}"
     # Optional resource limits:
     # deploy:
     #   resources:

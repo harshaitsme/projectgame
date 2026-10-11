@@ -10,5 +10,18 @@ data class GameConfig(
     var mode: GameMode = GameMode.DUO,
     var playerName: String = "Player",
     var serverHost: String = "161.118.255.172",
+    var roomCode: String = "",
+    var createRoom: Boolean = false,
     var onExitToMenu: () -> Unit = {}
-)
+) {
+    companion object {
+        private const val CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+
+        fun generateRoomCode(): String {
+            return (1..6)
+                .map { CODE_CHARS.random() }
+                .joinToString("")
+        }
+    }
+}
+
