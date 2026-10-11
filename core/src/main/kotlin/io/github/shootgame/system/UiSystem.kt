@@ -54,22 +54,31 @@ class UiSystem(
     private lateinit var fontSmall: BitmapFont
     private lateinit var fontMedium: BitmapFont
     private lateinit var fontLarge: BitmapFont
+    private lateinit var fontXLarge: BitmapFont
 
-    // Color Palette inspired by stylized 3D mobile battlegrounds
-    private val colBgDark = Color(0.06f, 0.09f, 0.16f, 0.85f)
-    private val colCardBg = Color(0.10f, 0.15f, 0.25f, 0.90f)
-    private val colBorderSoft = Color(0.20f, 0.32f, 0.50f, 0.70f)
-    private val colCyanGlow = Color(0.22f, 0.74f, 0.96f, 1f)
-    private val colHealthGreen = Color(0.18f, 0.82f, 0.44f, 1f)
-    private val colHealthDanger = Color(0.92f, 0.25f, 0.30f, 1f)
-    private val colAmber = Color(0.98f, 0.72f, 0.18f, 1f)
-    private val colButtonNormal = Color(0.12f, 0.19f, 0.32f, 0.85f)
-    private val colButtonPressed = Color(0.24f, 0.40f, 0.65f, 0.95f)
-    private val colActionPrimary = Color(0.15f, 0.42f, 0.85f, 0.90f)
+    // Futuristic Sci-Fi Cyberpunk Palette (Matched to Reference Image)
+    private val colCyberOrange = Color(1.0f, 0.58f, 0.02f, 1f)      // Neon cyber-orange border
+    private val colCyberOrangeDark = Color(0.85f, 0.42f, 0.0f, 1f)  // Tech bevel shadow
+    private val colCyberYellow = Color(1.0f, 0.90f, 0.04f, 1f)      // Cyber neon yellow fill
+    private val colCyberDanger = Color(0.96f, 0.22f, 0.26f, 1f)      // Alert red fill
+    private val colCyberGrey = Color(0.38f, 0.40f, 0.44f, 1f)        // Tech hazard grey
+    private val colDarkChamber = Color(0.09f, 0.10f, 0.13f, 0.94f)   // Chassis dark background
+    private val colDarkTrack = Color(0.18f, 0.19f, 0.22f, 1f)        // Unfilled recess track
+
+    // Button states
+    private val colButtonBg = Color(0.12f, 0.14f, 0.18f, 0.92f)
+    private val colButtonPressed = Color(0.28f, 0.18f, 0.06f, 0.95f)
+
+    // Fill Drawables
+    private lateinit var fillYellowDrawable: TextureRegionDrawable
+    private lateinit var fillDangerDrawable: TextureRegionDrawable
+    private lateinit var fillAmberDrawable: TextureRegionDrawable
 
     // HUD Elements
     private lateinit var healthBarFill: Image
     private lateinit var healthBarFillCell: Cell<Image>
+    private lateinit var ammoBarFill: Image
+    private lateinit var ammoBarFillCell: Cell<Image>
     private lateinit var healthTextLabel: Label
     private lateinit var weaponNameLabel: Label
     private lateinit var ammoCountLabel: Label
@@ -78,7 +87,8 @@ class UiSystem(
     private var sfxButtonLabel: Label? = null
     private var bgmButtonLabel: Label? = null
 
-    private val maxHealthBarWidth = 190f
+    private var maxHealthBarWidth = 432f
+    private var maxAmmoBarWidth = 432f
 
     init {
         initFonts()
@@ -102,21 +112,25 @@ class UiSystem(
                 val generator = FreeTypeFontGenerator(fontHandle)
                 fontGenerator = generator
 
-                val makeFont = { size: Int, border: Float ->
+                val makeFont = { size: Int, border: Float, shadow: Float ->
                     val param = FreeTypeFontParameter().apply {
                         this.size = size
                         this.color = Color.WHITE
                         this.borderWidth = border
-                        this.borderColor = Color(0f, 0f, 0f, 0.75f)
+                        this.borderColor = Color(0f, 0f, 0f, 1f)
+                        this.shadowOffsetX = shadow.toInt()
+                        this.shadowOffsetY = shadow.toInt()
+                        this.shadowColor = Color(0f, 0f, 0f, 0.95f)
                         this.minFilter = Texture.TextureFilter.Linear
                         this.magFilter = Texture.TextureFilter.Linear
                     }
                     generator.generateFont(param).also { generatedFonts.add(it) }
                 }
 
-                fontSmall = makeFont(13, 1f)
-                fontMedium = makeFont(16, 1.2f)
-                fontLarge = makeFont(20, 1.5f)
+                fontSmall = makeFont(22, 1.8f, 2f)
+                fontMedium = makeFont(28, 2.2f, 2f)
+                fontLarge = makeFont(34, 2.6f, 3f)
+                fontXLarge = makeFont(44, 3.2f, 3f)
                 return
             } catch (e: Exception) {
                 Gdx.app.error("UiSystem", "Failed to load KnightWarrior font, fallback to default", e)
@@ -128,6 +142,159 @@ class UiSystem(
         fontSmall = defaultFont
         fontMedium = defaultFont
         fontLarge = defaultFont
+        fontXLarge = defaultFont
+    }
+
+    private fun createFillDrawable(fillColor: Color): TextureRegionDrawable {
+        val pixmap = Pixmap(16, 16, Pixmap.Format.RGBA8888)
+        pixmap.setColor(fillColor)
+        pixmap.fill()
+        val texture = Texture(pixmap)
+        texture.setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear)
+        disposables.add(texture)
+        pixmap.dispose()
+        return TextureRegionDrawable(texture)
+    }
+
+    /**
+     * Procedurally creates the futuristic sci-fi progress bar frame matching the reference image:
+     * - Chamfered outer cyber-orange border
+     * - Asymmetrical tech tab with diagonal hazard warning chevrons (///)
+     * - Segmented LED status pips (■ ■ ■ ■)
+     * - Dark inner recess for the fill bar
+     */
+    private fun createSciFiBarBackground(
+        w: Int,
+        h: Int,
+        tabOnTop: Boolean = true
+    ): TextureRegionDrawable {
+        val pixmap = Pixmap(w, h, Pixmap.Format.RGBA8888)
+        pixmap.blending = Pixmap.Blending.None
+        pixmap.setColor(0f, 0f, 0f, 0f)
+        pixmap.fill()
+        pixmap.blending = Pixmap.Blending.SourceOver
+
+        val chamfer = 12
+        val tabH = 6
+        val borderWidth = 3
+
+        fun fillChamferedBox(ox: Int, oy: Int, bw: Int, bh: Int, ch: Int, col: Color) {
+            pixmap.setColor(col)
+            pixmap.fillRectangle(ox + ch, oy, bw - ch * 2, bh)
+            pixmap.fillRectangle(ox, oy + ch, ch, bh - ch * 2)
+            pixmap.fillRectangle(ox + bw - ch, oy + ch, ch, bh - ch * 2)
+            pixmap.fillTriangle(ox, oy + ch, ox + ch, oy + ch, ox + ch, oy)
+            pixmap.fillTriangle(ox + bw - ch, oy, ox + bw - ch, oy + ch, ox + bw - 1, oy + ch)
+            pixmap.fillTriangle(ox, oy + bh - ch, ox + ch, oy + bh - ch, ox + ch, oy + bh - 1)
+            pixmap.fillTriangle(ox + bw - ch, oy + bh - 1, ox + bw - ch, oy + bh - ch, ox + bw - 1, oy + bh - ch)
+        }
+
+        val baseY = if (tabOnTop) tabH else 0
+        val baseH = h - tabH
+        fillChamferedBox(0, baseY, w, baseH, chamfer, colCyberOrange)
+
+        // Asymmetrical tech tab
+        val tabStart = if (tabOnTop) (w * 0.44f).toInt() else (w * 0.12f).toInt()
+        val tabW = (w * 0.34f).toInt()
+        if (tabOnTop) {
+            pixmap.setColor(colCyberOrange)
+            pixmap.fillRectangle(tabStart, 0, tabW, tabH + 1)
+            pixmap.fillTriangle(tabStart - tabH, tabH, tabStart, tabH, tabStart, 0)
+            pixmap.fillTriangle(tabStart + tabW, 0, tabStart + tabW, tabH, tabStart + tabW + tabH, tabH)
+        } else {
+            pixmap.setColor(colCyberOrange)
+            pixmap.fillRectangle(tabStart, h - tabH - 1, tabW, tabH + 1)
+            pixmap.fillTriangle(tabStart - tabH, h - tabH, tabStart, h - tabH, tabStart, h - 1)
+            pixmap.fillTriangle(tabStart + tabW, h - 1, tabStart + tabW, h - tabH, tabStart + tabW + tabH, h - tabH)
+        }
+
+        // Inner dark chamber
+        fillChamferedBox(borderWidth, baseY + borderWidth, w - borderWidth * 2, baseH - borderWidth * 2, max(2, chamfer - borderWidth), colDarkChamber)
+
+        // Recessed track cavity for progress bar
+        val trackX = 14
+        val trackY = baseY + 10
+        val trackW = w - 28
+        val trackH = baseH - 20
+        pixmap.setColor(colDarkTrack)
+        pixmap.fillRectangle(trackX, trackY, trackW, trackH)
+
+        // Track border
+        pixmap.setColor(Color(0.28f, 0.30f, 0.35f, 1f))
+        pixmap.drawRectangle(trackX - 1, trackY - 1, trackW + 2, trackH + 2)
+
+        // Hazard Chevrons (///)
+        val chevronsStart = tabStart + 8
+        val chevronsY = if (tabOnTop) 1 else (h - tabH + 1)
+        for (i in 0 until 5) {
+            val sx = chevronsStart + i * 11
+            pixmap.setColor(if (i < 3) colCyberYellow else colCyberGrey)
+            pixmap.drawLine(sx, chevronsY + 4, sx + 4, chevronsY)
+            pixmap.drawLine(sx + 1, chevronsY + 4, sx + 5, chevronsY)
+        }
+
+        // Segmented Status Pips (■ ■ ■ ■)
+        val pipsStart = if (tabOnTop) (w * 0.10f).toInt() else (w * 0.55f).toInt()
+        val pipsY = if (tabOnTop) (h - 4) else 1
+        for (i in 0 until 5) {
+            val px = pipsStart + i * 10
+            pixmap.setColor(if (i < 3) colCyberYellow else colCyberGrey)
+            pixmap.fillRectangle(px, pipsY, 6, 2)
+        }
+
+        val texture = Texture(pixmap)
+        texture.setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear)
+        disposables.add(texture)
+        pixmap.dispose()
+        return TextureRegionDrawable(texture)
+    }
+
+    private fun createSciFiBadgeBackground(
+        w: Int,
+        h: Int,
+        accentColor: Color = colCyberOrange
+    ): TextureRegionDrawable {
+        val pixmap = Pixmap(w, h, Pixmap.Format.RGBA8888)
+        pixmap.blending = Pixmap.Blending.None
+        pixmap.setColor(0f, 0f, 0f, 0f)
+        pixmap.fill()
+        pixmap.blending = Pixmap.Blending.SourceOver
+
+        val ch = 10
+        val bw = 3
+        // Outer border
+        pixmap.setColor(accentColor)
+        pixmap.fillRectangle(ch, 0, w - ch * 2, h)
+        pixmap.fillRectangle(0, ch, ch, h - ch * 2)
+        pixmap.fillRectangle(w - ch, ch, ch, h - ch * 2)
+        pixmap.fillTriangle(0, ch, ch, ch, ch, 0)
+        pixmap.fillTriangle(w - ch, 0, w - ch, ch, w - 1, ch)
+        pixmap.fillTriangle(0, h - ch, ch, h - ch, ch, h - 1)
+        pixmap.fillTriangle(w - ch, h - 1, w - ch, h - ch, w - 1, h - ch)
+
+        // Inner dark body
+        pixmap.setColor(colDarkChamber)
+        pixmap.fillRectangle(ch, bw, w - ch * 2, h - bw * 2)
+        pixmap.fillRectangle(bw, ch, ch, h - ch * 2)
+        pixmap.fillRectangle(w - ch, ch, ch - bw, h - ch * 2)
+        pixmap.fillTriangle(bw, ch, ch, ch, ch, bw)
+        pixmap.fillTriangle(w - ch, bw, w - ch, ch, w - 1 - bw, ch)
+        pixmap.fillTriangle(bw, h - ch, ch, h - ch, ch, h - 1 - bw)
+        pixmap.fillTriangle(w - ch, h - 1 - bw, w - ch, h - ch, w - 1 - bw, h - ch)
+
+        // Tech chevrons
+        for (i in 0 until 3) {
+            pixmap.setColor(if (i == 0) colCyberYellow else colCyberGrey)
+            val sx = w - 30 + i * 8
+            pixmap.drawLine(sx, 8, sx + 4, 3)
+            pixmap.drawLine(sx + 1, 8, sx + 5, 3)
+        }
+
+        val texture = Texture(pixmap)
+        texture.setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear)
+        disposables.add(texture)
+        pixmap.dispose()
+        return TextureRegionDrawable(texture)
     }
 
     private fun createRoundedDrawable(
@@ -141,7 +308,6 @@ class UiSystem(
         val pixmap = Pixmap(w, h, Pixmap.Format.RGBA8888)
         pixmap.blending = Pixmap.Blending.None
 
-        // Background or border pass
         if (borderColor != null && borderWidth > 0) {
             pixmap.setColor(borderColor)
             fillRounded(pixmap, w, h, radius)
@@ -175,88 +341,117 @@ class UiSystem(
         offsetY: Int = 0
     ) {
         val rad = r.coerceAtMost(w / 2).coerceAtMost(h / 2)
-        // 4 corner circles
         pixmap.fillCircle(offsetX + rad, offsetY + rad, rad)
         pixmap.fillCircle(offsetX + w - rad - 1, offsetY + rad, rad)
         pixmap.fillCircle(offsetX + rad, offsetY + h - rad - 1, rad)
         pixmap.fillCircle(offsetX + w - rad - 1, offsetY + h - rad - 1, rad)
-        // Cross rectangles
         pixmap.fillRectangle(offsetX + rad, offsetY, w - rad * 2, h)
         pixmap.fillRectangle(offsetX, offsetY + rad, w, h - rad * 2)
     }
 
     private fun setupHud() {
-        // --- Top Bar Container (Left to Right) ---
         val rootTable = Table()
         rootTable.setFillParent(true)
         rootTable.top().pad(16f)
 
-        // 1. Player Status Card (Health + Weapon)
-        val statusCard = Table()
-        statusCard.background = createRoundedDrawable(280, 110, 16, colCardBg, colBorderSoft, 2)
-        statusCard.pad(10f, 14f, 10f, 14f)
+        fillYellowDrawable = createFillDrawable(colCyberYellow)
+        fillDangerDrawable = createFillDrawable(colCyberDanger)
+        fillAmberDrawable = createFillDrawable(colCyberOrange)
 
-        // Health Section
-        val hpTitle = Label("VITAL SIGNS", Label.LabelStyle(fontSmall, colCyanGlow))
-        healthTextLabel = Label("100 / 100", Label.LabelStyle(fontMedium, Color.WHITE))
+        // 1. Status Section: Health & Weapon Sci-Fi Progress Bars (Prominent & Large)
+        val statusContainer = Table()
+        val barWidth = 460f
+        val barHeight = 58f
+        val trackWidth = barWidth - 28f
+        val fillHeight = 28f
+        maxHealthBarWidth = trackWidth
+        maxAmmoBarWidth = trackWidth
 
-        val healthTrack = Table()
-        healthTrack.background = createRoundedDrawable(200, 18, 9, colBgDark, colBorderSoft, 1)
+        // --- HEALTH SECTION ---
+        val hpHeaderRow = Table()
+        val hpTitle = Label("VITAL SIGNS", Label.LabelStyle(fontSmall, colCyberOrange))
+        hpHeaderRow.add(hpTitle).left().expandX()
+        statusContainer.add(hpHeaderRow).fillX().padBottom(5f).row()
 
-        val fillDrawable = createRoundedDrawable(200, 14, 7, colHealthGreen)
-        healthBarFill = Image(fillDrawable)
-        healthTrack.left()
-        healthBarFillCell = healthTrack.add(healthBarFill).size(maxHealthBarWidth, 14f).pad(2f)
+        val healthFrameTable = Table()
+        healthFrameTable.background = createSciFiBarBackground(barWidth.toInt(), barHeight.toInt(), tabOnTop = true)
+        healthFrameTable.left().padLeft(14f).padRight(14f).padTop(16f).padBottom(6f)
+        healthBarFill = Image(fillYellowDrawable)
+        healthBarFillCell = healthFrameTable.add(healthBarFill).size(maxHealthBarWidth, fillHeight).left()
 
-        statusCard.add(hpTitle).left().padBottom(3f)
-        statusCard.add(healthTextLabel).right().padBottom(3f).row()
-        statusCard.add(healthTrack).colspan(2).fillX().padBottom(8f).row()
+        // Health Stack: Embeds the number/text DIRECTLY INSIDE the progress bar
+        val healthStack = Stack()
+        healthStack.add(healthFrameTable)
 
-        // Weapon & Ammo Section
-        val weaponRow = Table()
-        weaponNameLabel = Label("Pistol", Label.LabelStyle(fontMedium, colCyanGlow))
+        val healthOverlay = Table()
+        healthOverlay.setFillParent(true)
+        healthTextLabel = Label("100 / 100 HP", Label.LabelStyle(fontMedium, Color.WHITE))
+        healthTextLabel.setAlignment(Align.center)
+        healthOverlay.add(healthTextLabel).expand().center().padTop(6f)
+        healthStack.add(healthOverlay)
+
+        statusContainer.add(healthStack).size(barWidth, barHeight).padBottom(14f).row()
+
+        // --- WEAPON & RELOAD PROGRESS SECTION ---
+        val weaponHeaderRow = Table()
+        weaponNameLabel = Label("PISTOL", Label.LabelStyle(fontSmall, colCyberOrange))
+        weaponHeaderRow.add(weaponNameLabel).left().expandX()
+        statusContainer.add(weaponHeaderRow).fillX().padBottom(5f).row()
+
+        val ammoFrameTable = Table()
+        ammoFrameTable.background = createSciFiBarBackground(barWidth.toInt(), barHeight.toInt(), tabOnTop = false)
+        ammoFrameTable.left().padLeft(14f).padRight(14f).padTop(6f).padBottom(16f)
+        ammoBarFill = Image(fillYellowDrawable)
+        ammoBarFillCell = ammoFrameTable.add(ammoBarFill).size(maxAmmoBarWidth, fillHeight).left()
+
+        // Ammo Stack: Embeds the ammo / reload % DIRECTLY INSIDE the progress bar
+        val ammoStack = Stack()
+        ammoStack.add(ammoFrameTable)
+
+        val ammoOverlay = Table()
+        ammoOverlay.setFillParent(true)
         ammoCountLabel = Label("12 / 12", Label.LabelStyle(fontMedium, Color.WHITE))
-        weaponRow.add(weaponNameLabel).left().expandX()
-        weaponRow.add(ammoCountLabel).right()
-        statusCard.add(weaponRow).colspan(2).fillX()
+        ammoCountLabel.setAlignment(Align.center)
+        ammoOverlay.add(ammoCountLabel).expand().center().padBottom(6f)
+        ammoStack.add(ammoOverlay)
 
-        rootTable.add(statusCard).left().top()
+        statusContainer.add(ammoStack).size(barWidth, barHeight)
 
-        // 2. Score & Frag Badge Pills (Center / Top-Middle)
+        rootTable.add(statusContainer).left().top()
+
+        // 2. Middle Sci-Fi Badges: Score & Frag (Larger: 200 x 64)
         val middlePills = Table()
-        middlePills.padLeft(18f)
+        middlePills.padLeft(26f)
 
-        // Score Pill
         val scorePill = Table()
-        scorePill.background = createRoundedDrawable(140, 44, 22, colCardBg, colBorderSoft, 2)
-        val scoreTag = Label("SCORE", Label.LabelStyle(fontSmall, colAmber))
-        scoreValueLabel = Label("0", Label.LabelStyle(fontMedium, Color.WHITE))
-        scorePill.add(scoreTag).padRight(8f)
+        scorePill.background = createSciFiBadgeBackground(200, 64, colCyberOrange)
+        val scoreTag = Label("SCORE", Label.LabelStyle(fontSmall, colCyberYellow))
+        scoreValueLabel = Label("0", Label.LabelStyle(fontLarge, Color.WHITE))
+        scorePill.add(scoreTag).padRight(12f)
         scorePill.add(scoreValueLabel)
 
-        // Frag Pill
         val fragPill = Table()
-        fragPill.background = createRoundedDrawable(130, 44, 22, colCardBg, colBorderSoft, 2)
-        val fragTag = Label("FRAG", Label.LabelStyle(fontSmall, colHealthDanger))
-        fragCountLabel = Label("0", Label.LabelStyle(fontMedium, Color.WHITE))
-        fragPill.add(fragTag).padRight(8f)
+        fragPill.background = createSciFiBadgeBackground(200, 64, colCyberOrange)
+        val fragTag = Label("FRAG", Label.LabelStyle(fontSmall, colCyberDanger))
+        fragCountLabel = Label("0", Label.LabelStyle(fontLarge, Color.WHITE))
+        fragPill.add(fragTag).padRight(12f)
         fragPill.add(fragCountLabel)
 
-        middlePills.add(scorePill).padRight(10f)
+        middlePills.add(scorePill).padRight(14f)
         middlePills.add(fragPill)
         rootTable.add(middlePills).expandX().left().top()
 
-        // 3. Audio Quick-Toggles (Top-Right)
+        // 3. Audio Quick-Toggles (Top-Right, Larger)
         val audioTable = Table()
-        val sfxBtn = createModernButton("SFX", 60f, 44f) {
+        val sfxBtn = createModernButton("SFX", 88f, 58f) {
             val enabled = audioService.toggleSound()
             sfxButtonLabel?.setText(if (enabled) "SFX" else "MUTED")
         }
-        val bgmBtn = createModernButton("BGM", 60f, 44f) {
+        val bgmBtn = createModernButton("BGM", 88f, 58f) {
             val enabled = audioService.toggleMusic()
             bgmButtonLabel?.setText(if (enabled) "BGM" else "MUTED")
         }
-        audioTable.add(sfxBtn).padRight(8f)
+        audioTable.add(sfxBtn).padRight(10f)
         audioTable.add(bgmBtn)
         rootTable.add(audioTable).right().top()
 
@@ -264,36 +459,36 @@ class UiSystem(
     }
 
     private fun setupTouchControls() {
-        // Left side movement d-pad
+        // Left side movement d-pad (Larger for comfortable thumb control)
         val leftTable = Table()
         leftTable.setFillParent(true)
-        leftTable.bottom().left().pad(24f)
+        leftTable.bottom().left().pad(28f)
 
-        val btnLeft = createActionButton("<", 92f, 92f, isPrimary = false) { touchLeft = it }
-        val btnRight = createActionButton(">", 92f, 92f, isPrimary = false) { touchRight = it }
+        val btnLeft = createActionButton("<", 124f, 124f, isPrimary = false, fontOverride = fontXLarge) { touchLeft = it }
+        val btnRight = createActionButton(">", 124f, 124f, isPrimary = false, fontOverride = fontXLarge) { touchRight = it }
 
-        leftTable.add(btnLeft).padRight(20f)
+        leftTable.add(btnLeft).padRight(24f)
         leftTable.add(btnRight)
         uiStage.addActor(leftTable)
 
-        // Right side Action Cluster
+        // Right side Action Cluster (Larger sizes with big centered text)
         val rightTable = Table()
         rightTable.setFillParent(true)
-        rightTable.bottom().right().pad(24f)
+        rightTable.bottom().right().pad(28f)
 
-        val btnJump = createActionButton("JUMP", 80f, 80f, isPrimary = false) { touchJump = it }
-        val btnReload = createActionButton("RLD", 80f, 80f, isPrimary = false) { touchReload = it }
-        val btnWeapon = createActionButton("SWAP", 80f, 80f, isPrimary = false) { if (it) touchSwitchWeapon = true }
-        val btnGrenade = createActionButton("BOMB", 80f, 80f, isPrimary = false) { touchGrenade = it }
-        val btnShoot = createActionButton("FIRE", 112f, 112f, isPrimary = true) { touchShoot = it }
+        val btnJump = createActionButton("JUMP", 112f, 112f, isPrimary = false) { touchJump = it }
+        val btnReload = createActionButton("RLD", 112f, 112f, isPrimary = false) { touchReload = it }
+        val btnWeapon = createActionButton("SWAP", 112f, 112f, isPrimary = false) { if (it) touchSwitchWeapon = true }
+        val btnGrenade = createActionButton("BOMB", 112f, 112f, isPrimary = false) { touchGrenade = it }
+        val btnShoot = createActionButton("FIRE", 158f, 158f, isPrimary = true, fontOverride = fontXLarge) { touchShoot = it }
 
         val secCluster = Table()
-        secCluster.add(btnWeapon).pad(6f)
-        secCluster.add(btnJump).pad(6f).row()
-        secCluster.add(btnGrenade).pad(6f)
-        secCluster.add(btnReload).pad(6f)
+        secCluster.add(btnWeapon).pad(8f)
+        secCluster.add(btnJump).pad(8f).row()
+        secCluster.add(btnGrenade).pad(8f)
+        secCluster.add(btnReload).pad(8f)
 
-        rightTable.add(secCluster).padRight(16f)
+        rightTable.add(secCluster).padRight(20f)
         rightTable.add(btnShoot)
         uiStage.addActor(rightTable)
     }
@@ -305,11 +500,11 @@ class UiSystem(
         onClick: () -> Unit
     ): Stack {
         val stack = Stack()
-        val normalDrawable = createRoundedDrawable(width.toInt(), height.toInt(), 12, colButtonNormal, colBorderSoft, 2)
-        val pressedDrawable = createRoundedDrawable(width.toInt(), height.toInt(), 12, colButtonPressed, colCyanGlow, 2)
+        val normalDrawable = createRoundedDrawable(width.toInt(), height.toInt(), 12, colButtonBg, colCyberOrange, 2)
+        val pressedDrawable = createRoundedDrawable(width.toInt(), height.toInt(), 12, colButtonPressed, colCyberYellow, 2)
 
         val bgImage = Image(normalDrawable)
-        val label = Label(text, Label.LabelStyle(fontMedium, Color.WHITE))
+        val label = Label(text, Label.LabelStyle(fontSmall, Color.WHITE))
         label.setAlignment(Align.center)
 
         if (text == "SFX") sfxButtonLabel = label
@@ -338,17 +533,18 @@ class UiSystem(
         width: Float,
         height: Float,
         isPrimary: Boolean,
+        fontOverride: BitmapFont = fontLarge,
         onStateChange: (Boolean) -> Unit
     ): Stack {
         val stack = Stack()
-        val normalBg = if (isPrimary) colActionPrimary else colButtonNormal
-        val border = if (isPrimary) colCyanGlow else colBorderSoft
+        val normalBg = if (isPrimary) colButtonPressed else colButtonBg
+        val border = if (isPrimary) colCyberYellow else colCyberOrange
 
-        val normalDrawable = createRoundedDrawable(width.toInt(), height.toInt(), (height / 2).toInt(), normalBg, border, 2)
-        val pressedDrawable = createRoundedDrawable(width.toInt(), height.toInt(), (height / 2).toInt(), colButtonPressed, colCyanGlow, 3)
+        val normalDrawable = createRoundedDrawable(width.toInt(), height.toInt(), (height / 2).toInt(), normalBg, border, 3)
+        val pressedDrawable = createRoundedDrawable(width.toInt(), height.toInt(), (height / 2).toInt(), colDarkChamber, colCyberYellow, 4)
 
         val bgImage = Image(normalDrawable)
-        val label = Label(text, Label.LabelStyle(fontLarge, Color.WHITE))
+        val label = Label(text, Label.LabelStyle(fontOverride, Color.WHITE))
         label.setAlignment(Align.center)
 
         stack.add(bgImage)
@@ -381,8 +577,10 @@ class UiSystem(
             healthTextLabel.setText("${health.currentHealth.toInt()} / ${health.maxHealth.toInt()} HP")
 
             if (hpRatio < 0.3f) {
-                healthTextLabel.color = colHealthDanger
+                healthBarFill.drawable = fillDangerDrawable
+                healthTextLabel.color = colCyberDanger
             } else {
+                healthBarFill.drawable = fillYellowDrawable
                 healthTextLabel.color = Color.WHITE
             }
 
@@ -390,13 +588,31 @@ class UiSystem(
             val weaponCmp = weaponCmps.getOrNull(player)
             val currentWeapon = weaponCmp?.currentWeapon
 
-            if (weaponCmp != null && currentWeapon != null) {
-                val currentAmmo = weaponCmp.ammoMap[currentWeapon] ?: currentWeapon.maxAmmo
-                weaponNameLabel.setText(currentWeapon.displayName)
-                ammoCountLabel.setText("$currentAmmo / ${currentWeapon.maxAmmo}${if (attackCmp.isReloading) " [RLD]" else ""}")
+            val maxAmmo = currentWeapon?.maxAmmo ?: attackCmp.maxAmmo
+            val currentAmmo = if (weaponCmp != null && currentWeapon != null) {
+                weaponCmp.ammoMap[currentWeapon] ?: currentWeapon.maxAmmo
             } else {
-                weaponNameLabel.setText("Standard")
-                ammoCountLabel.setText("${attackCmp.ammo} / ${attackCmp.maxAmmo}${if (attackCmp.isReloading) " [RLD]" else ""}")
+                attackCmp.ammo
+            }
+
+            val weaponName = currentWeapon?.displayName ?: "STANDARD"
+            weaponNameLabel.setText(weaponName.uppercase())
+
+            if (attackCmp.isReloading) {
+                val reloadDuration = currentWeapon?.reloadTime ?: attackCmp.reloadTime
+                val reloadRatio = (attackCmp.stateTime / reloadDuration).coerceIn(0f, 1f)
+                val reloadW = max(2f, maxAmmoBarWidth * reloadRatio)
+                ammoBarFill.drawable = fillAmberDrawable
+                ammoBarFillCell.width(reloadW)
+                ammoCountLabel.setText("RELOADING ${(reloadRatio * 100).toInt()}%")
+                ammoCountLabel.color = colCyberOrange
+            } else {
+                val ammoRatio = (currentAmmo.toFloat() / maxAmmo).coerceIn(0f, 1f)
+                val ammoW = max(2f, maxAmmoBarWidth * ammoRatio)
+                ammoBarFill.drawable = fillYellowDrawable
+                ammoBarFillCell.width(ammoW)
+                ammoCountLabel.setText("$currentAmmo / $maxAmmo")
+                ammoCountLabel.color = Color.WHITE
             }
 
             fragCountLabel.setText("${attackCmp.fragAmmo}")
