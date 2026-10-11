@@ -44,6 +44,9 @@ class NetworkSystem(
     var myNetworkId: Int = -1
         private set
 
+    var activeRoomCode: String = config.roomCode.trim().uppercase()
+        private set
+
     val isConnected: Boolean
         get() = client?.isConnected == true
 
@@ -66,7 +69,7 @@ class NetworkSystem(
         private set
 
     private val healthSystem: HealthSystem by lazy { world.system<HealthSystem>() }
-    private val combatSystem: CombatSystem by lazy { world.system<CombatSystem>() }
+    private val combatSystem: CombatSystem by lazy { world.system<HealthSystem>(); world.system<CombatSystem>() }
 
     val activePlayerCount: Int
         get() = remoteEntities.size + (if (myNetworkId != -1) 1 else 0)
@@ -149,10 +152,27 @@ class NetworkSystem(
         return list.sortedWith(compareByDescending<PlayerScoreEntry> { it.kills }.thenBy { it.id })
     }
 
-    fun connect(host: String = NetworkConfig.serverHost, playerName: String = "Player", timeoutMs: Int = 4000) {
+    fun connect(
+        host: String = NetworkConfig.serverHost,
+        playerName: String = "Player",
+        roomCode: String = "",
+        gameMode: String = "DUO",
+        createRoom: Boolean = false,
+        sessionToken: String = "",
+        timeoutMs: Int = 4000
+    ) {
+        val fallbackCode = roomCode.trim().uppercase().ifEmpty { GameConfig.generateRoomCode() }
+        activeRoomCode = fallbackCode
         val gameClient = GameClient(host, NetworkConfig.TCP_PORT, NetworkConfig.UDP_PORT)
         client = gameClient
-        gameClient.connect(playerName, timeoutMs)
+        gameClient.connect(
+            name = playerName,
+            roomCode = if (createRoom || roomCode.isNotBlank()) fallbackCode else "",
+            gameMode = gameMode,
+            createRoom = createRoom,
+            initialSessionToken = sessionToken,
+            timeoutMs = timeoutMs
+        )
     }
 
     fun disconnect() {
@@ -192,8 +212,11 @@ class NetworkSystem(
             when (val packet = currentClient.packetQueue.poll()) {
                 is LoginResponsePacket -> {
                     myNetworkId = packet.assignedId
-                    postFeed("Connected as ${config.playerName} (ID #$myNetworkId)")
-                    println("Assigned player network ID: $myNetworkId at spawn (${packet.spawnX}, ${packet.spawnY})")
+                    if (packet.roomCode.isNotBlank()) {
+                        activeRoomCode = packet.roomCode.trim().uppercase()
+                    }
+                    postFeed("Joined ${config.mode.displayName} • ROOM CODE: $activeRoomCode")
+                    println("Assigned player network ID: $myNetworkId in room $activeRoomCode at spawn (${packet.spawnX}, ${packet.spawnY})")
 
                     world.family(allOf = arrayOf(PlayerComponent::class)).forEach { localPlayer ->
                         if (localPlayer !in remotePlayerCmps) {
@@ -215,26 +238,41 @@ class NetworkSystem(
                 }
 
                 is PlayerConnectedPacket -> {
+                    if (packet.roomCode.isNotBlank() && activeRoomCode.isNotBlank() &&
+                        !packet.roomCode.equals(activeRoomCode, ignoreCase = true)
+                    ) {
+                        continue
+                    }
                     val id = packet.id
                     if (id != myNetworkId && !remoteEntities.containsKey(id) && !pendingSpawnNetIds.contains(id)) {
                         spawnRemotePlayer(id, packet.x, packet.y)
-                        postFeed("Player #$id joined the game")
+                        postFeed("Operative #$id joined Room $activeRoomCode")
                     }
                 }
 
                 is PlayerDisconnectedPacket -> {
+                    if (packet.roomCode.isNotBlank() && activeRoomCode.isNotBlank() &&
+                        !packet.roomCode.equals(activeRoomCode, ignoreCase = true)
+                    ) {
+                        continue
+                    }
                     val id = packet.id
                     val remote = remoteEntities.remove(id)
                     pendingSpawnNetIds.remove(id)
                     if (remote != null) {
                         val name = netCmps.getOrNull(remote)?.playerName ?: "Player #$id"
                         world.remove(remote)
-                        postFeed("$name disconnected")
+                        postFeed("$name left Room $activeRoomCode")
                         println("Removed remote player: $id")
                     }
                 }
 
                 is PlayerStatePacket -> {
+                    if (packet.roomCode.isNotBlank() && activeRoomCode.isNotBlank() &&
+                        !packet.roomCode.equals(activeRoomCode, ignoreCase = true)
+                    ) {
+                        continue
+                    }
                     val id = packet.id
                     if (id == myNetworkId) {
                         // Sync authoritative kills/deaths for local player if provided by server
@@ -363,6 +401,11 @@ class NetworkSystem(
                 }
 
                 is PlayerShootPacket -> {
+                    if (packet.roomCode.isNotBlank() && activeRoomCode.isNotBlank() &&
+                        !packet.roomCode.equals(activeRoomCode, ignoreCase = true)
+                    ) {
+                        continue
+                    }
                     val id = packet.id
                     if (id != myNetworkId) {
                         val remote = remoteEntities[id]
@@ -388,6 +431,11 @@ class NetworkSystem(
                 }
 
                 is PlayerHitPacket -> {
+                    if (packet.roomCode.isNotBlank() && activeRoomCode.isNotBlank() &&
+                        !packet.roomCode.equals(activeRoomCode, ignoreCase = true)
+                    ) {
+                        continue
+                    }
                     val attackerName = if (packet.fromId == myNetworkId) {
                         "You"
                     } else {

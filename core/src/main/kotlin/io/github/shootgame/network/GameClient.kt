@@ -34,13 +34,31 @@ class GameClient(
     @Volatile var localPlayerName: String = "Player"
         private set
 
+    @Volatile var activeRoomCode: String = ""
+        private set
+
+    @Volatile var activeGameMode: String = "DUO"
+        private set
+
     val packetQueue = ConcurrentLinkedQueue<Any>()
 
-    fun connect(name: String, timeoutMs: Int = 4000) {
+    fun connect(
+        name: String,
+        roomCode: String = "",
+        gameMode: String = "DUO",
+        createRoom: Boolean = false,
+        initialSessionToken: String = "",
+        timeoutMs: Int = 4000
+    ) {
         localPlayerName = name
+        activeRoomCode = roomCode.trim().uppercase()
+        activeGameMode = gameMode.trim().uppercase()
+        if (initialSessionToken.isNotBlank()) {
+            sessionToken = initialSessionToken
+        }
         Thread {
             try {
-                println("Connecting to ShootGame server at $host: TCP=$tcpPort, UDP=$udpPort...")
+                println("Connecting to ShootGame server at $host: TCP=$tcpPort, UDP=$udpPort (mode=$activeGameMode, room=$activeRoomCode, create=$createRoom)...")
                 val inetAddr = InetAddress.getByName(host)
                 serverInetAddress = inetAddr
 
@@ -70,14 +88,17 @@ class GameClient(
                     setName("ShootGame-TCP-Worker")
                 }.start()
 
-                // 5. Send login packet over TCP (use in-memory sessionToken only for same-client reconnects)
+                // 5. Send login packet over TCP with room code & mode
                 val login = LoginPacket.newBuilder()
                     .setPlayerName(name)
                     .setSessionToken(sessionToken)
+                    .setRoomCode(activeRoomCode)
+                    .setGameMode(activeGameMode)
+                    .setCreateRoom(createRoom)
                     .build()
                 sendTcp(Wire.TYPE_LOGIN, login)
 
-                println("TCP connection established to $host:$tcpPort as '$name'")
+                println("TCP connection established to $host:$tcpPort as '$name' [Room=$activeRoomCode, Mode=$activeGameMode]")
             } catch (e: Exception) {
                 println("Could not connect to multiplayer server at $host: ${e.message}. Running in offline mode.")
                 close()
@@ -100,12 +121,18 @@ class GameClient(
                         val resp = LoginResponsePacket.parseFrom(body)
                         playerId = resp.assignedId
                         sessionToken = resp.sessionToken
+                        if (resp.roomCode.isNotBlank()) {
+                            activeRoomCode = resp.roomCode.trim().uppercase()
+                        }
+                        if (resp.gameMode.isNotBlank()) {
+                            activeGameMode = resp.gameMode.trim().uppercase()
+                        }
 
                         // Send UDP registration datagram immediately (twice for UDP reliability)
                         sendUdpRegister(resp.assignedId)
                         sendUdpRegister(resp.assignedId)
                         packetQueue.add(resp)
-                        println("Logged into server: assignedId=${resp.assignedId}, spawn=(${resp.spawnX}, ${resp.spawnY})")
+                        println("Logged into server: assignedId=${resp.assignedId}, room=$activeRoomCode, spawn=(${resp.spawnX}, ${resp.spawnY})")
                     }
                     Wire.TYPE_PLAYER_CONNECTED -> {
                         packetQueue.add(PlayerConnectedPacket.parseFrom(body))
@@ -215,6 +242,7 @@ class GameClient(
             .setHealth(health)
             .setPlayerName(localPlayerName)
             .setWeaponIndex(weaponIndex)
+            .setRoomCode(activeRoomCode)
             .build()
         sendTcp(Wire.TYPE_PLAYER_STATE, packet)
     }
@@ -234,6 +262,7 @@ class GameClient(
             .setOriginY(originY)
             .setDirectionX(directionX)
             .setDirectionY(directionY)
+            .setRoomCode(activeRoomCode)
             .build()
         sendTcp(Wire.TYPE_PLAYER_SHOOT, packet)
     }
