@@ -2,10 +2,12 @@ package io.github.shootgame.system
 
 import com.badlogic.gdx.Application
 import com.badlogic.gdx.Gdx
-import com.badlogic.gdx.Input
 import com.badlogic.gdx.graphics.Color
 import com.badlogic.gdx.graphics.Pixmap
 import com.badlogic.gdx.graphics.Texture
+import com.badlogic.gdx.graphics.g2d.BitmapFont
+import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator
+import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator.FreeTypeFontParameter
 import com.badlogic.gdx.scenes.scene2d.InputEvent
 import com.badlogic.gdx.scenes.scene2d.Stage
 import com.badlogic.gdx.scenes.scene2d.ui.*
@@ -20,9 +22,11 @@ import com.kotcrab.vis.ui.widget.VisTable
 import com.kotcrab.vis.ui.widget.VisTextButton
 import io.github.shootgame.audio.AudioService
 import io.github.shootgame.audio.SoundType
-import io.github.shootgame.component.*
-import io.github.shootgame.screen.GameConfig
-import io.github.shootgame.screen.GameMode
+import io.github.shootgame.component.AttackComponent
+import io.github.shootgame.component.HealthComponent
+import io.github.shootgame.component.PlayerComponent
+import io.github.shootgame.component.WeaponComponent
+import kotlin.math.max
 
 class UiSystem(
     @Qualifier("uiStage") private val uiStage: Stage,
@@ -53,62 +57,47 @@ class UiSystem(
         return res
     }
 
-    private lateinit var modeLabel: VisLabel
-    private var roomCodeLabel: VisLabel? = null
-    private lateinit var sbTitleLabel: VisLabel
-    private lateinit var healthLabel: VisLabel
+    private val disposables = mutableListOf<Texture>()
+    private var fontGenerator: FreeTypeFontGenerator? = null
+    private val generatedFonts = mutableListOf<BitmapFont>()
+    private lateinit var fontSmall: BitmapFont
+    private lateinit var fontMedium: BitmapFont
+    private lateinit var fontLarge: BitmapFont
+    private lateinit var fontXLarge: BitmapFont
+
+    // Futuristic Sci-Fi Cyberpunk Palette (Matched to Reference Image)
+    private val colCyberOrange = Color(1.0f, 0.58f, 0.02f, 1f)      // Neon cyber-orange border
+    private val colCyberOrangeDark = Color(0.85f, 0.42f, 0.0f, 1f)  // Tech bevel shadow
+    private val colCyberYellow = Color(1.0f, 0.90f, 0.04f, 1f)      // Cyber neon yellow fill
+    private val colCyberDanger = Color(0.96f, 0.22f, 0.26f, 1f)      // Alert red fill
+    private val colCyberGrey = Color(0.38f, 0.40f, 0.44f, 1f)        // Tech hazard grey
+    private val colDarkChamber = Color(0.09f, 0.10f, 0.13f, 0.94f)   // Chassis dark background
+    private val colDarkTrack = Color(0.18f, 0.19f, 0.22f, 1f)        // Unfilled recess track
+
+    // Button states
+    private val colButtonBg = Color(0.12f, 0.14f, 0.18f, 0.92f)
+    private val colButtonPressed = Color(0.28f, 0.18f, 0.06f, 0.95f)
+
+    // Fill Drawables
+    private lateinit var fillYellowDrawable: TextureRegionDrawable
+    private lateinit var fillDangerDrawable: TextureRegionDrawable
+    private lateinit var fillAmberDrawable: TextureRegionDrawable
+
+    // HUD Elements
     private lateinit var healthBarFill: Image
-    private lateinit var weaponLabel: VisLabel
-    private lateinit var ammoLabel: VisLabel
-    private lateinit var statsLabel: VisLabel
-    private lateinit var feedLabel: VisLabel
-    private lateinit var scoreboardLabel: VisLabel
+    private lateinit var healthBarFillCell: Cell<Image>
+    private lateinit var ammoBarFill: Image
+    private lateinit var ammoBarFillCell: Cell<Image>
+    private lateinit var healthTextLabel: Label
+    private lateinit var weaponNameLabel: Label
+    private lateinit var ammoCountLabel: Label
+    private lateinit var fragCountLabel: Label
+    private lateinit var scoreValueLabel: Label
+    private var sfxButtonLabel: Label? = null
+    private var bgmButtonLabel: Label? = null
 
-    private val weaponButtons = mutableMapOf<WeaponType, VisTextButton>()
-
-    private var sfxBtn: VisTextButton? = null
-    private var bgmBtn: VisTextButton? = null
-
-    private var panelBgTexture: Texture? = null
-    private var barBgTexture: Texture? = null
-    private var barFillTexture: Texture? = null
-    private var touchTexture: Texture? = null
-    private var pressedTexture: Texture? = null
-
-    private fun makeSolidTexture(r: Float, g: Float, b: Float, a: Float): Texture {
-        val pixmap = Pixmap(4, 4, Pixmap.Format.RGBA8888)
-        pixmap.setColor(r, g, b, a)
-        pixmap.fill()
-        val tex = Texture(pixmap)
-        pixmap.dispose()
-        return tex
-    }
-
-    private fun getTouchTexture(pressed: Boolean = false): Texture {
-        if (pressed) {
-            if (pressedTexture == null) {
-                val pixmap = Pixmap(100, 100, Pixmap.Format.RGBA8888)
-                pixmap.setColor(0.2f, 0.85f, 1f, 0.55f)
-                pixmap.fillCircle(50, 50, 48)
-                pixmap.setColor(1f, 1f, 1f, 0.9f)
-                pixmap.drawCircle(50, 50, 48)
-                pressedTexture = Texture(pixmap)
-                pixmap.dispose()
-            }
-            return pressedTexture!!
-        } else {
-            if (touchTexture == null) {
-                val pixmap = Pixmap(100, 100, Pixmap.Format.RGBA8888)
-                pixmap.setColor(0.1f, 0.15f, 0.22f, 0.45f)
-                pixmap.fillCircle(50, 50, 48)
-                pixmap.setColor(0.4f, 0.85f, 1f, 0.65f)
-                pixmap.drawCircle(50, 50, 48)
-                touchTexture = Texture(pixmap)
-                pixmap.dispose()
-            }
-            return touchTexture!!
-        }
-    }
+    private var maxHealthBarWidth = 432f
+    private var maxAmmoBarWidth = 432f
 
     init {
         panelBgTexture = makeSolidTexture(0.05f, 0.08f, 0.14f, 0.78f)
@@ -121,249 +110,473 @@ class UiSystem(
         }
     }
 
+    private fun initFonts() {
+        val candidates = listOf(
+            "fonts/KnightWarrior.otf",
+            "assets/fonts/KnightWarrior.otf"
+        )
+        val fontHandle = candidates
+            .map { Gdx.files.internal(it) }
+            .firstOrNull { it.exists() }
+
+        if (fontHandle != null) {
+            try {
+                val generator = FreeTypeFontGenerator(fontHandle)
+                fontGenerator = generator
+
+                val makeFont = { size: Int, border: Float, shadow: Float ->
+                    val param = FreeTypeFontParameter().apply {
+                        this.size = size
+                        this.color = Color.WHITE
+                        this.borderWidth = border
+                        this.borderColor = Color(0f, 0f, 0f, 1f)
+                        this.shadowOffsetX = shadow.toInt()
+                        this.shadowOffsetY = shadow.toInt()
+                        this.shadowColor = Color(0f, 0f, 0f, 0.95f)
+                        this.minFilter = Texture.TextureFilter.Linear
+                        this.magFilter = Texture.TextureFilter.Linear
+                    }
+                    generator.generateFont(param).also { generatedFonts.add(it) }
+                }
+
+                fontSmall = makeFont(22, 1.8f, 2f)
+                fontMedium = makeFont(28, 2.2f, 2f)
+                fontLarge = makeFont(34, 2.6f, 3f)
+                fontXLarge = makeFont(44, 3.2f, 3f)
+                return
+            } catch (e: Exception) {
+                Gdx.app.error("UiSystem", "Failed to load KnightWarrior font, fallback to default", e)
+            }
+        }
+
+        val defaultFont = BitmapFont()
+        generatedFonts.add(defaultFont)
+        fontSmall = defaultFont
+        fontMedium = defaultFont
+        fontLarge = defaultFont
+        fontXLarge = defaultFont
+    }
+
+    private fun createFillDrawable(fillColor: Color): TextureRegionDrawable {
+        val pixmap = Pixmap(16, 16, Pixmap.Format.RGBA8888)
+        pixmap.setColor(fillColor)
+        pixmap.fill()
+        val texture = Texture(pixmap)
+        texture.setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear)
+        disposables.add(texture)
+        pixmap.dispose()
+        return TextureRegionDrawable(texture)
+    }
+
+    /**
+     * Procedurally creates the futuristic sci-fi progress bar frame matching the reference image:
+     * - Chamfered outer cyber-orange border
+     * - Asymmetrical tech tab with diagonal hazard warning chevrons (///)
+     * - Segmented LED status pips (■ ■ ■ ■)
+     * - Dark inner recess for the fill bar
+     */
+    private fun createSciFiBarBackground(
+        w: Int,
+        h: Int,
+        tabOnTop: Boolean = true
+    ): TextureRegionDrawable {
+        val pixmap = Pixmap(w, h, Pixmap.Format.RGBA8888)
+        pixmap.blending = Pixmap.Blending.None
+        pixmap.setColor(0f, 0f, 0f, 0f)
+        pixmap.fill()
+        pixmap.blending = Pixmap.Blending.SourceOver
+
+        val chamfer = 12
+        val tabH = 6
+        val borderWidth = 3
+
+        fun fillChamferedBox(ox: Int, oy: Int, bw: Int, bh: Int, ch: Int, col: Color) {
+            pixmap.setColor(col)
+            pixmap.fillRectangle(ox + ch, oy, bw - ch * 2, bh)
+            pixmap.fillRectangle(ox, oy + ch, ch, bh - ch * 2)
+            pixmap.fillRectangle(ox + bw - ch, oy + ch, ch, bh - ch * 2)
+            pixmap.fillTriangle(ox, oy + ch, ox + ch, oy + ch, ox + ch, oy)
+            pixmap.fillTriangle(ox + bw - ch, oy, ox + bw - ch, oy + ch, ox + bw - 1, oy + ch)
+            pixmap.fillTriangle(ox, oy + bh - ch, ox + ch, oy + bh - ch, ox + ch, oy + bh - 1)
+            pixmap.fillTriangle(ox + bw - ch, oy + bh - 1, ox + bw - ch, oy + bh - ch, ox + bw - 1, oy + bh - ch)
+        }
+
+        val baseY = if (tabOnTop) tabH else 0
+        val baseH = h - tabH
+        fillChamferedBox(0, baseY, w, baseH, chamfer, colCyberOrange)
+
+        // Asymmetrical tech tab
+        val tabStart = if (tabOnTop) (w * 0.44f).toInt() else (w * 0.12f).toInt()
+        val tabW = (w * 0.34f).toInt()
+        if (tabOnTop) {
+            pixmap.setColor(colCyberOrange)
+            pixmap.fillRectangle(tabStart, 0, tabW, tabH + 1)
+            pixmap.fillTriangle(tabStart - tabH, tabH, tabStart, tabH, tabStart, 0)
+            pixmap.fillTriangle(tabStart + tabW, 0, tabStart + tabW, tabH, tabStart + tabW + tabH, tabH)
+        } else {
+            pixmap.setColor(colCyberOrange)
+            pixmap.fillRectangle(tabStart, h - tabH - 1, tabW, tabH + 1)
+            pixmap.fillTriangle(tabStart - tabH, h - tabH, tabStart, h - tabH, tabStart, h - 1)
+            pixmap.fillTriangle(tabStart + tabW, h - 1, tabStart + tabW, h - tabH, tabStart + tabW + tabH, h - tabH)
+        }
+
+        // Inner dark chamber
+        fillChamferedBox(borderWidth, baseY + borderWidth, w - borderWidth * 2, baseH - borderWidth * 2, max(2, chamfer - borderWidth), colDarkChamber)
+
+        // Recessed track cavity for progress bar
+        val trackX = 14
+        val trackY = baseY + 10
+        val trackW = w - 28
+        val trackH = baseH - 20
+        pixmap.setColor(colDarkTrack)
+        pixmap.fillRectangle(trackX, trackY, trackW, trackH)
+
+        // Track border
+        pixmap.setColor(Color(0.28f, 0.30f, 0.35f, 1f))
+        pixmap.drawRectangle(trackX - 1, trackY - 1, trackW + 2, trackH + 2)
+
+        // Hazard Chevrons (///)
+        val chevronsStart = tabStart + 8
+        val chevronsY = if (tabOnTop) 1 else (h - tabH + 1)
+        for (i in 0 until 5) {
+            val sx = chevronsStart + i * 11
+            pixmap.setColor(if (i < 3) colCyberYellow else colCyberGrey)
+            pixmap.drawLine(sx, chevronsY + 4, sx + 4, chevronsY)
+            pixmap.drawLine(sx + 1, chevronsY + 4, sx + 5, chevronsY)
+        }
+
+        // Segmented Status Pips (■ ■ ■ ■)
+        val pipsStart = if (tabOnTop) (w * 0.10f).toInt() else (w * 0.55f).toInt()
+        val pipsY = if (tabOnTop) (h - 4) else 1
+        for (i in 0 until 5) {
+            val px = pipsStart + i * 10
+            pixmap.setColor(if (i < 3) colCyberYellow else colCyberGrey)
+            pixmap.fillRectangle(px, pipsY, 6, 2)
+        }
+
+        val texture = Texture(pixmap)
+        texture.setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear)
+        disposables.add(texture)
+        pixmap.dispose()
+        return TextureRegionDrawable(texture)
+    }
+
+    private fun createSciFiBadgeBackground(
+        w: Int,
+        h: Int,
+        accentColor: Color = colCyberOrange
+    ): TextureRegionDrawable {
+        val pixmap = Pixmap(w, h, Pixmap.Format.RGBA8888)
+        pixmap.blending = Pixmap.Blending.None
+        pixmap.setColor(0f, 0f, 0f, 0f)
+        pixmap.fill()
+        pixmap.blending = Pixmap.Blending.SourceOver
+
+        val ch = 10
+        val bw = 3
+        // Outer border
+        pixmap.setColor(accentColor)
+        pixmap.fillRectangle(ch, 0, w - ch * 2, h)
+        pixmap.fillRectangle(0, ch, ch, h - ch * 2)
+        pixmap.fillRectangle(w - ch, ch, ch, h - ch * 2)
+        pixmap.fillTriangle(0, ch, ch, ch, ch, 0)
+        pixmap.fillTriangle(w - ch, 0, w - ch, ch, w - 1, ch)
+        pixmap.fillTriangle(0, h - ch, ch, h - ch, ch, h - 1)
+        pixmap.fillTriangle(w - ch, h - 1, w - ch, h - ch, w - 1, h - ch)
+
+        // Inner dark body
+        pixmap.setColor(colDarkChamber)
+        pixmap.fillRectangle(ch, bw, w - ch * 2, h - bw * 2)
+        pixmap.fillRectangle(bw, ch, ch, h - ch * 2)
+        pixmap.fillRectangle(w - ch, ch, ch - bw, h - ch * 2)
+        pixmap.fillTriangle(bw, ch, ch, ch, ch, bw)
+        pixmap.fillTriangle(w - ch, bw, w - ch, ch, w - 1 - bw, ch)
+        pixmap.fillTriangle(bw, h - ch, ch, h - ch, ch, h - 1 - bw)
+        pixmap.fillTriangle(w - ch, h - 1 - bw, w - ch, h - ch, w - 1 - bw, h - ch)
+
+        // Tech chevrons
+        for (i in 0 until 3) {
+            pixmap.setColor(if (i == 0) colCyberYellow else colCyberGrey)
+            val sx = w - 30 + i * 8
+            pixmap.drawLine(sx, 8, sx + 4, 3)
+            pixmap.drawLine(sx + 1, 8, sx + 5, 3)
+        }
+
+        val texture = Texture(pixmap)
+        texture.setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear)
+        disposables.add(texture)
+        pixmap.dispose()
+        return TextureRegionDrawable(texture)
+    }
+
+    private fun createRoundedDrawable(
+        w: Int,
+        h: Int,
+        radius: Int,
+        fillColor: Color,
+        borderColor: Color? = null,
+        borderWidth: Int = 1
+    ): TextureRegionDrawable {
+        val pixmap = Pixmap(w, h, Pixmap.Format.RGBA8888)
+        pixmap.blending = Pixmap.Blending.None
+
+        if (borderColor != null && borderWidth > 0) {
+            pixmap.setColor(borderColor)
+            fillRounded(pixmap, w, h, radius)
+            pixmap.setColor(fillColor)
+            fillRounded(
+                pixmap,
+                w - borderWidth * 2,
+                h - borderWidth * 2,
+                max(1, radius - borderWidth),
+                borderWidth,
+                borderWidth
+            )
+        } else {
+            pixmap.setColor(fillColor)
+            fillRounded(pixmap, w, h, radius)
+        }
+
+        val texture = Texture(pixmap)
+        texture.setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear)
+        disposables.add(texture)
+        pixmap.dispose()
+        return TextureRegionDrawable(texture)
+    }
+
+    private fun fillRounded(
+        pixmap: Pixmap,
+        w: Int,
+        h: Int,
+        r: Int,
+        offsetX: Int = 0,
+        offsetY: Int = 0
+    ) {
+        val rad = r.coerceAtMost(w / 2).coerceAtMost(h / 2)
+        pixmap.fillCircle(offsetX + rad, offsetY + rad, rad)
+        pixmap.fillCircle(offsetX + w - rad - 1, offsetY + rad, rad)
+        pixmap.fillCircle(offsetX + rad, offsetY + h - rad - 1, rad)
+        pixmap.fillCircle(offsetX + w - rad - 1, offsetY + h - rad - 1, rad)
+        pixmap.fillRectangle(offsetX + rad, offsetY, w - rad * 2, h)
+        pixmap.fillRectangle(offsetX, offsetY + rad, w, h - rad * 2)
+    }
+
     private fun setupHud() {
-        val panelDrawable = TextureRegionDrawable(panelBgTexture!!)
+        val rootTable = Table()
+        rootTable.setFillParent(true)
+        rootTable.top().pad(16f)
 
-        // --- 1. TOP-LEFT PLAYER HUD CARD ---
-        val topLeftAnchor = Table()
-        topLeftAnchor.setFillParent(true)
-        topLeftAnchor.top().left()
+        fillYellowDrawable = createFillDrawable(colCyberYellow)
+        fillDangerDrawable = createFillDrawable(colCyberDanger)
+        fillAmberDrawable = createFillDrawable(colCyberOrange)
 
-        val hudCard = VisTable(false)
-        hudCard.background = panelDrawable
-        hudCard.pad(12f, 16f, 12f, 16f)
+        // 1. Status Section: Health & Weapon Sci-Fi Progress Bars (Prominent & Large)
+        val statusContainer = Table()
+        val barWidth = 460f
+        val barHeight = 58f
+        val trackWidth = barWidth - 28f
+        val fillHeight = 28f
+        maxHealthBarWidth = trackWidth
+        maxAmmoBarWidth = trackWidth
 
-        modeLabel = VisLabel("[${config.mode.displayName}] ${config.playerName}").apply {
-            color = Color(0.3f, 0.9f, 1f, 1f)
+        // --- HEALTH SECTION ---
+        val hpHeaderRow = Table()
+        val hpTitle = Label("VITAL SIGNS", Label.LabelStyle(fontSmall, colCyberOrange))
+        hpHeaderRow.add(hpTitle).left().expandX()
+        statusContainer.add(hpHeaderRow).fillX().padBottom(5f).row()
+
+        val healthFrameTable = Table()
+        healthFrameTable.background = createSciFiBarBackground(barWidth.toInt(), barHeight.toInt(), tabOnTop = true)
+        healthFrameTable.left().padLeft(14f).padRight(14f).padTop(16f).padBottom(6f)
+        healthBarFill = Image(fillYellowDrawable)
+        healthBarFillCell = healthFrameTable.add(healthBarFill).size(maxHealthBarWidth, fillHeight).left()
+
+        // Health Stack: Embeds the number/text DIRECTLY INSIDE the progress bar
+        val healthStack = Stack()
+        healthStack.add(healthFrameTable)
+
+        val healthOverlay = Table()
+        healthOverlay.setFillParent(true)
+        healthTextLabel = Label("100 / 100 HP", Label.LabelStyle(fontMedium, Color.WHITE))
+        healthTextLabel.setAlignment(Align.center)
+        healthOverlay.add(healthTextLabel).expand().center().padTop(6f)
+        healthStack.add(healthOverlay)
+
+        statusContainer.add(healthStack).size(barWidth, barHeight).padBottom(14f).row()
+
+        // --- WEAPON & RELOAD PROGRESS SECTION ---
+        val weaponHeaderRow = Table()
+        weaponNameLabel = Label("PISTOL", Label.LabelStyle(fontSmall, colCyberOrange))
+        weaponHeaderRow.add(weaponNameLabel).left().expandX()
+        statusContainer.add(weaponHeaderRow).fillX().padBottom(5f).row()
+
+        val ammoFrameTable = Table()
+        ammoFrameTable.background = createSciFiBarBackground(barWidth.toInt(), barHeight.toInt(), tabOnTop = false)
+        ammoFrameTable.left().padLeft(14f).padRight(14f).padTop(6f).padBottom(16f)
+        ammoBarFill = Image(fillYellowDrawable)
+        ammoBarFillCell = ammoFrameTable.add(ammoBarFill).size(maxAmmoBarWidth, fillHeight).left()
+
+        // Ammo Stack: Embeds the ammo / reload % DIRECTLY INSIDE the progress bar
+        val ammoStack = Stack()
+        ammoStack.add(ammoFrameTable)
+
+        val ammoOverlay = Table()
+        ammoOverlay.setFillParent(true)
+        ammoCountLabel = Label("12 / 12", Label.LabelStyle(fontMedium, Color.WHITE))
+        ammoCountLabel.setAlignment(Align.center)
+        ammoOverlay.add(ammoCountLabel).expand().center().padBottom(6f)
+        ammoStack.add(ammoOverlay)
+
+        statusContainer.add(ammoStack).size(barWidth, barHeight)
+
+        rootTable.add(statusContainer).left().top()
+
+        // 2. Middle Sci-Fi Badges: Score & Frag (Larger: 200 x 64)
+        val middlePills = Table()
+        middlePills.padLeft(26f)
+
+        val scorePill = Table()
+        scorePill.background = createSciFiBadgeBackground(200, 64, colCyberOrange)
+        val scoreTag = Label("SCORE", Label.LabelStyle(fontSmall, colCyberYellow))
+        scoreValueLabel = Label("0", Label.LabelStyle(fontLarge, Color.WHITE))
+        scorePill.add(scoreTag).padRight(12f)
+        scorePill.add(scoreValueLabel)
+
+        val fragPill = Table()
+        fragPill.background = createSciFiBadgeBackground(200, 64, colCyberOrange)
+        val fragTag = Label("FRAG", Label.LabelStyle(fontSmall, colCyberDanger))
+        fragCountLabel = Label("0", Label.LabelStyle(fontLarge, Color.WHITE))
+        fragPill.add(fragTag).padRight(12f)
+        fragPill.add(fragCountLabel)
+
+        middlePills.add(scorePill).padRight(14f)
+        middlePills.add(fragPill)
+        rootTable.add(middlePills).expandX().left().top()
+
+        // 3. Audio Quick-Toggles (Top-Right, Larger)
+        val audioTable = Table()
+        val sfxBtn = createModernButton("SFX", 88f, 58f) {
+            val enabled = audioService.toggleSound()
+            sfxButtonLabel?.setText(if (enabled) "SFX" else "MUTED")
         }
-        hudCard.add(modeLabel).left().padBottom(4f).row()
-
-        if (config.mode != GameMode.OFFLINE) {
-            val roomRow = VisTable(false)
-            val rLbl = VisLabel("ROOM CODE: ${config.roomCode.ifEmpty { "ASSIGNING..." }}").apply {
-                color = Color(1f, 0.88f, 0.32f, 1f)
-            }
-            roomCodeLabel = rLbl
-            val copyCodeBtn = VisTextButton("COPY CODE").apply {
-                color = Color(0.35f, 0.95f, 1f, 1f)
-                addListener(object : ClickListener() {
-                    override fun clicked(event: InputEvent?, x: Float, y: Float) {
-                        audioService.play(SoundType.CLICK, volumeModifier = 0.5f)
-                        val code = networkSystem.activeRoomCode.ifEmpty { config.roomCode }
-                        if (code.isNotEmpty()) {
-                            Gdx.app.clipboard.contents = code
-                            networkSystem.postFeed("✓ Room Code [$code] copied! Share with your ${config.mode.displayName} team!")
-                        }
-                    }
-                })
-            }
-            roomRow.add(rLbl).left().padRight(10f)
-            roomRow.add(copyCodeBtn).height(24f)
-            hudCard.add(roomRow).left().padBottom(6f).row()
+        val bgmBtn = createModernButton("BGM", 88f, 58f) {
+            val enabled = audioService.toggleMusic()
+            bgmButtonLabel?.setText(if (enabled) "BGM" else "MUTED")
         }
+        audioTable.add(sfxBtn).padRight(10f)
+        audioTable.add(bgmBtn)
+        rootTable.add(audioTable).right().top()
 
-        // Health bar + text row
-        val healthRow = VisTable(false)
-        healthLabel = VisLabel("HP: 100 / 100").apply {
-            color = Color(0.35f, 1f, 0.5f, 1f)
-        }
-        val barContainer = Table()
-        barContainer.background = TextureRegionDrawable(barBgTexture!!)
-        healthBarFill = Image(TextureRegionDrawable(barFillTexture!!)).apply {
-            color = Color(0.25f, 0.95f, 0.4f, 1f)
-        }
-        barContainer.add(healthBarFill).width(160f).height(14f).left()
-
-        healthRow.add(healthLabel).width(115f).left().padRight(10f)
-        healthRow.add(barContainer).width(160f).height(14f).left()
-        hudCard.add(healthRow).left().padBottom(6f).row()
-
-        weaponLabel = VisLabel("Weapon: Pistol  [1-3 / Q,E]").apply {
-            color = Color(1f, 0.9f, 0.4f, 1f)
-        }
-        hudCard.add(weaponLabel).left().padBottom(4f).row()
-
-        ammoLabel = VisLabel("Ammo: 12 / 12 (Reserve: 60)   |   Frag: 3").apply {
-            color = Color.WHITE
-        }
-        hudCard.add(ammoLabel).left().padBottom(4f).row()
-
-        statsLabel = VisLabel("Kills: 0   |   Deaths: 0   |   Score: 0").apply {
-            color = Color(0.75f, 0.85f, 1f, 1f)
-        }
-        hudCard.add(statsLabel).left().padBottom(8f).row()
-
-        // Weapon quick-select buttons [1-3]
-        val weaponBar = VisTable(false)
-        WeaponType.values().forEachIndexed { idx, wType ->
-            val shortName = when (wType) {
-                WeaponType.PISTOL -> "1:Pistol [${wType.maxAmmo}]"
-                WeaponType.SHOTGUN -> "2:Shotgun [${wType.maxAmmo}]"
-                WeaponType.MACHINE_GUN -> "3:MG [${wType.maxAmmo}]"
-            }
-            val btn = VisTextButton(shortName).apply {
-                addListener(object : ClickListener() {
-                    override fun clicked(event: InputEvent?, x: Float, y: Float) {
-                        audioService.play(SoundType.CLICK, volumeModifier = 0.5f)
-                        requestedWeaponSelect = wType
-                    }
-                })
-            }
-            weaponButtons[wType] = btn
-            weaponBar.add(btn).height(28f).padRight(if (idx < WeaponType.values().lastIndex) 6f else 0f)
-        }
-        hudCard.add(weaponBar).left()
-
-        topLeftAnchor.add(hudCard).padTop(12f).padLeft(12f)
-        uiStage.addActor(topLeftAnchor)
-
-        // --- 2. TOP-CENTER COMBAT FEED BANNER ---
-        val topCenterAnchor = Table()
-        topCenterAnchor.setFillParent(true)
-        topCenterAnchor.top()
-
-        feedLabel = VisLabel("").apply {
-            setAlignment(Align.center)
-            color = Color(1f, 0.85f, 0.25f, 1f)
-            setFontScale(1.1f)
-        }
-        topCenterAnchor.add(feedLabel).padTop(16f)
-        uiStage.addActor(topCenterAnchor)
-
-        // --- 3. TOP-RIGHT CONTROLS & LIVE SCOREBOARD ---
-        val topRightAnchor = Table()
-        topRightAnchor.setFillParent(true)
-        topRightAnchor.top().right()
-
-        val rightColumn = VisTable(false)
-
-        val btnRow = VisTable(false)
-        sfxBtn = VisTextButton("SFX: ON").apply {
-            addListener(object : ClickListener() {
-                override fun clicked(event: InputEvent?, x: Float, y: Float) {
-                    val enabled = audioService.toggleSound()
-                    setText(if (enabled) "SFX: ON" else "SFX: OFF")
-                }
-            })
-        }
-        bgmBtn = VisTextButton("BGM: ON").apply {
-            addListener(object : ClickListener() {
-                override fun clicked(event: InputEvent?, x: Float, y: Float) {
-                    val enabled = audioService.toggleMusic()
-                    setText(if (enabled) "BGM: ON" else "BGM: OFF")
-                }
-            })
-        }
-        val menuBtn = VisTextButton("MENU").apply {
-            color = Color(1f, 0.45f, 0.45f, 1f)
-            addListener(object : ClickListener() {
-                override fun clicked(event: InputEvent?, x: Float, y: Float) {
-                    audioService.play(SoundType.CLICK)
-                    networkSystem.disconnect()
-                    config.onExitToMenu()
-                }
-            })
-        }
-
-        btnRow.add(sfxBtn).width(85f).height(34f).padRight(6f)
-        btnRow.add(bgmBtn).width(85f).height(34f).padRight(6f)
-        btnRow.add(menuBtn).width(80f).height(34f)
-        rightColumn.add(btnRow).right().padBottom(8f).row()
-
-        // Scoreboard card
-        val scoreboardCard = VisTable(false)
-        scoreboardCard.background = panelDrawable
-        scoreboardCard.pad(10f, 14f, 10f, 14f)
-
-        val sbTitle = VisLabel("MATCH SCOREBOARD").apply {
-            color = Color(0.3f, 0.9f, 1f, 1f)
-        }
-        sbTitleLabel = sbTitle
-        scoreboardCard.add(sbTitle).left().padBottom(4f).row()
-
-        scoreboardLabel = VisLabel("Waiting for players...").apply {
-            color = Color.WHITE
-        }
-        scoreboardCard.add(scoreboardLabel).left()
-
-        rightColumn.add(scoreboardCard).right()
-        topRightAnchor.add(rightColumn).padTop(12f).padRight(12f)
-        uiStage.addActor(topRightAnchor)
+        uiStage.addActor(rootTable)
     }
 
     private fun setupTouchControls() {
+        // Left side movement d-pad (Larger for comfortable thumb control)
         val leftTable = Table()
         leftTable.setFillParent(true)
-        leftTable.bottom().left()
+        leftTable.bottom().left().pad(28f)
 
-        val btnSize = 115f
-        val btnLeft = createTouchButton("LEFT") { touchLeft = it }
-        val btnRight = createTouchButton("RIGHT") { touchRight = it }
+        val btnLeft = createActionButton("<", 124f, 124f, isPrimary = false, fontOverride = fontXLarge) { touchLeft = it }
+        val btnRight = createActionButton(">", 124f, 124f, isPrimary = false, fontOverride = fontXLarge) { touchRight = it }
 
-        val moveTable = Table()
-        moveTable.add(btnLeft).size(btnSize).padRight(28f)
-        moveTable.add(btnRight).size(btnSize)
-
-        leftTable.add(moveTable).pad(45f)
+        leftTable.add(btnLeft).padRight(24f)
+        leftTable.add(btnRight)
         uiStage.addActor(leftTable)
 
+        // Right side Action Cluster (Larger sizes with big centered text)
         val rightTable = Table()
         rightTable.setFillParent(true)
-        rightTable.bottom().right()
+        rightTable.bottom().right().pad(28f)
 
-        val btnShoot = createTouchButton("FIRE") { touchShoot = it }
-        val btnReload = createTouchButton("RELOAD") { touchReload = it }
-        val btnWeapon = createTouchButton("GUN") { if (it) touchSwitchWeapon = true }
-        val btnJump = createTouchButton("JUMP") { touchJump = it }
-        val btnGrenade = createTouchButton("FRAG") { touchGrenade = it }
+        val btnJump = createActionButton("JUMP", 112f, 112f, isPrimary = false) { touchJump = it }
+        val btnReload = createActionButton("RLD", 112f, 112f, isPrimary = false) { touchReload = it }
+        val btnWeapon = createActionButton("SWAP", 112f, 112f, isPrimary = false) { if (it) touchSwitchWeapon = true }
+        val btnGrenade = createActionButton("BOMB", 112f, 112f, isPrimary = false) { touchGrenade = it }
+        val btnShoot = createActionButton("FIRE", 158f, 158f, isPrimary = true, fontOverride = fontXLarge) { touchShoot = it }
 
-        val actionGrid = Table()
-        actionGrid.add(btnWeapon).size(95f).pad(8f)
-        actionGrid.add(btnReload).size(95f).pad(8f).row()
-        actionGrid.add(btnGrenade).size(95f).pad(8f)
-        actionGrid.add(btnJump).size(105f).pad(8f)
+        val secCluster = Table()
+        secCluster.add(btnWeapon).pad(8f)
+        secCluster.add(btnJump).pad(8f).row()
+        secCluster.add(btnGrenade).pad(8f)
+        secCluster.add(btnReload).pad(8f)
 
-        rightTable.add(actionGrid).padRight(20f).padBottom(35f)
-        rightTable.add(btnShoot).size(150f).padRight(45f).padBottom(45f)
+        rightTable.add(secCluster).padRight(20f)
+        rightTable.add(btnShoot)
         uiStage.addActor(rightTable)
     }
 
-    private fun createTouchButton(text: String, action: (Boolean) -> Unit): Stack {
+    private fun createModernButton(
+        text: String,
+        width: Float,
+        height: Float,
+        onClick: () -> Unit
+    ): Stack {
         val stack = Stack()
-        val image = Image(getTouchTexture(false))
+        val normalDrawable = createRoundedDrawable(width.toInt(), height.toInt(), 12, colButtonBg, colCyberOrange, 2)
+        val pressedDrawable = createRoundedDrawable(width.toInt(), height.toInt(), 12, colButtonPressed, colCyberYellow, 2)
 
-        val label = VisLabel(text).apply {
-            setAlignment(Align.center)
-        }
+        val bgImage = Image(normalDrawable)
+        val label = Label(text, Label.LabelStyle(fontSmall, Color.WHITE))
+        label.setAlignment(Align.center)
 
-        stack.add(image)
+        if (text == "SFX") sfxButtonLabel = label
+        if (text == "BGM") bgmButtonLabel = label
+
+        stack.add(bgImage)
         stack.add(label)
 
         stack.addListener(object : ClickListener() {
             override fun touchDown(event: InputEvent?, x: Float, y: Float, pointer: Int, button: Int): Boolean {
-                audioService.play(SoundType.CLICK, volumeModifier = 0.4f)
-                action(true)
-                image.drawable = TextureRegionDrawable(getTouchTexture(true))
+                audioService.play(SoundType.CLICK, volumeModifier = 0.5f)
+                bgImage.drawable = pressedDrawable
                 return true
             }
 
             override fun touchUp(event: InputEvent?, x: Float, y: Float, pointer: Int, button: Int) {
-                action(false)
-                image.drawable = TextureRegionDrawable(getTouchTexture(false))
+                bgImage.drawable = normalDrawable
+                onClick()
             }
         })
         return stack
     }
 
-    override fun onTick() {
-        if (Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE)) {
-            networkSystem.disconnect()
-            config.onExitToMenu()
-            return
-        }
+    private fun createActionButton(
+        text: String,
+        width: Float,
+        height: Float,
+        isPrimary: Boolean,
+        fontOverride: BitmapFont = fontLarge,
+        onStateChange: (Boolean) -> Unit
+    ): Stack {
+        val stack = Stack()
+        val normalBg = if (isPrimary) colButtonPressed else colButtonBg
+        val border = if (isPrimary) colCyberYellow else colCyberOrange
 
-        // Update combat feed banner
-        feedLabel.setText(networkSystem.combatFeedMessage)
+        val normalDrawable = createRoundedDrawable(width.toInt(), height.toInt(), (height / 2).toInt(), normalBg, border, 3)
+        val pressedDrawable = createRoundedDrawable(width.toInt(), height.toInt(), (height / 2).toInt(), colDarkChamber, colCyberYellow, 4)
+
+        val bgImage = Image(normalDrawable)
+        val label = Label(text, Label.LabelStyle(fontOverride, Color.WHITE))
+        label.setAlignment(Align.center)
+
+        stack.add(bgImage)
+        stack.add(label)
+
+        stack.addListener(object : ClickListener() {
+            override fun touchDown(event: InputEvent?, x: Float, y: Float, pointer: Int, button: Int): Boolean {
+                audioService.play(SoundType.CLICK, volumeModifier = 0.4f)
+                bgImage.drawable = pressedDrawable
+                onStateChange(true)
+                return true
+            }
+
+            override fun touchUp(event: InputEvent?, x: Float, y: Float, pointer: Int, button: Int) {
+                bgImage.drawable = normalDrawable
+                onStateChange(false)
+            }
+        })
+        return stack
+    }
 
         // Update local player HUD (filter out RemotePlayerComponent!)
         world.family(
@@ -372,27 +585,17 @@ class UiSystem(
             if (player in remotePlayerCmps) return@forEach
 
             val health = healthCmps[player]
-            val hpInt = health.currentHealth.toInt().coerceAtLeast(0)
-            val maxHpInt = health.maxHealth.toInt().coerceAtLeast(1)
-            val ratio = (health.currentHealth / health.maxHealth).coerceIn(0f, 1f)
+            val hpRatio = (health.currentHealth / health.maxHealth).coerceIn(0f, 1f)
+            val fillW = max(2f, maxHealthBarWidth * hpRatio)
+            healthBarFillCell.width(fillW)
+            healthTextLabel.setText("${health.currentHealth.toInt()} / ${health.maxHealth.toInt()} HP")
 
-            if (player in deadCmps) {
-                healthLabel.setText("RESPAWNING...")
-                healthLabel.color = Color(1f, 0.35f, 0.35f, 1f)
+            if (hpRatio < 0.3f) {
+                healthBarFill.drawable = fillDangerDrawable
+                healthTextLabel.color = colCyberDanger
             } else {
-                healthLabel.setText("HP: $hpInt / $maxHpInt")
-                healthLabel.color = when {
-                    ratio > 0.5f -> Color(0.35f, 1f, 0.5f, 1f)
-                    ratio > 0.25f -> Color(1f, 0.8f, 0.2f, 1f)
-                    else -> Color(1f, 0.3f, 0.3f, 1f)
-                }
-            }
-
-            healthBarFill.setSize(160f * ratio, 14f)
-            healthBarFill.color = when {
-                ratio > 0.5f -> Color(0.25f, 0.95f, 0.4f, 1f)
-                ratio > 0.25f -> Color(1f, 0.75f, 0.2f, 1f)
-                else -> Color(1f, 0.25f, 0.25f, 1f)
+                healthBarFill.drawable = fillYellowDrawable
+                healthTextLabel.color = Color.WHITE
             }
 
             val attackCmp = attackCmps.getOrNull(player) ?: return@forEach
@@ -411,69 +614,45 @@ class UiSystem(
 
             val currentWeapon = weaponCmp?.currentWeapon
 
-            if (weaponCmp != null && currentWeapon != null) {
-                val currentAmmo = weaponCmp.ammoMap[currentWeapon] ?: currentWeapon.maxAmmo
-                val reserveAmmo = weaponCmp.reserveAmmoMap[currentWeapon] ?: currentWeapon.maxReserveAmmo
-                weaponLabel.setText("Weapon: ${currentWeapon.displayName}  [1-3 / Q,E]")
-                val reloadTag = if (attackCmp.isReloading) " (RELOADING...)" else ""
-                ammoLabel.setText("Ammo: $currentAmmo / ${currentWeapon.maxAmmo} (Total: $reserveAmmo)$reloadTag   |   Frag: ${attackCmp.fragAmmo}")
-
-                weaponButtons.forEach { (wType, btn) ->
-                    val wClip = weaponCmp.ammoMap[wType] ?: wType.maxAmmo
-                    val wRes = weaponCmp.reserveAmmoMap[wType] ?: wType.maxReserveAmmo
-                    val labelTxt = when (wType) {
-                        WeaponType.PISTOL -> "1:Pistol [$wClip/$wRes]"
-                        WeaponType.SHOTGUN -> "2:Shotgun [$wClip/$wRes]"
-                        WeaponType.MACHINE_GUN -> "3:MG [$wClip/$wRes]"
-                    }
-                    btn.setText(labelTxt)
-                    btn.color = if (wType == currentWeapon) {
-                        Color(0.25f, 0.95f, 1f, 1f)
-                    } else {
-                        Color(0.65f, 0.7f, 0.75f, 1f)
-                    }
-                }
+            val maxAmmo = currentWeapon?.maxAmmo ?: attackCmp.maxAmmo
+            val currentAmmo = if (weaponCmp != null && currentWeapon != null) {
+                weaponCmp.ammoMap[currentWeapon] ?: currentWeapon.maxAmmo
             } else {
-                ammoLabel.setText("Ammo: ${attackCmp.ammo} / ${attackCmp.maxAmmo}   |   Frag: ${attackCmp.fragAmmo}")
+                attackCmp.ammo
             }
 
-            val playerCmp = playerCmps[player]
-            statsLabel.setText("Kills: ${playerCmp.kills}   |   Deaths: ${playerCmp.deaths}   |   Score: ${playerCmp.score}")
+            val weaponName = currentWeapon?.displayName ?: "STANDARD"
+            weaponNameLabel.setText(weaponName.uppercase())
 
-            if (config.mode != GameMode.OFFLINE) {
-                val connStatus = if (networkSystem.isConnected) "ONLINE" else "CONNECTING..."
-                val roomCode = networkSystem.activeRoomCode.ifEmpty { config.roomCode.ifEmpty { "---" } }
-                modeLabel.setText("[${config.mode.displayName}] ${config.playerName} • $connStatus (${networkSystem.activePlayerCount}/${config.mode.maxPlayers})")
-                modeLabel.color = if (networkSystem.isConnected) Color(0.3f, 0.95f, 1f, 1f) else Color(1f, 0.8f, 0.3f, 1f)
-                roomCodeLabel?.setText("ROOM CODE: $roomCode")
-                sbTitleLabel.setText("ROOM [$roomCode] • ${config.mode.name} (${networkSystem.activePlayerCount}/${config.mode.maxPlayers})")
+            if (attackCmp.isReloading) {
+                val reloadDuration = currentWeapon?.reloadTime ?: attackCmp.reloadTime
+                val reloadRatio = (attackCmp.stateTime / reloadDuration).coerceIn(0f, 1f)
+                val reloadW = max(2f, maxAmmoBarWidth * reloadRatio)
+                ammoBarFill.drawable = fillAmberDrawable
+                ammoBarFillCell.width(reloadW)
+                ammoCountLabel.setText("RELOADING ${(reloadRatio * 100).toInt()}%")
+                ammoCountLabel.color = colCyberOrange
             } else {
-                modeLabel.setText("[Solo Practice] ${config.playerName}")
-                sbTitleLabel.setText("SOLO PRACTICE SCOREBOARD")
+                val ammoRatio = (currentAmmo.toFloat() / maxAmmo).coerceIn(0f, 1f)
+                val ammoW = max(2f, maxAmmoBarWidth * ammoRatio)
+                ammoBarFill.drawable = fillYellowDrawable
+                ammoBarFillCell.width(ammoW)
+                ammoCountLabel.setText("$currentAmmo / $maxAmmo")
+                ammoCountLabel.color = Color.WHITE
             }
-        }
 
-        // Update Live Scoreboard
-        val entries = networkSystem.getScoreboardEntries()
-        if (entries.isEmpty()) {
-            scoreboardLabel.setText("${config.playerName} — 100 HP | 0K / 0D")
-        } else {
-            val sb = StringBuilder()
-            entries.forEachIndexed { idx, e ->
-                val youTag = if (e.isLocal) " (YOU)" else ""
-                val hpStr = if (e.health <= 0f) "DEAD" else "${e.health.toInt()} HP"
-                sb.append("${idx + 1}. ${e.name}$youTag  —  $hpStr  |  ${e.kills}K / ${e.deaths}D")
-                if (idx < entries.lastIndex) sb.append("\n")
-            }
-            scoreboardLabel.setText(sb.toString())
+            fragCountLabel.setText("${attackCmp.fragAmmo}")
+            val playerCmp = playerCmps.getOrNull(player)
+            scoreValueLabel.setText("${playerCmp?.score ?: 0}")
         }
     }
 
     override fun onDispose() {
-        panelBgTexture?.dispose()
-        barBgTexture?.dispose()
-        barFillTexture?.dispose()
-        touchTexture?.dispose()
-        pressedTexture?.dispose()
+        disposables.forEach { it.dispose() }
+        disposables.clear()
+        generatedFonts.forEach { it.dispose() }
+        generatedFonts.clear()
+        fontGenerator?.dispose()
+        fontGenerator = null
     }
 }

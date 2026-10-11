@@ -8,17 +8,19 @@ import ktx.assets.disposeSafely
 import ktx.log.logger
 
 enum class SoundType(val fileName: String) {
-    SHOT("sounds/shot.wav"),
-    RELOAD("sounds/reload.wav"),
-    THROW("sounds/throw.wav"),
+    SHOT("sounds/shot.mp3"),
+    SHOTGUN("sounds/shotgun.mp3"),
+    RELOAD("sounds/reload.mp3"),
+    THROW("sounds/throw.mp3"),
     EXPLOSION("sounds/explosion.wav"),
-    JUMP("sounds/jump.wav"),
-    CLICK("sounds/click.wav")
+    JUMP("sounds/jump.mp3"),
+    CLICK("sounds/click.mp3")
 }
 
 class AudioService {
     private val soundCache = mutableMapOf<SoundType, Sound>()
     private var music: Music? = null
+    private var isDisposed = false
 
     var isSoundEnabled: Boolean = true
     var isMusicEnabled: Boolean = true
@@ -53,15 +55,15 @@ class AudioService {
 
     private fun loadMusic() {
         try {
-            val musicFile = Gdx.files.internal("sounds/bgm.wav")
+            val musicFile = Gdx.files.internal("sounds/bgm.mp3")
             if (musicFile.exists()) {
                 music = Gdx.audio.newMusic(musicFile).apply {
                     isLooping = true
                     volume = if (isMusicEnabled) musicVolume else 0f
                 }
-                log.info { "Loaded background music: sounds/bgm.wav" }
+                log.info { "Loaded background music: sounds/bgm.mp3" }
             } else {
-                log.error { "Background music file not found: sounds/bgm.wav" }
+                log.error { "Background music file not found: sounds/bgm.mp3" }
             }
         } catch (e: Exception) {
             log.error(e) { "Failed to load background music: sounds/bgm.wav" }
@@ -74,6 +76,10 @@ class AudioService {
         pitchVariation: Float = 0f,
         basePitch: Float = 1f
     ) {
+        if (isDisposed) {
+            log.warn { "Attempted to play sound after AudioService was disposed" }
+            return
+        }
         if (!isSoundEnabled) return
         val sound = soundCache[type] ?: return
 
@@ -88,39 +94,47 @@ class AudioService {
     }
 
     fun playMusic() {
-        if (music != null) {
-            music?.volume = if (isMusicEnabled) musicVolume else 0f
-            if (!music!!.isPlaying) {
-                music?.play()
-            }
+        if (isDisposed) {
+            log.warn { "Attempted to play music after AudioService was disposed" }
+            return
+        }
+        val currentMusic = music ?: return
+        currentMusic.volume = if (isMusicEnabled) musicVolume else 0f
+        if (!currentMusic.isPlaying) {
+            currentMusic.play()
         }
     }
 
     fun pauseMusic() {
+        if (isDisposed) return
         music?.pause()
     }
 
     fun resumeMusic() {
+        if (isDisposed) return
         if (isMusicEnabled && music != null && !music!!.isPlaying) {
             music?.play()
         }
     }
 
     fun stopMusic() {
+        if (isDisposed) return
         music?.stop()
     }
 
     fun toggleSound(): Boolean {
+        if (isDisposed) return false
         isSoundEnabled = !isSoundEnabled
         return isSoundEnabled
     }
 
     fun toggleMusic(): Boolean {
+        if (isDisposed) return false
         isMusicEnabled = !isMusicEnabled
         if (music != null) {
             if (isMusicEnabled) {
                 music?.volume = musicVolume
-                if (!music!!.isPlaying) {
+                if (music != null && !music!!.isPlaying) {
                     music?.play()
                 }
             } else {
@@ -131,10 +145,12 @@ class AudioService {
     }
 
     fun dispose() {
+        if (isDisposed) return
         soundCache.values.forEach { it.disposeSafely() }
         soundCache.clear()
         music?.disposeSafely()
         music = null
+        isDisposed = true
     }
 
     companion object {

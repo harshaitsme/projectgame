@@ -53,6 +53,7 @@ class GameScreen(private val config: GameConfig = GameConfig()) : KtxScreen {
     private val stage: Stage = Stage(ExtendViewport(16f, 9f), spriteBatch)
     private val uiStage: Stage = Stage(ScreenViewport(), spriteBatch)
     private val textureAtlas = TextureAtlas("graphics/PlayerObject.atlas")
+    private val mapLoader = TmxMapLoader()
 
     private var currentMap: TiledMap? = null
     private val phWorld = createWorld(gravity = vec2(0f, -20f)).apply {
@@ -107,7 +108,7 @@ class GameScreen(private val config: GameConfig = GameConfig()) : KtxScreen {
                 stage.addListener(system)
             }
         }
-        currentMap = TmxMapLoader().load("map/map1.tmx")
+        currentMap = mapLoader.load("map/map1.tmx")
         stage.fire(MapChangeEvent(currentMap!!))
         audioService.playMusic()
 
