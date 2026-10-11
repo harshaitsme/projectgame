@@ -1,5 +1,7 @@
 package io.github.shootgame.screen
 
+import io.github.shootgame.network.GameClient
+
 enum class GameMode(val displayName: String, val maxPlayers: Int, val description: String) {
     OFFLINE("Solo Practice", 1, "Play solo against AI bots on the arena map."),
     DUO("2P Duo Arena", 2, "2-Player live multiplayer PvP arena match."),
@@ -14,6 +16,7 @@ data class GameConfig(
     var createRoom: Boolean = false,
     var jwtToken: String = "",
     var sessionToken: String = "",
+    var preConnectedClient: GameClient? = null,
     var onExitToMenu: () -> Unit = {}
 ) {
     companion object {

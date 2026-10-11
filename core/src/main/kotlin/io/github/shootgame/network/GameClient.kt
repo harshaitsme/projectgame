@@ -40,6 +40,12 @@ class GameClient(
     @Volatile var activeGameMode: String = "DUO"
         private set
 
+    @Volatile var connectionFailed: Boolean = false
+        private set
+
+    @Volatile var lastError: String = ""
+        private set
+
     val packetQueue = ConcurrentLinkedQueue<Any>()
 
     fun connect(
@@ -53,6 +59,8 @@ class GameClient(
         localPlayerName = name
         activeRoomCode = roomCode.trim().uppercase()
         activeGameMode = gameMode.trim().uppercase()
+        connectionFailed = false
+        lastError = ""
         if (initialSessionToken.isNotBlank()) {
             sessionToken = initialSessionToken
         }
@@ -100,6 +108,8 @@ class GameClient(
 
                 println("TCP connection established to $host:$tcpPort as '$name' [Room=$activeRoomCode, Mode=$activeGameMode]")
             } catch (e: Exception) {
+                lastError = e.message ?: "Unable to reach multiplayer server"
+                connectionFailed = true
                 println("Could not connect to multiplayer server at $host: ${e.message}. Running in offline mode.")
                 close()
             }
