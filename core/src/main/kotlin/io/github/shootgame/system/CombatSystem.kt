@@ -128,23 +128,75 @@ class CombatSystem(
     private fun spawnGrenade(shooter: Entity, imageCmp: ImageComponent, moveCmp: MoveComponent) {
         val image = imageCmp.image
         val facingRight = image.scaleX > 0
+        val throwCos = if (facingRight) 1f else -1f
+        val throwSin = 0.55f
         val x = image.x + image.width * 0.5f + (if (facingRight) 0.5f else -0.5f)
         val y = image.y + image.height * 0.5f
+
+        if (shooter in playerCmps && shooter !in remotePlayerCmps && networkSystem.isConnected) {
+            networkSystem.sendBombThrow(
+                originX = x,
+                originY = y,
+                dirX = throwCos,
+                dirY = throwSin
+            )
+        }
 
         world.entity {
             add<SpawnComponent> {
                 type = "Frag"
                 location.set(x, y)
             }
+            add<FragComponent> {
+                fuseTime = 2.0f
+                isRemote = false
+            }
             add<OwnerComponent> {
                 owner = shooter
             }
             add<MoveComponent> {
-                cos = moveCmp.lastCos
-                sin = 0.5f // Throw slightly upwards
-                speed = 8f
+                cos = throwCos
+                sin = throwSin
+                speed = 7.5f
             }
         }
+    }
+
+    fun spawnRemoteGrenade(
+        shooter: Entity?,
+        remoteNetId: Int,
+        startX: Float,
+        startY: Float,
+        dirX: Float,
+        dirY: Float
+    ) {
+        val imageCmp = shooter?.let { imageCmps.getOrNull(it) }
+        if (imageCmp != null && dirX != 0f) {
+            imageCmp.image.originX = imageCmp.image.width * 0.5f
+            imageCmp.image.scaleX = if (dirX < 0f) -1f else 1f
+        }
+        world.entity {
+            add<SpawnComponent> {
+                type = "Frag"
+                location.set(startX, startY)
+            }
+            add<FragComponent> {
+                fuseTime = 2.35f
+                isRemote = true
+                remoteOwnerNetId = remoteNetId
+            }
+            if (shooter != null) {
+                add<OwnerComponent> {
+                    owner = shooter
+                }
+            }
+            add<MoveComponent> {
+                cos = if (dirX < 0f) -1f else 1f
+                sin = if (dirY != 0f) dirY else 0.55f
+                speed = 7.5f
+            }
+        }
+        audioService.play(SoundType.THROW, pitchVariation = 0.05f)
     }
 
     fun spawnRemoteShot(shooter: Entity, weapon: WeaponType?, dirX: Float) {

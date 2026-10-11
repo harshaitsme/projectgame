@@ -829,50 +829,53 @@ fn handle_message(
                 .unwrap_or_else(|| pkt.room_code.clone());
             pkt.room_code = shooter_room.clone();
 
-            // Enforce per-player weapon cooldown (server authority) & record shot telemetry.
-            if let Some(&entity) = entities.get(&pkt.id) {
-                let mut cooldowns = world.write::<Cooldown>();
-                if let Some(cd) = cooldowns.get_mut(entity) {
-                    if tick < cd.next_tick {
-                        return;
+            let is_bomb_packet = pkt.weapon_index == 99 || pkt.weapon_index == 100;
+            if !is_bomb_packet {
+                // Enforce per-player weapon cooldown (server authority) & record shot telemetry.
+                if let Some(&entity) = entities.get(&pkt.id) {
+                    let mut cooldowns = world.write::<Cooldown>();
+                    if let Some(cd) = cooldowns.get_mut(entity) {
+                        if tick < cd.next_tick {
+                            return;
+                        }
+                        cd.next_tick = tick + SHOOT_COOLDOWN_TICKS;
                     }
-                    cd.next_tick = tick + SHOOT_COOLDOWN_TICKS;
+                    let mut metas = world.write::<PlayerMeta>();
+                    if let Some(meta) = metas.get_mut(entity) {
+                        meta.weapon_index = pkt.weapon_index;
+                        meta.shots_fired = meta.shots_fired.saturating_add(1);
+                    }
                 }
-                let mut metas = world.write::<PlayerMeta>();
-                if let Some(meta) = metas.get_mut(entity) {
-                    meta.weapon_index = pkt.weapon_index;
-                    meta.shots_fired = meta.shots_fired.saturating_add(1);
+                if let Some(room) = rooms.get_mut(&shooter_room) {
+                    room.total_shots = room.total_shots.saturating_add(1);
                 }
-            }
-            if let Some(room) = rooms.get_mut(&shooter_room) {
-                room.total_shots = room.total_shots.saturating_add(1);
-            }
 
-            let (nx, ny) = (pkt.direction_x / mag, pkt.direction_y / mag);
-            let dmg = weapon_damage(pkt.weapon_index);
+                let (nx, ny) = (pkt.direction_x / mag, pkt.direction_y / mag);
+                let dmg = weapon_damage(pkt.weapon_index);
 
-            // Spawn a server-authoritative projectile entity (scoped to shooter's room).
-            let entity = world
-                .create_entity()
-                .with(Position {
-                    x: pkt.origin_x,
-                    y: pkt.origin_y,
-                })
-                .with(Velocity {
-                    dx: nx * PROJECTILE_SPEED,
-                    dy: ny * PROJECTILE_SPEED,
-                })
-                .with(Lifetime {
-                    remaining: PROJECTILE_LIFE,
-                })
-                .with(Owner {
-                    id: pkt.id,
-                    damage: dmg,
-                    weapon_index: pkt.weapon_index,
-                    room_code: shooter_room.clone(),
-                })
-                .build();
-            projectiles.push(entity);
+                // Spawn a server-authoritative projectile entity (scoped to shooter's room).
+                let entity = world
+                    .create_entity()
+                    .with(Position {
+                        x: pkt.origin_x,
+                        y: pkt.origin_y,
+                    })
+                    .with(Velocity {
+                        dx: nx * PROJECTILE_SPEED,
+                        dy: ny * PROJECTILE_SPEED,
+                    })
+                    .with(Lifetime {
+                        remaining: PROJECTILE_LIFE,
+                    })
+                    .with(Owner {
+                        id: pkt.id,
+                        damage: dmg,
+                        weapon_index: pkt.weapon_index,
+                        room_code: shooter_room.clone(),
+                    })
+                    .build();
+                projectiles.push(entity);
+            }
 
             // Broadcast PlayerShootPacket ONLY to other clients in the same room!
             let shoot_frame = net::tcp_frame(TYPE_PLAYER_SHOOT, &pkt);

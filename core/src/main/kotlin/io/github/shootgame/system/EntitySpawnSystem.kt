@@ -42,7 +42,8 @@ class EntitySpawnSystem(
     private val moveCmps: ComponentMapper<MoveComponent>,
     private val ownerCmps: ComponentMapper<OwnerComponent>,
     private val damageCmps: ComponentMapper<DamageComponent>,
-    private val bulletCmps: ComponentMapper<BulletComponent>
+    private val bulletCmps: ComponentMapper<BulletComponent>,
+    private val fragCmps: ComponentMapper<FragComponent>
 ) : EventListener, IteratingSystem() {
 
     private val cachedCfgs = mutableMapOf<String, SpawnCfg>()
@@ -87,6 +88,7 @@ class EntitySpawnSystem(
         val originalOwnerCmp = if (entity in ownerCmps) ownerCmps[entity] else null
         val originalDamageCmp = if (entity in damageCmps) damageCmps[entity] else null
         val originalBulletCmp = if (entity in bulletCmps) bulletCmps[entity] else null
+        val originalFragCmp = if (entity in fragCmps) fragCmps[entity] else null
 
         world.entity { spawnedEntity ->
             val imageCmp = add<ImageComponent> {
@@ -118,7 +120,7 @@ class EntitySpawnSystem(
                                          else size(cfg.model, cfg.type).y * 2.5f
                         val positionX = spawnCmp.location.x - finalWidth * 0.5f
                         val positionY = if (spawnCmp.type == "Explosion") {
-                            spawnCmp.location.y
+                            spawnCmp.location.y - finalHeight * 0.35f
                         } else {
                             spawnCmp.location.y - finalHeight * 0.5f
                         }
@@ -236,7 +238,13 @@ class EntitySpawnSystem(
             }
 
             if (spawnCmp.type == "Frag") {
-                add<FragComponent>()
+                add<FragComponent> {
+                    if (originalFragCmp != null) {
+                        fuseTime = originalFragCmp.fuseTime
+                        isRemote = originalFragCmp.isRemote
+                        remoteOwnerNetId = originalFragCmp.remoteOwnerNetId
+                    }
+                }
                 if (originalOwnerCmp != null) {
                     add<OwnerComponent> {
                         owner = originalOwnerCmp.owner
@@ -253,7 +261,14 @@ class EntitySpawnSystem(
 
             if (spawnCmp.type == "Explosion") {
                 add<ExplosionComponent> {
-                    range = size(cfg.model, cfg.type).x * 2.5f * 0.5f
+                    range = 3.8f
+                    centerX = spawnCmp.location.x
+                    centerY = spawnCmp.location.y
+                }
+                if (originalOwnerCmp != null) {
+                    add<OwnerComponent> {
+                        owner = originalOwnerCmp.owner
+                    }
                 }
             }
 

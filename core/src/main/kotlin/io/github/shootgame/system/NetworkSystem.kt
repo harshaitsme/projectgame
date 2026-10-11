@@ -4,11 +4,14 @@ import com.badlogic.gdx.physics.box2d.World as PhWorld
 import com.github.quillraven.fleks.ComponentMapper
 import com.github.quillraven.fleks.Entity
 import com.github.quillraven.fleks.IntervalSystem
+import io.github.shootgame.audio.AudioService
+import io.github.shootgame.audio.SoundType
 import io.github.shootgame.component.*
 import io.github.shootgame.network.GameClient
 import io.github.shootgame.network.NetworkConfig
 import io.github.shootgame.proto.*
 import io.github.shootgame.screen.GameConfig
+import ktx.math.vec2
 import kotlin.math.abs
 
 data class PlayerScoreEntry(
@@ -24,6 +27,7 @@ data class PlayerScoreEntry(
 class NetworkSystem(
     private val phWorld: PhWorld,
     private val config: GameConfig,
+    private val audioService: AudioService,
     private val netCmps: ComponentMapper<NetworkComponent>,
     private val moveCmps: ComponentMapper<MoveComponent>,
     private val physicCmps: ComponentMapper<PhysicComponent>,
@@ -34,12 +38,25 @@ class NetworkSystem(
     private val deadCmps: ComponentMapper<DeadComponent>,
     private val weaponCmps: ComponentMapper<WeaponComponent>,
     private val playerCmps: ComponentMapper<PlayerComponent>,
-    private val remotePlayerCmps: ComponentMapper<RemotePlayerComponent>
+    private val remotePlayerCmps: ComponentMapper<RemotePlayerComponent>,
+    private val fragCmps: ComponentMapper<FragComponent>
 ) : IntervalSystem() {
+
+    companion object {
+        const val WEAPON_INDEX_FRAG_THROW = 99
+        const val WEAPON_INDEX_FRAG_EXPLODE = 100
+        const val BOMB_Y_ENCODING_OFFSET = 1000f
+    }
 
     private var client: GameClient? = null
     private val remoteEntities = mutableMapOf<Int, Entity>()
     private val pendingSpawnNetIds = mutableSetOf<Int>()
+    private val lastRemoteBombThrowTime = mutableMapOf<Int, Float>()
+    private val lastRemoteBombExplodeTime = mutableMapOf<Int, Float>()
+    private var networkElapsedTime = 0f
+    private var pendingExplodeRetryTimer = -1f
+    private var pendingExplodeRetryX = 0f
+    private var pendingExplodeRetryY = 0f
 
     var myNetworkId: Int = -1
         private set
@@ -77,6 +94,16 @@ class NetworkSystem(
     fun postFeed(msg: String, duration: Float = 3.5f) {
         combatFeedMessage = msg
         combatFeedTimer = duration
+    }
+
+    fun forceImmediateSync() {
+        syncTimer = syncRate
+    }
+
+    fun markRemoteBombDetonated(remoteNetId: Int) {
+        if (remoteNetId >= 0) {
+            lastRemoteBombExplodeTime[remoteNetId] = networkElapsedTime
+        }
     }
 
     fun onLocalBulletHitRemote(remote: Entity) {
@@ -194,7 +221,35 @@ class NetworkSystem(
         client?.sendShoot(originX, originY, dirX, dirY, weaponIndex)
     }
 
+    fun sendBombThrow(originX: Float, originY: Float, dirX: Float, dirY: Float) {
+        // Offset originY by +1000f so any unpatched server spawns its projectile far above the arena
+        // while forwarding the exact coordinates over both TCP and UDP to all clients in the room.
+        client?.sendShoot(originX, originY + BOMB_Y_ENCODING_OFFSET, dirX, dirY, WEAPON_INDEX_FRAG_THROW)
+    }
+
+    fun sendBombExplosion(explodeX: Float, explodeY: Float) {
+        // Broadcast authoritative detonation coordinates to all clients in the room.
+        client?.sendShoot(explodeX, explodeY + BOMB_Y_ENCODING_OFFSET, 1f, 0f, WEAPON_INDEX_FRAG_EXPLODE)
+        pendingExplodeRetryX = explodeX
+        pendingExplodeRetryY = explodeY
+        pendingExplodeRetryTimer = 0.065f
+    }
+
     override fun onTick() {
+        networkElapsedTime += deltaTime
+        if (pendingExplodeRetryTimer > 0f) {
+            pendingExplodeRetryTimer -= deltaTime
+            if (pendingExplodeRetryTimer <= 0f) {
+                pendingExplodeRetryTimer = -1f
+                client?.sendShoot(
+                    pendingExplodeRetryX,
+                    pendingExplodeRetryY + BOMB_Y_ENCODING_OFFSET,
+                    1f,
+                    0f,
+                    WEAPON_INDEX_FRAG_EXPLODE
+                )
+            }
+        }
         if (combatFeedTimer > 0f) {
             combatFeedTimer = (combatFeedTimer - deltaTime).coerceAtLeast(0f)
             if (combatFeedTimer <= 0f) {
@@ -419,22 +474,91 @@ class NetworkSystem(
                     val id = packet.id
                     if (id != myNetworkId) {
                         val remote = remoteEntities[id]
-                        if (remote != null && remote in netCmps && remote !in deadCmps) {
-                            val netCmp = netCmps[remote]
-                            netCmp.attackHoldTimer = 0.25f
-                            if (packet.directionX != 0f) {
-                                netCmp.targetSin = if (packet.directionX < 0f) -1f else 1f
+                        when (packet.weaponIndex) {
+                            WEAPON_INDEX_FRAG_THROW -> {
+                                val lastThrow = lastRemoteBombThrowTime[id] ?: -10f
+                                if (networkElapsedTime - lastThrow >= 0.35f) {
+                                    lastRemoteBombThrowTime[id] = networkElapsedTime
+                                    val decodedY = if (packet.originY > 500f) {
+                                        packet.originY - BOMB_Y_ENCODING_OFFSET
+                                    } else {
+                                        packet.originY
+                                    }
+                                    if (remote != null && remote in netCmps) {
+                                        val netCmp = netCmps[remote]
+                                        netCmp.throwHoldTimer = 0.45f
+                                        if (packet.directionX != 0f) {
+                                            netCmp.targetSin = if (packet.directionX < 0f) -1f else 1f
+                                        }
+                                    }
+                                    combatSystem.spawnRemoteGrenade(
+                                        shooter = remote,
+                                        remoteNetId = id,
+                                        startX = packet.originX,
+                                        startY = decodedY,
+                                        dirX = packet.directionX,
+                                        dirY = packet.directionY
+                                    )
+                                }
                             }
-                            val weapons = WeaponType.values()
-                            val weapon = if (packet.weaponIndex in weapons.indices) {
-                                weapons[packet.weaponIndex]
-                            } else {
-                                WeaponType.PISTOL
+                            WEAPON_INDEX_FRAG_EXPLODE -> {
+                                val lastExplode = lastRemoteBombExplodeTime[id] ?: -10f
+                                if (networkElapsedTime - lastExplode >= 0.35f) {
+                                    lastRemoteBombExplodeTime[id] = networkElapsedTime
+                                    val explodeX = packet.originX
+                                    val explodeY = if (packet.originY > 500f) {
+                                        packet.originY - BOMB_Y_ENCODING_OFFSET
+                                    } else {
+                                        packet.originY
+                                    }
+
+                                    // Remove the oldest active remote Frag entity for this player so it doesn't detonate a second time
+                                    var oldestFrag: Entity? = null
+                                    var minFuse = Float.MAX_VALUE
+                                    world.family(allOf = arrayOf(FragComponent::class)).forEach { fragEntity ->
+                                        val frag = fragCmps[fragEntity]
+                                        if (frag.isRemote && frag.remoteOwnerNetId == id && frag.fuseTime < minFuse) {
+                                            minFuse = frag.fuseTime
+                                            oldestFrag = fragEntity
+                                        }
+                                    }
+                                    if (oldestFrag != null) {
+                                        world.remove(oldestFrag!!)
+                                    }
+
+                                    world.entity {
+                                        add<SpawnComponent> {
+                                            type = "Explosion"
+                                            location.set(vec2(explodeX, explodeY))
+                                        }
+                                        if (remote != null) {
+                                            add<OwnerComponent> {
+                                                owner = remote
+                                            }
+                                        }
+                                    }
+                                    audioService.play(SoundType.EXPLOSION)
+                                }
                             }
-                            weaponCmps.getOrNull(remote)?.selectWeapon(weapon)
-                            if (netCmp.remoteShootCooldown <= 0f) {
-                                combatSystem.spawnRemoteShot(remote, weapon, netCmp.targetSin)
-                                netCmp.remoteShootCooldown = weapon.fireRate
+                            else -> {
+                                if (remote != null && remote in netCmps && remote !in deadCmps) {
+                                    val netCmp = netCmps[remote]
+                                    netCmp.attackHoldTimer = 0.25f
+                                    if (packet.directionX != 0f) {
+                                        netCmp.targetSin = if (packet.directionX < 0f) -1f else 1f
+                                    }
+                                    val weapons = WeaponType.values()
+                                    val weapon = if (packet.weaponIndex in weapons.indices) {
+                                        weapons[packet.weaponIndex]
+                                    } else {
+                                        WeaponType.PISTOL
+                                    }
+                                    weaponCmps.getOrNull(remote)?.selectWeapon(weapon)
+                                    if (netCmp.remoteShootCooldown <= 0f) {
+                                        combatSystem.spawnRemoteShot(remote, weapon, netCmp.targetSin)
+                                        netCmp.remoteShootCooldown = weapon.fireRate
+                                    }
+                                }
                             }
                         }
                     }

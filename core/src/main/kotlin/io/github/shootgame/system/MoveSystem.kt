@@ -48,11 +48,10 @@ class MoveSystem(
                 moveCmp.sin * moveCmp.speed
             )
         } else if (isFrag) {
-            // For grenades, we only set the horizontal speed, let gravity handle vertical
-            body.setLinearVelocity(
-                moveCmp.cos * moveCmp.speed,
-                currentVelocity.y
-            )
+            // Let Box2D handle grenade arc & wall bounces; apply gentle friction when rolling on floor
+            if (abs(currentVelocity.y) < 0.25f) {
+                body.setLinearVelocity(currentVelocity.x * 0.94f, currentVelocity.y)
+            }
         } else if (entity !in remotePlayerCmps) {
             // Keep local player & enemies inside the indoor map arena (prevent roof/void trapping)
             if (body.position.y > 9.5f || body.position.y < 1.0f) {
