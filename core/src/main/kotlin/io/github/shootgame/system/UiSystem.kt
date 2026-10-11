@@ -6,6 +6,8 @@ import com.badlogic.gdx.graphics.Color
 import com.badlogic.gdx.graphics.Pixmap
 import com.badlogic.gdx.graphics.Texture
 import com.badlogic.gdx.graphics.g2d.BitmapFont
+import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator
+import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator.FreeTypeFontParameter
 import com.badlogic.gdx.scenes.scene2d.InputEvent
 import com.badlogic.gdx.scenes.scene2d.Stage
 import com.badlogic.gdx.scenes.scene2d.ui.*
@@ -56,6 +58,11 @@ class UiSystem(
     }
 
     private val disposables = mutableListOf<Texture>()
+    private var fontGenerator: FreeTypeFontGenerator? = null
+    private val generatedFonts = mutableListOf<BitmapFont>()
+    private lateinit var fontSmall: BitmapFont
+    private lateinit var fontMedium: BitmapFont
+    private lateinit var fontLarge: BitmapFont
 
     // Color Palette inspired by stylized 3D mobile battlegrounds
     private val colBgDark = Color(0.06f, 0.09f, 0.16f, 0.85f)
@@ -91,6 +98,48 @@ class UiSystem(
         if (Gdx.app.type == Application.ApplicationType.Android) {
             setupTouchControls()
         }
+    }
+
+    private fun initFonts() {
+        val candidates = listOf(
+            "fonts/KnightWarrior.otf",
+            "assets/fonts/KnightWarrior.otf"
+        )
+        val fontHandle = candidates
+            .map { Gdx.files.internal(it) }
+            .firstOrNull { it.exists() }
+
+        if (fontHandle != null) {
+            try {
+                val generator = FreeTypeFontGenerator(fontHandle)
+                fontGenerator = generator
+
+                val makeFont = { size: Int, border: Float ->
+                    val param = FreeTypeFontParameter().apply {
+                        this.size = size
+                        this.color = Color.WHITE
+                        this.borderWidth = border
+                        this.borderColor = Color(0f, 0f, 0f, 0.75f)
+                        this.minFilter = Texture.TextureFilter.Linear
+                        this.magFilter = Texture.TextureFilter.Linear
+                    }
+                    generator.generateFont(param).also { generatedFonts.add(it) }
+                }
+
+                fontSmall = makeFont(13, 1f)
+                fontMedium = makeFont(16, 1.2f)
+                fontLarge = makeFont(20, 1.5f)
+                return
+            } catch (e: Exception) {
+                Gdx.app.error("UiSystem", "Failed to load KnightWarrior font, fallback to default", e)
+            }
+        }
+
+        val defaultFont = BitmapFont()
+        generatedFonts.add(defaultFont)
+        fontSmall = defaultFont
+        fontMedium = defaultFont
+        fontLarge = defaultFont
     }
 
     private fun createRoundedDrawable(
@@ -160,8 +209,8 @@ class UiSystem(
         statusCard.pad(10f, 14f, 10f, 14f)
 
         // Health Section
-        val hpTitle = Label("VITAL SIGNS", Label.LabelStyle(BitmapFont(), colCyanGlow))
-        healthTextLabel = Label("100 / 100", Label.LabelStyle(BitmapFont(), Color.WHITE))
+        val hpTitle = Label("VITAL SIGNS", Label.LabelStyle(fontSmall, colCyanGlow))
+        healthTextLabel = Label("100 / 100", Label.LabelStyle(fontMedium, Color.WHITE))
 
         val healthTrack = Table()
         healthTrack.background = createRoundedDrawable(200, 18, 9, colBgDark, colBorderSoft, 1)
@@ -177,8 +226,8 @@ class UiSystem(
 
         // Weapon & Ammo Section
         val weaponRow = Table()
-        weaponNameLabel = Label("Pistol", Label.LabelStyle(BitmapFont(), colCyanGlow))
-        ammoCountLabel = Label("12 / 12", Label.LabelStyle(BitmapFont(), Color.WHITE))
+        weaponNameLabel = Label("Pistol", Label.LabelStyle(fontMedium, colCyanGlow))
+        ammoCountLabel = Label("12 / 12", Label.LabelStyle(fontMedium, Color.WHITE))
         weaponRow.add(weaponNameLabel).left().expandX()
         weaponRow.add(ammoCountLabel).right()
         statusCard.add(weaponRow).colspan(2).fillX()
@@ -192,16 +241,16 @@ class UiSystem(
         // Score Pill
         val scorePill = Table()
         scorePill.background = createRoundedDrawable(140, 44, 22, colCardBg, colBorderSoft, 2)
-        val scoreTag = Label("SCORE", Label.LabelStyle(BitmapFont(), colAmber))
-        scoreValueLabel = Label("0", Label.LabelStyle(BitmapFont(), Color.WHITE))
+        val scoreTag = Label("SCORE", Label.LabelStyle(fontSmall, colAmber))
+        scoreValueLabel = Label("0", Label.LabelStyle(fontMedium, Color.WHITE))
         scorePill.add(scoreTag).padRight(8f)
         scorePill.add(scoreValueLabel)
 
         // Frag Pill
         val fragPill = Table()
         fragPill.background = createRoundedDrawable(130, 44, 22, colCardBg, colBorderSoft, 2)
-        val fragTag = Label("FRAG", Label.LabelStyle(BitmapFont(), colHealthDanger))
-        fragCountLabel = Label("0", Label.LabelStyle(BitmapFont(), Color.WHITE))
+        val fragTag = Label("FRAG", Label.LabelStyle(fontSmall, colHealthDanger))
+        fragCountLabel = Label("0", Label.LabelStyle(fontMedium, Color.WHITE))
         fragPill.add(fragTag).padRight(8f)
         fragPill.add(fragCountLabel)
 
@@ -272,7 +321,7 @@ class UiSystem(
         val pressedDrawable = createRoundedDrawable(width.toInt(), height.toInt(), 12, colButtonPressed, colCyanGlow, 2)
 
         val bgImage = Image(normalDrawable)
-        val label = Label(text, Label.LabelStyle(BitmapFont(), Color.WHITE))
+        val label = Label(text, Label.LabelStyle(fontMedium, Color.WHITE))
         label.setAlignment(Align.center)
 
         if (text == "SFX") sfxButtonLabel = label
@@ -311,7 +360,7 @@ class UiSystem(
         val pressedDrawable = createRoundedDrawable(width.toInt(), height.toInt(), (height / 2).toInt(), colButtonPressed, colCyanGlow, 3)
 
         val bgImage = Image(normalDrawable)
-        val label = Label(text, Label.LabelStyle(BitmapFont(), Color.WHITE))
+        val label = Label(text, Label.LabelStyle(fontLarge, Color.WHITE))
         label.setAlignment(Align.center)
 
         stack.add(bgImage)
@@ -385,5 +434,9 @@ class UiSystem(
     override fun onDispose() {
         disposables.forEach { it.dispose() }
         disposables.clear()
+        generatedFonts.forEach { it.dispose() }
+        generatedFonts.clear()
+        fontGenerator?.dispose()
+        fontGenerator = null
     }
 }
