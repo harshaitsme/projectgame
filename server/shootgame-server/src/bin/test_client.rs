@@ -14,6 +14,7 @@ fn connect_and_login(name: &str, token: &str) -> (TcpStream, u32, f32, f32, Stri
     let login = LoginPacket {
         player_name: name.into(),
         session_token: token.into(),
+        ..Default::default()
     };
     let frame = net::tcp_frame(net::TYPE_LOGIN, &login);
     stream.write_all(&frame).unwrap();
@@ -21,8 +22,8 @@ fn connect_and_login(name: &str, token: &str) -> (TcpStream, u32, f32, f32, Stri
     // Read framed LoginResponsePacket.
     let resp: LoginResponsePacket = net::read_login_response(&mut stream).expect("login response");
     println!(
-        "{name}: id={}, spawn=({}, {}), token={}",
-        resp.assigned_id, resp.spawn_x, resp.spawn_y, resp.session_token
+        "{name}: id={}, room={}, spawn=({}, {}), token={}",
+        resp.assigned_id, resp.room_code, resp.spawn_x, resp.spawn_y, resp.session_token
     );
     (stream, resp.assigned_id, resp.spawn_x, resp.spawn_y, resp.session_token)
 }
@@ -52,6 +53,7 @@ fn main() {
         origin_y: a_y,
         direction_x: 1.0,
         direction_y: 0.0,
+        ..Default::default()
     };
     let frame = net::tcp_frame(net::TYPE_PLAYER_SHOOT, &shoot);
     a_stream.write_all(&frame).unwrap();

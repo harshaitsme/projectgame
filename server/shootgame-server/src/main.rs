@@ -1,4 +1,5 @@
-/// Phase 4 – ECS Simulation & Game Systems for ShootGame Rust Dedicated Server
+/// Phase 4 – ECS Simulation, Room Matchmaking (Duo/Squad) & Firebase Telemetry
+/// for ShootGame Rust Dedicated Server
 ///
 /// Architecture: single-owner game loop.
 /// `specs::World` is not `Send`, so it lives inside the main task exclusively.
@@ -6,6 +7,10 @@
 /// (wrapped in `Arc` for the registration-receiver task), plus per-client TCP
 /// writer channels so state/combat events are delivered reliably even across
 /// strict NATs or emulators that block inbound UDP.
+use shootgame_server::firebase::{
+    self, CombatEventTelemetry, FirebaseOp, RoomPlayerTelemetry, RoomTelemetry,
+    ServerAnalyticsSnapshot,
+};
 use shootgame_server::network::{
     self as net,
     LoginResponsePacket, PlayerConnectedPacket, PlayerDisconnectedPacket,
@@ -14,13 +19,14 @@ use shootgame_server::network::{
     TYPE_PLAYER_HIT, TYPE_PLAYER_SHOOT, TYPE_PLAYER_STATE,
 };
 use specs::{Component, Entity, Join, VecStorage, World};
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::net::SocketAddr;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
+use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, UdpSocket};
-use tokio::sync::{mpsc, oneshot};
+use tokio::sync::{mpsc, oneshot, RwLock};
 use tokio::time::{interval, Duration, MissedTickBehavior};
 
 /// Fixed simulation timestep (60 Hz).
@@ -44,6 +50,15 @@ const VIEW_RADIUS_SQ: f32 = VIEW_RADIUS * VIEW_RADIUS;
 /// Reconnection grace period (ticks). A disconnected session stays resumable
 /// for this long — 120 s at 60 Hz.
 const SESSION_GRACE_TICKS: u64 = 120 * 60;
+/// Maximum recent combat/room events retained in analytics snapshot.
+const MAX_RECENT_EVENTS: usize = 40;
+
+fn unix_now() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
 
 // ---------------------------------------------------------------------------
 // ECS components.
@@ -107,11 +122,13 @@ impl Component for Health {
     type Storage = VecStorage<Health>;
 }
 
-/// Marks an entity as a projectile and carries the shooter's client id and weapon damage.
-#[derive(Debug, Clone, Copy)]
+/// Marks an entity as a projectile and carries the shooter's client id, weapon damage, and room code.
+#[derive(Debug, Clone)]
 struct Owner {
     id: u32,
     damage: f32,
+    weapon_index: u32,
+    room_code: String,
 }
 impl Component for Owner {
     type Storage = VecStorage<Owner>;
@@ -137,21 +154,38 @@ impl Component for ActionState {
     type Storage = VecStorage<ActionState>;
 }
 
-/// Player metadata (username, kills, deaths, selected weapon).
+/// Player metadata (username, kills, deaths, selected weapon, room & telemetry stats).
 #[derive(Debug, Clone, Default)]
 struct PlayerMeta {
     name: String,
     kills: u32,
     deaths: u32,
     weapon_index: u32,
+    room_code: String,
+    game_mode: String,
+    shots_fired: u32,
+    hits_landed: u32,
+    damage_dealt: f32,
 }
 impl Component for PlayerMeta {
     type Storage = VecStorage<PlayerMeta>;
 }
 
-/// Default spawn position on map1.tmx indoor floor for a given client id.
-fn spawn_pos(id: u32) -> (f32, f32) {
-    match (id.saturating_sub(1)) % 4 {
+/// Server-side Match Room (Duo = 2 players max, Squad = 4 players max).
+#[derive(Debug, Clone)]
+struct GameRoom {
+    room_code: String,
+    game_mode: String,
+    max_players: u32,
+    players: Vec<u32>,
+    total_kills: u32,
+    total_shots: u32,
+    created_at: u64,
+}
+
+/// Default spawn position on map1.tmx indoor floor for a given slot index (0..4).
+fn spawn_pos(slot: u32) -> (f32, f32) {
+    match slot % 4 {
         0 => (12.47, 5.2),
         1 => (6.5, 5.2),
         2 => (15.5, 5.2),
@@ -164,8 +198,39 @@ fn weapon_damage(weapon_index: u32) -> f32 {
         0 => 20.0, // Pistol
         1 => 18.0, // Shotgun
         2 => 12.0, // Machine Gun
-        3 => 55.0, // Sniper
         _ => 20.0,
+    }
+}
+
+fn weapon_name(weapon_index: u32) -> &'static str {
+    match weapon_index {
+        0 => "Pistol",
+        1 => "Shotgun",
+        2 => "Machine Gun",
+        _ => "Pistol",
+    }
+}
+
+/// Generate a unique 6-character uppercase alphanumeric room code (excluding ambiguous 0/O/1/I).
+fn gen_room_code(existing: &HashMap<String, GameRoom>) -> String {
+    const CHARSET: &[u8] = b"ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    loop {
+        let mut code = String::with_capacity(6);
+        for _ in 0..6 {
+            let idx = (rand::random::<u32>() as usize) % CHARSET.len();
+            code.push(CHARSET[idx] as char);
+        }
+        if !existing.contains_key(&code) {
+            return code;
+        }
+    }
+}
+
+fn normalize_mode(raw: &str) -> (&'static str, u32) {
+    if raw.trim().eq_ignore_ascii_case("SQUAD") {
+        ("SQUAD", 4)
+    } else {
+        ("DUO", 2)
     }
 }
 
@@ -178,6 +243,7 @@ struct Session {
     player_id: u32,
     connected: bool,
     last_active_tick: u64,
+    room_code: String,
 }
 
 /// Reply sent back over a oneshot channel when the main loop resolves a login.
@@ -186,13 +252,20 @@ struct LoginResult {
     spawn_x: f32,
     spawn_y: f32,
     session_token: String,
+    room_code: String,
+    game_mode: String,
+    max_players: u32,
+    current_players: u32,
 }
 
 enum ServerMessage {
-    /// A client requested login (or reconnection).
+    /// A client requested login (or reconnection) with optional room creation/join parameters.
     Login {
         player_name: String,
         session_token: String,
+        room_code: String,
+        game_mode: String,
+        create_room: bool,
         tcp_tx: mpsc::UnboundedSender<Vec<u8>>,
         reply: oneshot::Sender<LoginResult>,
     },
@@ -273,6 +346,9 @@ async fn client_handler(
                         .send(ServerMessage::Login {
                             player_name: login.player_name,
                             session_token: login.session_token,
+                            room_code: login.room_code,
+                            game_mode: login.game_mode,
+                            create_room: login.create_room,
                             tcp_tx: tcp_tx.clone(),
                             reply: reply_tx,
                         })
@@ -292,15 +368,23 @@ async fn client_handler(
                     };
                     client_id = Some(result.id);
                     eprintln!(
-                        "Client {} ready: id={}, addr={remote}",
+                        "Client {} ready: id={}, room={} ({}/{} {}), addr={remote}",
                         if is_reconnect { "reconnected" } else { "connected" },
-                        result.id
+                        result.id,
+                        result.room_code,
+                        result.current_players,
+                        result.max_players,
+                        result.game_mode
                     );
                     let resp = LoginResponsePacket {
                         assigned_id: result.id,
                         spawn_x: result.spawn_x,
                         spawn_y: result.spawn_y,
                         session_token: result.session_token,
+                        room_code: result.room_code,
+                        game_mode: result.game_mode,
+                        max_players: result.max_players,
+                        current_players: result.current_players,
                     };
                     let _ = tcp_tx.send(net::tcp_frame(TYPE_LOGIN_RESPONSE, &resp));
                 }
@@ -371,6 +455,19 @@ async fn udp_receiver(udp: Arc<UdpSocket>, msg_tx: mpsc::Sender<ServerMessage>) 
     }
 }
 
+fn push_telemetry_event(
+    recent_events: &mut VecDeque<CombatEventTelemetry>,
+    firebase_tx: &mpsc::UnboundedSender<FirebaseOp>,
+    ev: CombatEventTelemetry,
+) {
+    let json = firebase::event_to_json(&ev);
+    let _ = firebase_tx.send(FirebaseOp::PushEvent(json));
+    recent_events.push_front(ev);
+    while recent_events.len() > MAX_RECENT_EVENTS {
+        recent_events.pop_back();
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Message application to the World.
 // ---------------------------------------------------------------------------
@@ -383,6 +480,10 @@ fn handle_message(
     projectiles: &mut Vec<Entity>,
     sessions: &mut HashMap<String, Session>,
     token_by_player: &mut HashMap<u32, String>,
+    rooms: &mut HashMap<String, GameRoom>,
+    player_rooms: &mut HashMap<u32, String>,
+    recent_events: &mut VecDeque<CombatEventTelemetry>,
+    firebase_tx: &mpsc::UnboundedSender<FirebaseOp>,
     udp: &Arc<UdpSocket>,
     msg: ServerMessage,
     tick: u64,
@@ -391,13 +492,25 @@ fn handle_message(
         ServerMessage::Login {
             player_name,
             session_token,
+            room_code,
+            game_mode,
+            create_room,
             tcp_tx,
             reply,
         } => {
             let now = tick;
+            let (mode_str, default_max) = normalize_mode(&game_mode);
+            let clean_req_code: String = room_code
+                .trim()
+                .chars()
+                .filter(|c| c.is_ascii_alphanumeric())
+                .map(|c| c.to_ascii_uppercase())
+                .take(8)
+                .collect();
+
             // Resume an existing session only if the token is valid AND not currently connected
             // by another active client window.
-            let (player_id, token) = if !session_token.is_empty()
+            let (player_id, token, resumed_room) = if !session_token.is_empty()
                 && sessions
                     .get(&session_token)
                     .map(|s| !s.connected)
@@ -407,7 +520,8 @@ fn handle_message(
                 sess.connected = true;
                 sess.last_active_tick = now;
                 let pid = sess.player_id;
-                (pid, session_token)
+                let prev_room = sess.room_code.clone();
+                (pid, session_token, Some(prev_room))
             } else {
                 let id = NEXT_CLIENT_ID.fetch_add(1, Ordering::Relaxed);
                 let token = gen_token();
@@ -417,22 +531,152 @@ fn handle_message(
                         player_id: id,
                         connected: true,
                         last_active_tick: now,
+                        room_code: String::new(),
                     },
                 );
                 token_by_player.insert(id, token.clone());
-                (id, token)
+                (id, token, None)
             };
-            eprintln!("Login resolved: player={player_name:?} id={player_id}");
 
-            let (sx, sy) = spawn_pos(player_id);
+            let display_name = if player_name.trim().is_empty() {
+                format!("Player_{player_id}")
+            } else {
+                player_name.trim().to_string()
+            };
+
+            // Resolve or create the GameRoom (Duo 2P or Squad 4P)
+            let resolved_code = if let Some(prev) = resumed_room.filter(|c| !c.is_empty() && rooms.contains_key(c)) {
+                prev
+            } else if create_room {
+                let code = if clean_req_code.len() >= 4 && !rooms.contains_key(&clean_req_code) {
+                    clean_req_code
+                } else {
+                    gen_room_code(rooms)
+                };
+                rooms.insert(
+                    code.clone(),
+                    GameRoom {
+                        room_code: code.clone(),
+                        game_mode: mode_str.to_string(),
+                        max_players: default_max,
+                        players: Vec::new(),
+                        total_kills: 0,
+                        total_shots: 0,
+                        created_at: unix_now(),
+                    },
+                );
+                push_telemetry_event(
+                    recent_events,
+                    firebase_tx,
+                    CombatEventTelemetry {
+                        event_type: "ROOM_CREATED".to_string(),
+                        room_code: code.clone(),
+                        game_mode: mode_str.to_string(),
+                        actor: display_name.clone(),
+                        target: format!("{default_max}P {mode_str} Room"),
+                        weapon: "-".to_string(),
+                        damage: 0.0,
+                        timestamp: unix_now(),
+                    },
+                );
+                code
+            } else if !clean_req_code.is_empty() {
+                // Join specific room by code (or create it with that code if it doesn't exist yet)
+                if !rooms.contains_key(&clean_req_code) {
+                    rooms.insert(
+                        clean_req_code.clone(),
+                        GameRoom {
+                            room_code: clean_req_code.clone(),
+                            game_mode: mode_str.to_string(),
+                            max_players: default_max,
+                            players: Vec::new(),
+                            total_kills: 0,
+                            total_shots: 0,
+                            created_at: unix_now(),
+                        },
+                    );
+                }
+                clean_req_code
+            } else {
+                // Quick Match: find an open room for the requested mode, or create one
+                let open_code = rooms
+                    .values()
+                    .find(|r| {
+                        r.game_mode == mode_str && (r.players.len() as u32) < r.max_players
+                    })
+                    .map(|r| r.room_code.clone());
+
+                match open_code {
+                    Some(c) => c,
+                    None => {
+                        let code = gen_room_code(rooms);
+                        rooms.insert(
+                            code.clone(),
+                            GameRoom {
+                                room_code: code.clone(),
+                                game_mode: mode_str.to_string(),
+                                max_players: default_max,
+                                players: Vec::new(),
+                                total_kills: 0,
+                                total_shots: 0,
+                                created_at: unix_now(),
+                            },
+                        );
+                        push_telemetry_event(
+                            recent_events,
+                            firebase_tx,
+                            CombatEventTelemetry {
+                                event_type: "ROOM_CREATED".to_string(),
+                                room_code: code.clone(),
+                                game_mode: mode_str.to_string(),
+                                actor: display_name.clone(),
+                                target: format!("{default_max}P {mode_str} QuickMatch"),
+                                weapon: "-".to_string(),
+                                damage: 0.0,
+                                timestamp: unix_now(),
+                            },
+                        );
+                        code
+                    }
+                }
+            };
+
+            let (slot_idx, resolved_mode, max_players, current_players) = {
+                let room = rooms.get_mut(&resolved_code).unwrap();
+                if !room.players.contains(&player_id) {
+                    room.players.push(player_id);
+                }
+                let slot = room
+                    .players
+                    .iter()
+                    .position(|&id| id == player_id)
+                    .unwrap_or(0) as u32;
+                (
+                    slot,
+                    room.game_mode.clone(),
+                    room.max_players,
+                    room.players.len() as u32,
+                )
+            };
+
+            if let Some(sess) = sessions.get_mut(&token) {
+                sess.room_code = resolved_code.clone();
+            }
+            player_rooms.insert(player_id, resolved_code.clone());
+
+            eprintln!(
+                "Login resolved: player={display_name:?} id={player_id} room={resolved_code} ({current_players}/{max_players} {resolved_mode})"
+            );
+
+            let (sx, sy) = spawn_pos(slot_idx);
 
             // Create or update the player entity.
             if let Some(&entity) = entities.get(&player_id) {
                 let mut metas = world.write::<PlayerMeta>();
                 if let Some(meta) = metas.get_mut(entity) {
-                    if !player_name.is_empty() {
-                        meta.name = player_name.clone();
-                    }
+                    meta.name = display_name.clone();
+                    meta.room_code = resolved_code.clone();
+                    meta.game_mode = resolved_mode.clone();
                 }
             } else {
                 let entity = world
@@ -447,38 +691,81 @@ fn handle_message(
                     .with(Cooldown { next_tick: 0 })
                     .with(ActionState::default())
                     .with(PlayerMeta {
-                        name: if player_name.is_empty() {
-                            format!("Player_{player_id}")
-                        } else {
-                            player_name.clone()
-                        },
+                        name: display_name.clone(),
                         kills: 0,
                         deaths: 0,
                         weapon_index: 0,
+                        room_code: resolved_code.clone(),
+                        game_mode: resolved_mode.clone(),
+                        shots_fired: 0,
+                        hits_landed: 0,
+                        damage_dealt: 0.0,
                     })
                     .build();
                 entities.insert(player_id, entity);
             }
 
-            tcp_senders.insert(player_id, tcp_tx);
+            tcp_senders.insert(player_id, tcp_tx.clone());
 
             let _ = reply.send(LoginResult {
                 id: player_id,
                 spawn_x: sx,
                 spawn_y: sy,
                 session_token: token,
+                room_code: resolved_code.clone(),
+                game_mode: resolved_mode.clone(),
+                max_players,
+                current_players,
             });
 
-            // Notify all other connected players over TCP that this player joined
+            push_telemetry_event(
+                recent_events,
+                firebase_tx,
+                CombatEventTelemetry {
+                    event_type: "PLAYER_JOIN".to_string(),
+                    room_code: resolved_code.clone(),
+                    game_mode: resolved_mode.clone(),
+                    actor: display_name.clone(),
+                    target: format!("Slot #{current_players}/{max_players}"),
+                    weapon: "Pistol".to_string(),
+                    damage: 0.0,
+                    timestamp: unix_now(),
+                },
+            );
+
+            // Notify other connected players IN THE SAME ROOM that this player joined,
+            // and also inform this player about everyone already in the room!
             let conn_pkt = PlayerConnectedPacket {
                 id: player_id,
                 x: sx,
                 y: sy,
+                room_code: resolved_code.clone(),
+                player_name: display_name.clone(),
             };
             let conn_frame = net::tcp_frame(TYPE_PLAYER_CONNECTED, &conn_pkt);
+            let positions = world.read::<Position>();
+            let metas = world.read::<PlayerMeta>();
             for (&other_id, tx) in tcp_senders.iter() {
-                if other_id != player_id {
+                if other_id != player_id
+                    && player_rooms.get(&other_id) == Some(&resolved_code)
+                {
                     let _ = tx.send(conn_frame.clone());
+                    if let Some(&other_ent) = entities.get(&other_id) {
+                        if let Some(other_pos) = positions.get(other_ent) {
+                            let other_name = metas
+                                .get(other_ent)
+                                .map(|m| m.name.clone())
+                                .unwrap_or_else(|| format!("Player_{other_id}"));
+                            let existing_pkt = PlayerConnectedPacket {
+                                id: other_id,
+                                x: other_pos.x,
+                                y: other_pos.y,
+                                room_code: resolved_code.clone(),
+                                player_name: other_name,
+                            };
+                            let _ = tcp_tx.send(net::tcp_frame(TYPE_PLAYER_CONNECTED, &existing_pkt));
+                        }
+                    }
                 }
             }
         }
@@ -527,7 +814,7 @@ fn handle_message(
             }
         }
 
-        ServerMessage::Shoot(pkt) => {
+        ServerMessage::Shoot(mut pkt) => {
             // Validate direction is non-zero.
             let mag = (pkt.direction_x * pkt.direction_x
                 + pkt.direction_y * pkt.direction_y)
@@ -536,7 +823,13 @@ fn handle_message(
                 return;
             }
 
-            // Enforce per-player weapon cooldown (server authority).
+            let shooter_room = player_rooms
+                .get(&pkt.id)
+                .cloned()
+                .unwrap_or_else(|| pkt.room_code.clone());
+            pkt.room_code = shooter_room.clone();
+
+            // Enforce per-player weapon cooldown (server authority) & record shot telemetry.
             if let Some(&entity) = entities.get(&pkt.id) {
                 let mut cooldowns = world.write::<Cooldown>();
                 if let Some(cd) = cooldowns.get_mut(entity) {
@@ -548,13 +841,17 @@ fn handle_message(
                 let mut metas = world.write::<PlayerMeta>();
                 if let Some(meta) = metas.get_mut(entity) {
                     meta.weapon_index = pkt.weapon_index;
+                    meta.shots_fired = meta.shots_fired.saturating_add(1);
                 }
+            }
+            if let Some(room) = rooms.get_mut(&shooter_room) {
+                room.total_shots = room.total_shots.saturating_add(1);
             }
 
             let (nx, ny) = (pkt.direction_x / mag, pkt.direction_y / mag);
             let dmg = weapon_damage(pkt.weapon_index);
 
-            // Spawn a server-authoritative projectile entity (owned by the shooter).
+            // Spawn a server-authoritative projectile entity (scoped to shooter's room).
             let entity = world
                 .create_entity()
                 .with(Position {
@@ -571,21 +868,26 @@ fn handle_message(
                 .with(Owner {
                     id: pkt.id,
                     damage: dmg,
+                    weapon_index: pkt.weapon_index,
+                    room_code: shooter_room.clone(),
                 })
                 .build();
             projectiles.push(entity);
-            eprintln!("Spawned projectile from id={} (weapon={})", pkt.id, pkt.weapon_index);
 
-            // Broadcast PlayerShootPacket to all other clients over TCP (and UDP) so they render the shot!
+            // Broadcast PlayerShootPacket ONLY to other clients in the same room!
             let shoot_frame = net::tcp_frame(TYPE_PLAYER_SHOOT, &pkt);
             for (&other_id, tx) in tcp_senders.iter() {
-                if other_id != pkt.id {
+                if other_id != pkt.id
+                    && player_rooms.get(&other_id) == Some(&shooter_room)
+                {
                     let _ = tx.send(shoot_frame.clone());
                 }
             }
             let shoot_udp = net::udp_datagram(TYPE_PLAYER_SHOOT, &pkt);
             for (&other_id, &addr) in addrs.iter() {
-                if other_id != pkt.id {
+                if other_id != pkt.id
+                    && player_rooms.get(&other_id) == Some(&shooter_room)
+                {
                     let udp_clone = udp.clone();
                     let data = shoot_udp.clone();
                     tokio::spawn(async move {
@@ -602,17 +904,62 @@ fn handle_message(
                     sess.last_active_tick = tick;
                 }
             }
+            let mut player_name = format!("Player_{id}");
+            let mut room_mode = "DUO".to_string();
             if let Some(entity) = entities.remove(&id) {
+                {
+                    let metas = world.read::<PlayerMeta>();
+                    if let Some(m) = metas.get(entity) {
+                        player_name = m.name.clone();
+                        room_mode = m.game_mode.clone();
+                    }
+                }
                 let _ = world.delete_entity(entity);
             }
             addrs.remove(&id);
             tcp_senders.remove(&id);
 
-            // Broadcast disconnect to all remaining clients
-            let disc_pkt = PlayerDisconnectedPacket { id };
-            let disc_frame = net::tcp_frame(TYPE_PLAYER_DISCONNECTED, &disc_pkt);
-            for tx in tcp_senders.values() {
-                let _ = tx.send(disc_frame.clone());
+            let room_code = player_rooms.remove(&id).unwrap_or_default();
+            if !room_code.is_empty() {
+                let mut remove_empty_room = false;
+                if let Some(room) = rooms.get_mut(&room_code) {
+                    room.players.retain(|&pid| pid != id);
+                    remove_empty_room = room.players.is_empty();
+                }
+                if remove_empty_room {
+                    rooms.remove(&room_code);
+                }
+
+                push_telemetry_event(
+                    recent_events,
+                    firebase_tx,
+                    CombatEventTelemetry {
+                        event_type: "PLAYER_LEAVE".to_string(),
+                        room_code: room_code.clone(),
+                        game_mode: room_mode,
+                        actor: player_name,
+                        target: if remove_empty_room {
+                            "Room closed".to_string()
+                        } else {
+                            "Left room".to_string()
+                        },
+                        weapon: "-".to_string(),
+                        damage: 0.0,
+                        timestamp: unix_now(),
+                    },
+                );
+
+                // Broadcast disconnect to remaining clients in the same room
+                let disc_pkt = PlayerDisconnectedPacket {
+                    id,
+                    room_code: room_code.clone(),
+                };
+                let disc_frame = net::tcp_frame(TYPE_PLAYER_DISCONNECTED, &disc_pkt);
+                for (&other_id, tx) in tcp_senders.iter() {
+                    if player_rooms.get(&other_id) == Some(&room_code) {
+                        let _ = tx.send(disc_frame.clone());
+                    }
+                }
             }
         }
 
@@ -652,6 +999,9 @@ fn run_systems(
     world: &mut World,
     entities: &HashMap<u32, Entity>,
     projectiles: &mut Vec<Entity>,
+    rooms: &mut HashMap<String, GameRoom>,
+    recent_events: &mut VecDeque<CombatEventTelemetry>,
+    firebase_tx: &mpsc::UnboundedSender<FirebaseOp>,
 ) -> Vec<PlayerHitPacket> {
     // --- Motion system (projectiles): Position += Velocity * dt ------------
     {
@@ -668,14 +1018,11 @@ fn run_systems(
         let mut lifetimes = world.write::<Lifetime>();
         let mut survivors: Vec<Entity> = Vec::with_capacity(projectiles.len());
         for &entity in projectiles.iter() {
-            match lifetimes.get_mut(entity) {
-                Some(lt) => {
-                    lt.remaining -= DT;
-                    if lt.remaining > 0.0 {
-                        survivors.push(entity);
-                    }
+            if let Some(lt) = lifetimes.get_mut(entity) {
+                lt.remaining -= DT;
+                if lt.remaining > 0.0 {
+                    survivors.push(entity);
                 }
-                None => {}
             }
         }
         drop(lifetimes);
@@ -697,49 +1044,58 @@ fn run_systems(
         }
     }
 
-    // --- Hit detection system (projectile vs player) ------------------------
+    // --- Hit detection system (projectile vs player within same room) -------
     let mut hits: Vec<PlayerHitPacket> = Vec::new();
 
-    let proj_data: Vec<(Entity, u32, f32, f32, f32)> = {
+    let proj_data: Vec<(Entity, u32, f32, u32, String, f32, f32)> = {
         let positions = world.read::<Position>();
         let owners = world.read::<Owner>();
         let mut out = Vec::new();
         for &e in projectiles.iter() {
             if let (Some(pos), Some(own)) = (positions.get(e), owners.get(e)) {
-                out.push((e, own.id, own.damage, pos.x, pos.y));
+                out.push((
+                    e,
+                    own.id,
+                    own.damage,
+                    own.weapon_index,
+                    own.room_code.clone(),
+                    pos.x,
+                    pos.y,
+                ));
             }
         }
         out
     };
 
-    let player_data: Vec<(Entity, u32, f32, f32)> = {
+    let player_data: Vec<(Entity, u32, String, f32, f32)> = {
         let positions = world.read::<Position>();
+        let metas = world.read::<PlayerMeta>();
         let mut out = Vec::new();
         for (&id, &e) in entities.iter() {
-            if let Some(pos) = positions.get(e) {
-                out.push((e, id, pos.x, pos.y));
+            if let (Some(pos), Some(meta)) = (positions.get(e), metas.get(e)) {
+                out.push((e, id, meta.room_code.clone(), pos.x, pos.y));
             }
         }
         out
     };
 
     let mut projectiles_to_delete: Vec<Entity> = Vec::new();
-    for &(pe, owner_id, damage, px, py) in proj_data.iter() {
-        for &(le, pid, lx, ly) in player_data.iter() {
-            if pid == owner_id {
-                continue; // a player cannot hit themselves
+    for (pe, owner_id, damage, w_idx, proj_room, px, py) in proj_data.iter() {
+        for (le, pid, player_room, lx, ly) in player_data.iter() {
+            if pid == owner_id || proj_room != player_room {
+                continue; // cannot hit self or players in another room
             }
             let dx = (px - lx).abs();
             let dy = (py - ly).abs();
             if dx <= HIT_HALF_W && dy <= HIT_HALF_H {
-                projectiles_to_delete.push(pe);
+                projectiles_to_delete.push(*pe);
 
                 let mut is_kill = false;
                 let mut new_health = 0.0;
                 {
                     let mut healths = world.write::<Health>();
-                    if let Some(h) = healths.get_mut(le) {
-                        h.current = (h.current - damage).max(0.0);
+                    if let Some(h) = healths.get_mut(*le) {
+                        h.current = (h.current - *damage).max(0.0);
                         new_health = h.current;
                         if h.current <= 0.0 {
                             is_kill = true;
@@ -750,59 +1106,72 @@ fn run_systems(
 
                 let mut attacker_kills = 0;
                 let mut victim_deaths = 0;
+                let mut attacker_name = format!("Player_{owner_id}");
+                let mut victim_name = format!("Player_{pid}");
+                let mut room_mode = "DUO".to_string();
                 {
                     let mut metas = world.write::<PlayerMeta>();
-                    if is_kill {
-                        if let Some(&attacker_entity) = entities.get(&owner_id) {
-                            if let Some(am) = metas.get_mut(attacker_entity) {
+                    if let Some(&attacker_entity) = entities.get(owner_id) {
+                        if let Some(am) = metas.get_mut(attacker_entity) {
+                            am.hits_landed = am.hits_landed.saturating_add(1);
+                            am.damage_dealt += *damage;
+                            if is_kill {
                                 am.kills += 1;
-                                attacker_kills = am.kills;
                             }
+                            attacker_kills = am.kills;
+                            attacker_name = am.name.clone();
+                            room_mode = am.game_mode.clone();
                         }
-                        if let Some(vm) = metas.get_mut(le) {
+                    }
+                    if let Some(vm) = metas.get_mut(*le) {
+                        if is_kill {
                             vm.deaths += 1;
-                            victim_deaths = vm.deaths;
                         }
-                    } else {
-                        if let Some(&attacker_entity) = entities.get(&owner_id) {
-                            if let Some(am) = metas.get(attacker_entity) {
-                                attacker_kills = am.kills;
-                            }
-                        }
-                        if let Some(vm) = metas.get(le) {
-                            victim_deaths = vm.deaths;
-                        }
+                        victim_deaths = vm.deaths;
+                        victim_name = vm.name.clone();
                     }
                 }
 
                 if is_kill {
-                    let (sx, sy) = spawn_pos(pid);
+                    if let Some(room) = rooms.get_mut(proj_room) {
+                        room.total_kills = room.total_kills.saturating_add(1);
+                    }
+                    let (sx, sy) = spawn_pos(*pid);
                     let mut positions = world.write::<Position>();
-                    if let Some(pos) = positions.get_mut(le) {
+                    if let Some(pos) = positions.get_mut(*le) {
                         pos.x = sx;
                         pos.y = sy;
                     }
                     eprintln!(
-                        "KILL: id={} eliminated id={} (kills={}, deaths={}); respawned at ({}, {})",
-                        owner_id, pid, attacker_kills, victim_deaths, sx, sy
+                        "KILL [Room {proj_room}]: {attacker_name} (#{owner_id}) eliminated {victim_name} (#{pid}) (kills={attacker_kills}, deaths={victim_deaths})"
                     );
-                } else {
-                    eprintln!(
-                        "HIT: id={} hit id={} for {} dmg (health now {})",
-                        owner_id, pid, damage, new_health
+                    push_telemetry_event(
+                        recent_events,
+                        firebase_tx,
+                        CombatEventTelemetry {
+                            event_type: "KILL".to_string(),
+                            room_code: proj_room.clone(),
+                            game_mode: room_mode,
+                            actor: attacker_name,
+                            target: victim_name,
+                            weapon: weapon_name(*w_idx).to_string(),
+                            damage: *damage,
+                            timestamp: unix_now(),
+                        },
                     );
                 }
 
                 hits.push(PlayerHitPacket {
-                    from_id: owner_id,
-                    to_id: pid,
-                    damage,
-                    x: lx,
-                    y: ly,
+                    from_id: *owner_id,
+                    to_id: *pid,
+                    damage: *damage,
+                    x: *lx,
+                    y: *ly,
                     target_health: new_health,
                     is_kill,
                     attacker_kills,
                     victim_deaths,
+                    room_code: proj_room.clone(),
                 });
                 break; // a projectile can only hit one player
             }
@@ -831,10 +1200,15 @@ struct PlayerSnapshot {
     is_reloading: bool,
     is_throwing: bool,
     health: f32,
+    max_health: f32,
     kills: u32,
     deaths: u32,
     player_name: String,
     weapon_index: u32,
+    room_code: String,
+    shots_fired: u32,
+    hits_landed: u32,
+    damage_dealt: f32,
 }
 
 /// Collect every player's authoritative state for this tick.
@@ -857,23 +1231,28 @@ fn build_player_snapshot(world: &World) -> Vec<PlayerSnapshot> {
             is_reloading: act.is_reloading,
             is_throwing: act.is_throwing,
             health: h.current,
+            max_health: h.max,
             kills: meta.kills,
             deaths: meta.deaths,
             player_name: meta.name.clone(),
             weapon_index: meta.weapon_index,
+            room_code: meta.room_code.clone(),
+            shots_fired: meta.shots_fired,
+            hits_landed: meta.hits_landed,
+            damage_dealt: meta.damage_dealt,
         })
         .collect()
 }
 
-fn snapshot_pos(snapshot: &[PlayerSnapshot], id: u32) -> Option<(f32, f32)> {
+fn snapshot_pos_and_room(snapshot: &[PlayerSnapshot], id: u32) -> Option<(f32, f32, &str)> {
     snapshot
         .iter()
         .find(|p| p.id == id)
-        .map(|p| (p.x, p.y))
+        .map(|p| (p.x, p.y, p.room_code.as_str()))
 }
 
 // ---------------------------------------------------------------------------
-// Broadcast: send each client the state of entities within VIEW_RADIUS.
+// Broadcast: send each client the state of entities in the SAME ROOM within VIEW_RADIUS.
 // Uses UDP every tick (60 Hz) and TCP every 2nd tick (30 Hz) so clients behind
 // strict NAT/firewalls/emulators still receive smooth state updates.
 // ---------------------------------------------------------------------------
@@ -900,13 +1279,20 @@ async fn broadcast(
             deaths: p.deaths,
             player_name: p.player_name.clone(),
             weapon_index: p.weapon_index,
+            room_code: p.room_code.clone(),
         })
         .collect();
 
     // 1. UDP broadcast (60 Hz)
     for (&client_id, &addr) in addrs.iter() {
-        let (ox, oy) = snapshot_pos(snapshot, client_id).unwrap_or((0.0, 0.0));
+        let (ox, oy, my_room) = match snapshot_pos_and_room(snapshot, client_id) {
+            Some(v) => v,
+            None => continue,
+        };
         for pkt in packets.iter() {
+            if pkt.room_code != my_room {
+                continue;
+            }
             let dx = pkt.x - ox;
             let dy = pkt.y - oy;
             if dx * dx + dy * dy > VIEW_RADIUS_SQ {
@@ -920,8 +1306,14 @@ async fn broadcast(
     // 2. TCP broadcast (30 Hz - guarantees delivery even if UDP is blocked by NAT/Emulator)
     if tick % 2 == 0 {
         for (&client_id, tx) in tcp_senders.iter() {
-            let (ox, oy) = snapshot_pos(snapshot, client_id).unwrap_or((0.0, 0.0));
+            let (ox, oy, my_room) = match snapshot_pos_and_room(snapshot, client_id) {
+                Some(v) => v,
+                None => continue,
+            };
             for pkt in packets.iter() {
+                if pkt.room_code != my_room {
+                    continue;
+                }
                 let dx = pkt.x - ox;
                 let dy = pkt.y - oy;
                 if dx * dx + dy * dy > VIEW_RADIUS_SQ {
@@ -935,7 +1327,7 @@ async fn broadcast(
 }
 
 // ---------------------------------------------------------------------------
-// Broadcast hit events over both TCP (reliable) and UDP (low-latency).
+// Broadcast hit events over both TCP (reliable) and UDP (low-latency) to same room.
 // ---------------------------------------------------------------------------
 async fn broadcast_hits(
     hits: &[PlayerHitPacket],
@@ -949,22 +1341,110 @@ async fn broadcast_hits(
         let tcp_bytes = net::tcp_frame(TYPE_PLAYER_HIT, hit);
 
         for (&client_id, &addr) in addrs.iter() {
+            let Some((px, py, room)) = snapshot_pos_and_room(snapshot, client_id) else {
+                continue;
+            };
+            if room != hit.room_code {
+                continue;
+            }
             let involved = client_id == hit.from_id || client_id == hit.to_id;
-            let nearby = snapshot_pos(snapshot, client_id)
-                .map(|(px, py)| {
-                    let dx = px - hit.x;
-                    let dy = py - hit.y;
-                    dx * dx + dy * dy <= VIEW_RADIUS_SQ
-                })
-                .unwrap_or(true);
+            let dx = px - hit.x;
+            let dy = py - hit.y;
+            let nearby = dx * dx + dy * dy <= VIEW_RADIUS_SQ;
             if involved || nearby {
                 let _ = udp.send_to(&udp_bytes, addr).await;
             }
         }
 
-        for tx in tcp_senders.values() {
-            let _ = tx.send(tcp_bytes.clone());
+        for (&client_id, tx) in tcp_senders.iter() {
+            if let Some((_, _, room)) = snapshot_pos_and_room(snapshot, client_id) {
+                if room == hit.room_code {
+                    let _ = tx.send(tcp_bytes.clone());
+                }
+            }
         }
+    }
+}
+
+/// Build the full real-time analytics snapshot for Firebase Realtime DB & the HTTP Dashboard.
+fn build_analytics_snapshot(
+    rooms: &HashMap<String, GameRoom>,
+    snapshot: &[PlayerSnapshot],
+    recent_events: &VecDeque<CombatEventTelemetry>,
+    started_at: u64,
+    firebase_configured: bool,
+) -> ServerAnalyticsSnapshot {
+    let now = unix_now();
+    let mut room_list: Vec<RoomTelemetry> = Vec::with_capacity(rooms.len());
+    let mut all_players: Vec<(String, RoomPlayerTelemetry)> = Vec::with_capacity(snapshot.len());
+    let mut total_kills = 0u32;
+    let mut total_shots = 0u32;
+
+    for room in rooms.values() {
+        let mut r_players: Vec<RoomPlayerTelemetry> = Vec::new();
+        for p in snapshot.iter().filter(|p| p.room_code == room.room_code) {
+            let rp = RoomPlayerTelemetry {
+                id: p.id,
+                name: p.player_name.clone(),
+                health: p.health,
+                max_health: p.max_health,
+                kills: p.kills,
+                deaths: p.deaths,
+                shots_fired: p.shots_fired,
+                hits_landed: p.hits_landed,
+                damage_dealt: p.damage_dealt,
+                weapon_name: weapon_name(p.weapon_index).to_string(),
+                x: p.x,
+                y: p.y,
+            };
+            all_players.push((room.room_code.clone(), rp.clone()));
+            r_players.push(rp);
+        }
+        r_players.sort_by(|a, b| b.kills.cmp(&a.kills).then_with(|| a.id.cmp(&b.id)));
+
+        total_kills = total_kills.saturating_add(room.total_kills);
+        total_shots = total_shots.saturating_add(room.total_shots);
+
+        let cur = r_players.len() as u32;
+        let status = if cur >= room.max_players {
+            "FULL / IN COMBAT".to_string()
+        } else if cur >= 2 {
+            "IN COMBAT".to_string()
+        } else {
+            "WAITING FOR PLAYERS".to_string()
+        };
+
+        room_list.push(RoomTelemetry {
+            room_code: room.room_code.clone(),
+            game_mode: room.game_mode.clone(),
+            max_players: room.max_players,
+            current_players: cur,
+            status,
+            total_kills: room.total_kills,
+            total_shots: room.total_shots,
+            created_at: room.created_at,
+            players: r_players,
+        });
+    }
+
+    room_list.sort_by(|a, b| {
+        b.current_players
+            .cmp(&a.current_players)
+            .then_with(|| a.room_code.cmp(&b.room_code))
+    });
+    all_players.sort_by(|a, b| b.1.kills.cmp(&a.1.kills).then_with(|| a.1.id.cmp(&b.1.id)));
+
+    ServerAnalyticsSnapshot {
+        timestamp: now,
+        uptime_seconds: now.saturating_sub(started_at),
+        active_rooms_count: room_list.len(),
+        online_players_count: snapshot.len(),
+        total_kills,
+        total_shots,
+        firebase_configured,
+        rooms: room_list,
+        all_players,
+        recent_events: recent_events.iter().cloned().collect(),
     }
 }
 
@@ -981,6 +1461,10 @@ async fn main() {
         .ok()
         .and_then(|s| s.parse().ok())
         .unwrap_or(54777);
+    let http_port: u16 = std::env::var("SHOOTGAME_HTTP_PORT")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(54556);
 
     let tcp_listener = TcpListener::bind(("0.0.0.0", tcp_port))
         .await
@@ -990,7 +1474,15 @@ async fn main() {
             .await
             .expect("UDP socket bind failed"),
     );
-    eprintln!("ShootGame Server (hardened) listening on TCP:{tcp_port}, UDP:{udp_port}");
+    eprintln!(
+        "ShootGame Server (Duo/Squad Rooms + Firebase Telemetry) listening on TCP:{tcp_port}, UDP:{udp_port}"
+    );
+
+    let (firebase_tx, firebase_configured) = firebase::spawn_firebase_worker();
+    let shared_analytics_json = Arc::new(RwLock::new(String::from("{}")));
+    firebase::spawn_analytics_http_server(http_port, shared_analytics_json.clone());
+
+    let started_at = unix_now();
 
     let mut world = World::new();
     world.register::<Position>();
@@ -1010,6 +1502,9 @@ async fn main() {
     let mut projectiles: Vec<Entity> = Vec::new();
     let mut sessions: HashMap<String, Session> = HashMap::new();
     let mut token_by_player: HashMap<u32, String> = HashMap::new();
+    let mut rooms: HashMap<String, GameRoom> = HashMap::new();
+    let mut player_rooms: HashMap<u32, String> = HashMap::new();
+    let mut recent_events: VecDeque<CombatEventTelemetry> = VecDeque::new();
     let mut tick: u64 = 0;
 
     let (msg_tx, mut msg_rx) = mpsc::channel::<ServerMessage>(512);
@@ -1048,6 +1543,10 @@ async fn main() {
                         &mut projectiles,
                         &mut sessions,
                         &mut token_by_player,
+                        &mut rooms,
+                        &mut player_rooms,
+                        &mut recent_events,
+                        &firebase_tx,
                         &udp_socket,
                         msg,
                         tick,
@@ -1062,10 +1561,34 @@ async fn main() {
             _ = ticker.tick() => {
                 tick += 1;
                 prune_sessions(&mut sessions, &mut token_by_player, tick);
-                let hits = run_systems(&mut world, &entities, &mut projectiles);
+                let hits = run_systems(
+                    &mut world,
+                    &entities,
+                    &mut projectiles,
+                    &mut rooms,
+                    &mut recent_events,
+                    &firebase_tx,
+                );
                 let snapshot = build_player_snapshot(&world);
                 broadcast(&snapshot, &addrs, &tcp_senders, &udp_socket, tick).await;
                 broadcast_hits(&hits, &snapshot, &addrs, &tcp_senders, &udp_socket).await;
+
+                // Update live analytics JSON & sync to Firebase Realtime DB every 2 seconds (120 ticks)
+                if tick % 120 == 0 || tick == 1 {
+                    let analytics = build_analytics_snapshot(
+                        &rooms,
+                        &snapshot,
+                        &recent_events,
+                        started_at,
+                        firebase_configured,
+                    );
+                    let json = firebase::snapshot_to_json(&analytics);
+                    {
+                        let mut guard = shared_analytics_json.write().await;
+                        *guard = json.clone();
+                    }
+                    let _ = firebase_tx.send(FirebaseOp::SyncSnapshot(json));
+                }
             }
         }
     }

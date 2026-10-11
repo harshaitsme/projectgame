@@ -2,6 +2,7 @@ package io.github.shootgame.system
 
 import com.badlogic.gdx.Application
 import com.badlogic.gdx.Gdx
+import com.badlogic.gdx.Input
 import com.badlogic.gdx.graphics.Color
 import com.badlogic.gdx.graphics.Pixmap
 import com.badlogic.gdx.graphics.Texture
@@ -10,22 +11,28 @@ import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator
 import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator.FreeTypeFontParameter
 import com.badlogic.gdx.scenes.scene2d.InputEvent
 import com.badlogic.gdx.scenes.scene2d.Stage
-import com.badlogic.gdx.scenes.scene2d.ui.*
+import com.badlogic.gdx.scenes.scene2d.ui.Cell
+import com.badlogic.gdx.scenes.scene2d.ui.Image
+import com.badlogic.gdx.scenes.scene2d.ui.Label
+import com.badlogic.gdx.scenes.scene2d.ui.Stack
+import com.badlogic.gdx.scenes.scene2d.ui.Table
 import com.badlogic.gdx.scenes.scene2d.utils.ClickListener
 import com.badlogic.gdx.scenes.scene2d.utils.TextureRegionDrawable
 import com.badlogic.gdx.utils.Align
 import com.github.quillraven.fleks.ComponentMapper
 import com.github.quillraven.fleks.IntervalSystem
 import com.github.quillraven.fleks.Qualifier
-import com.kotcrab.vis.ui.widget.VisLabel
-import com.kotcrab.vis.ui.widget.VisTable
-import com.kotcrab.vis.ui.widget.VisTextButton
 import io.github.shootgame.audio.AudioService
 import io.github.shootgame.audio.SoundType
 import io.github.shootgame.component.AttackComponent
+import io.github.shootgame.component.DeadComponent
 import io.github.shootgame.component.HealthComponent
 import io.github.shootgame.component.PlayerComponent
+import io.github.shootgame.component.RemotePlayerComponent
 import io.github.shootgame.component.WeaponComponent
+import io.github.shootgame.component.WeaponType
+import io.github.shootgame.screen.GameConfig
+import io.github.shootgame.screen.GameMode
 import kotlin.math.max
 
 class UiSystem(
@@ -60,6 +67,7 @@ class UiSystem(
     private val disposables = mutableListOf<Texture>()
     private var fontGenerator: FreeTypeFontGenerator? = null
     private val generatedFonts = mutableListOf<BitmapFont>()
+    private lateinit var fontTiny: BitmapFont
     private lateinit var fontSmall: BitmapFont
     private lateinit var fontMedium: BitmapFont
     private lateinit var fontLarge: BitmapFont
@@ -67,9 +75,9 @@ class UiSystem(
 
     // Futuristic Sci-Fi Cyberpunk Palette (Matched to Reference Image)
     private val colCyberOrange = Color(1.0f, 0.58f, 0.02f, 1f)      // Neon cyber-orange border
-    private val colCyberOrangeDark = Color(0.85f, 0.42f, 0.0f, 1f)  // Tech bevel shadow
     private val colCyberYellow = Color(1.0f, 0.90f, 0.04f, 1f)      // Cyber neon yellow fill
     private val colCyberDanger = Color(0.96f, 0.22f, 0.26f, 1f)      // Alert red fill
+    private val colCyberCyan = Color(0.25f, 0.92f, 1.0f, 1f)         // Tactical cyan accent
     private val colCyberGrey = Color(0.38f, 0.40f, 0.44f, 1f)        // Tech hazard grey
     private val colDarkChamber = Color(0.09f, 0.10f, 0.13f, 0.94f)   // Chassis dark background
     private val colDarkTrack = Color(0.18f, 0.19f, 0.22f, 1f)        // Unfilled recess track
@@ -84,6 +92,11 @@ class UiSystem(
     private lateinit var fillAmberDrawable: TextureRegionDrawable
 
     // HUD Elements
+    private lateinit var modeStatusLabel: Label
+    private var roomCodeLabel: Label? = null
+    private lateinit var sbTitleLabel: Label
+    private lateinit var scoreboardRowsTable: Table
+    private lateinit var combatFeedLabel: Label
     private lateinit var healthBarFill: Image
     private lateinit var healthBarFillCell: Cell<Image>
     private lateinit var ammoBarFill: Image
@@ -100,10 +113,7 @@ class UiSystem(
     private var maxAmmoBarWidth = 432f
 
     init {
-        panelBgTexture = makeSolidTexture(0.05f, 0.08f, 0.14f, 0.78f)
-        barBgTexture = makeSolidTexture(0.22f, 0.08f, 0.08f, 0.9f)
-        barFillTexture = makeSolidTexture(1f, 1f, 1f, 1f)
-
+        initFonts()
         setupHud()
         if (Gdx.app.type == Application.ApplicationType.Android) {
             setupTouchControls()
@@ -139,6 +149,7 @@ class UiSystem(
                     generator.generateFont(param).also { generatedFonts.add(it) }
                 }
 
+                fontTiny = makeFont(16, 1.4f, 1f)
                 fontSmall = makeFont(22, 1.8f, 2f)
                 fontMedium = makeFont(28, 2.2f, 2f)
                 fontLarge = makeFont(34, 2.6f, 3f)
@@ -151,6 +162,7 @@ class UiSystem(
 
         val defaultFont = BitmapFont()
         generatedFonts.add(defaultFont)
+        fontTiny = defaultFont
         fontSmall = defaultFont
         fontMedium = defaultFont
         fontLarge = defaultFont
@@ -221,7 +233,14 @@ class UiSystem(
         }
 
         // Inner dark chamber
-        fillChamferedBox(borderWidth, baseY + borderWidth, w - borderWidth * 2, baseH - borderWidth * 2, max(2, chamfer - borderWidth), colDarkChamber)
+        fillChamferedBox(
+            borderWidth,
+            baseY + borderWidth,
+            w - borderWidth * 2,
+            baseH - borderWidth * 2,
+            max(2, chamfer - borderWidth),
+            colDarkChamber
+        )
 
         // Recessed track cavity for progress bar
         val trackX = 14
@@ -382,7 +401,12 @@ class UiSystem(
         // --- HEALTH SECTION ---
         val hpHeaderRow = Table()
         val hpTitle = Label("VITAL SIGNS", Label.LabelStyle(fontSmall, colCyberOrange))
+        modeStatusLabel = Label(
+            "[${config.mode.displayName.uppercase()}] ${config.playerName.uppercase()}",
+            Label.LabelStyle(fontTiny, colCyberCyan)
+        )
         hpHeaderRow.add(hpTitle).left().expandX()
+        hpHeaderRow.add(modeStatusLabel).right()
         statusContainer.add(hpHeaderRow).fillX().padBottom(5f).row()
 
         val healthFrameTable = Table()
@@ -402,12 +426,27 @@ class UiSystem(
         healthOverlay.add(healthTextLabel).expand().center().padTop(6f)
         healthStack.add(healthOverlay)
 
-        statusContainer.add(healthStack).size(barWidth, barHeight).padBottom(14f).row()
+        statusContainer.add(healthStack).size(barWidth, barHeight).padBottom(12f).row()
 
         // --- WEAPON & RELOAD PROGRESS SECTION ---
         val weaponHeaderRow = Table()
         weaponNameLabel = Label("PISTOL", Label.LabelStyle(fontSmall, colCyberOrange))
         weaponHeaderRow.add(weaponNameLabel).left().expandX()
+
+        // Quick-select weapon buttons [1-3]
+        val weaponSwitchRow = Table()
+        WeaponType.values().forEachIndexed { idx, wType ->
+            val shortTag = when (wType) {
+                WeaponType.PISTOL -> "1:PISTOL"
+                WeaponType.SHOTGUN -> "2:SHOTGUN"
+                WeaponType.MACHINE_GUN -> "3:MG"
+            }
+            val wBtn = createModernButton(shortTag, 84f, 28f, fontTiny) {
+                requestedWeaponSelect = wType
+            }
+            weaponSwitchRow.add(wBtn).padLeft(if (idx > 0) 6f else 0f)
+        }
+        weaponHeaderRow.add(weaponSwitchRow).right()
         statusContainer.add(weaponHeaderRow).fillX().padBottom(5f).row()
 
         val ammoFrameTable = Table()
@@ -427,14 +466,37 @@ class UiSystem(
         ammoOverlay.add(ammoCountLabel).expand().center().padBottom(6f)
         ammoStack.add(ammoOverlay)
 
-        statusContainer.add(ammoStack).size(barWidth, barHeight)
+        statusContainer.add(ammoStack).size(barWidth, barHeight).row()
+
+        // Room Code row for Duo / Squad online modes
+        if (config.mode != GameMode.OFFLINE) {
+            val roomRow = Table()
+            roomRow.background = createRoundedDrawable(barWidth.toInt(), 36, 8, colDarkChamber, colCyberCyan, 1)
+            roomRow.pad(4f, 12f, 4f, 10f)
+            val rLbl = Label(
+                "ROOM CODE: ${config.roomCode.ifEmpty { "ASSIGNING..." }}",
+                Label.LabelStyle(fontTiny, colCyberYellow)
+            )
+            roomCodeLabel = rLbl
+            val copyBtn = createModernButton("COPY", 76f, 26f, fontTiny) {
+                val code = networkSystem.activeRoomCode.ifEmpty { config.roomCode }
+                if (code.isNotEmpty()) {
+                    Gdx.app.clipboard.contents = code
+                    networkSystem.postFeed("✓ Room Code [$code] copied! Share with your ${config.mode.displayName} team!")
+                }
+            }
+            roomRow.add(rLbl).left().expandX()
+            roomRow.add(copyBtn).right()
+            statusContainer.add(roomRow).width(barWidth).height(36f).padTop(8f).left().row()
+        }
 
         rootTable.add(statusContainer).left().top()
 
-        // 2. Middle Sci-Fi Badges: Score & Frag (Larger: 200 x 64)
-        val middlePills = Table()
-        middlePills.padLeft(26f)
+        // 2. Middle Sci-Fi Badges: Score & Frag + Combat Feed
+        val middleCol = Table()
+        middleCol.padLeft(26f)
 
+        val middlePills = Table()
         val scorePill = Table()
         scorePill.background = createSciFiBadgeBackground(200, 64, colCyberOrange)
         val scoreTag = Label("SCORE", Label.LabelStyle(fontSmall, colCyberYellow))
@@ -451,21 +513,52 @@ class UiSystem(
 
         middlePills.add(scorePill).padRight(14f)
         middlePills.add(fragPill)
-        rootTable.add(middlePills).expandX().left().top()
+        middleCol.add(middlePills).left().top().row()
 
-        // 3. Audio Quick-Toggles (Top-Right, Larger)
+        combatFeedLabel = Label("", Label.LabelStyle(fontTiny, colCyberYellow)).apply {
+            setAlignment(Align.left)
+        }
+        middleCol.add(combatFeedLabel).left().padTop(8f)
+
+        rootTable.add(middleCol).expandX().left().top()
+
+        // 3. Top-Right Column: Audio Toggles + MENU Exit + Live Multiplayer Scoreboard
+        val topRightCol = Table()
         val audioTable = Table()
-        val sfxBtn = createModernButton("SFX", 88f, 58f) {
+        val sfxBtn = createModernButton("SFX", 82f, 52f) {
             val enabled = audioService.toggleSound()
             sfxButtonLabel?.setText(if (enabled) "SFX" else "MUTED")
         }
-        val bgmBtn = createModernButton("BGM", 88f, 58f) {
+        val bgmBtn = createModernButton("BGM", 82f, 52f) {
             val enabled = audioService.toggleMusic()
             bgmButtonLabel?.setText(if (enabled) "BGM" else "MUTED")
         }
-        audioTable.add(sfxBtn).padRight(10f)
-        audioTable.add(bgmBtn)
-        rootTable.add(audioTable).right().top()
+        val menuBtn = createModernButton("MENU", 88f, 52f) {
+            networkSystem.disconnect()
+            config.onExitToMenu()
+        }
+        audioTable.add(sfxBtn).padRight(8f)
+        audioTable.add(bgmBtn).padRight(8f)
+        audioTable.add(menuBtn)
+        topRightCol.add(audioTable).right().top().row()
+
+        // Live Scoreboard Card (shows per-player HP, K/D, Score, Roof Respawn status)
+        val sbCard = Table()
+        sbCard.background = createRoundedDrawable(276, 130, 10, colDarkChamber, colCyberOrange, 2)
+        sbCard.pad(8f, 12f, 8f, 12f)
+        val initialSbTitle = if (config.mode != GameMode.OFFLINE) {
+            "ROOM [${config.roomCode.ifEmpty { "---" }}] • ${config.mode.name}"
+        } else {
+            "SOLO PRACTICE SCOREBOARD"
+        }
+        sbTitleLabel = Label(initialSbTitle, Label.LabelStyle(fontTiny, colCyberYellow))
+        sbCard.add(sbTitleLabel).left().padBottom(4f).row()
+
+        scoreboardRowsTable = Table()
+        sbCard.add(scoreboardRowsTable).left().fillX()
+        topRightCol.add(sbCard).right().padTop(8f).width(276f)
+
+        rootTable.add(topRightCol).right().top()
 
         uiStage.addActor(rootTable)
     }
@@ -509,14 +602,15 @@ class UiSystem(
         text: String,
         width: Float,
         height: Float,
+        fontOverride: BitmapFont = fontSmall,
         onClick: () -> Unit
     ): Stack {
         val stack = Stack()
-        val normalDrawable = createRoundedDrawable(width.toInt(), height.toInt(), 12, colButtonBg, colCyberOrange, 2)
-        val pressedDrawable = createRoundedDrawable(width.toInt(), height.toInt(), 12, colButtonPressed, colCyberYellow, 2)
+        val normalDrawable = createRoundedDrawable(width.toInt(), height.toInt(), 10, colButtonBg, colCyberOrange, 2)
+        val pressedDrawable = createRoundedDrawable(width.toInt(), height.toInt(), 10, colButtonPressed, colCyberYellow, 2)
 
         val bgImage = Image(normalDrawable)
-        val label = Label(text, Label.LabelStyle(fontSmall, Color.WHITE))
+        val label = Label(text, Label.LabelStyle(fontOverride, Color.WHITE))
         label.setAlignment(Align.center)
 
         if (text == "SFX") sfxButtonLabel = label
@@ -578,6 +672,13 @@ class UiSystem(
         return stack
     }
 
+    override fun onTick() {
+        if (Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE)) {
+            networkSystem.disconnect()
+            config.onExitToMenu()
+            return
+        }
+
         // Update local player HUD (filter out RemotePlayerComponent!)
         world.family(
             allOf = arrayOf(PlayerComponent::class, HealthComponent::class)
@@ -588,6 +689,7 @@ class UiSystem(
             val hpRatio = (health.currentHealth / health.maxHealth).coerceIn(0f, 1f)
             val fillW = max(2f, maxHealthBarWidth * hpRatio)
             healthBarFillCell.width(fillW)
+            healthFrameTableInvalidate(healthBarFill)
             healthTextLabel.setText("${health.currentHealth.toInt()} / ${health.maxHealth.toInt()} HP")
 
             if (hpRatio < 0.3f) {
@@ -622,7 +724,7 @@ class UiSystem(
             }
 
             val weaponName = currentWeapon?.displayName ?: "STANDARD"
-            weaponNameLabel.setText(weaponName.uppercase())
+            weaponNameLabel.setText("${weaponName.uppercase()} [∞ INF]")
 
             if (attackCmp.isReloading) {
                 val reloadDuration = currentWeapon?.reloadTime ?: attackCmp.reloadTime
@@ -630,6 +732,7 @@ class UiSystem(
                 val reloadW = max(2f, maxAmmoBarWidth * reloadRatio)
                 ammoBarFill.drawable = fillAmberDrawable
                 ammoBarFillCell.width(reloadW)
+                healthFrameTableInvalidate(ammoBarFill)
                 ammoCountLabel.setText("RELOADING ${(reloadRatio * 100).toInt()}%")
                 ammoCountLabel.color = colCyberOrange
             } else {
@@ -637,14 +740,70 @@ class UiSystem(
                 val ammoW = max(2f, maxAmmoBarWidth * ammoRatio)
                 ammoBarFill.drawable = fillYellowDrawable
                 ammoBarFillCell.width(ammoW)
+                healthFrameTableInvalidate(ammoBarFill)
                 ammoCountLabel.setText("$currentAmmo / $maxAmmo")
                 ammoCountLabel.color = Color.WHITE
+            }
+
+            if (config.mode != GameMode.OFFLINE) {
+                val connStatus = if (networkSystem.isConnected) "ONLINE" else "CONNECTING..."
+                val roomCode = networkSystem.activeRoomCode.ifEmpty { config.roomCode.ifEmpty { "---" } }
+                modeStatusLabel.setText(
+                    "[${config.mode.displayName.uppercase()}] ${config.playerName.uppercase()} • $connStatus (${networkSystem.activePlayerCount}/${config.mode.maxPlayers})"
+                )
+                modeStatusLabel.color = if (networkSystem.isConnected) colCyberCyan else colCyberYellow
+                roomCodeLabel?.setText("ROOM CODE: $roomCode")
+                sbTitleLabel.setText("ROOM [$roomCode] • ${config.mode.name} (${networkSystem.activePlayerCount}/${config.mode.maxPlayers})")
+            } else {
+                modeStatusLabel.setText("[SOLO] ${config.playerName.uppercase()}")
+                sbTitleLabel.setText("SOLO PRACTICE SCOREBOARD")
             }
 
             fragCountLabel.setText("${attackCmp.fragAmmo}")
             val playerCmp = playerCmps.getOrNull(player)
             scoreValueLabel.setText("${playerCmp?.score ?: 0}")
         }
+
+        // Update combat feed banner
+        combatFeedLabel.setText(networkSystem.combatFeedMessage)
+
+        // Rebuild live scoreboard rows (shows each player's distinct health, K/D, and roof respawn status)
+        scoreboardRowsTable.clearChildren()
+        val entries = networkSystem.getScoreboardEntries()
+        if (entries.isEmpty()) {
+            val row = Table()
+            val nameLbl = Label("${config.playerName} (YOU)".take(14), Label.LabelStyle(fontTiny, colCyberCyan))
+            val hpLbl = Label("100HP", Label.LabelStyle(fontTiny, colCyberYellow))
+            val kdLbl = Label("0K/0D", Label.LabelStyle(fontTiny, Color.LIGHT_GRAY))
+            row.add(nameLbl).width(120f).left()
+            row.add(hpLbl).width(64f).left()
+            row.add(kdLbl).width(64f).right()
+            scoreboardRowsTable.add(row).left().padBottom(2f).row()
+        } else {
+            entries.take(6).forEach { e ->
+                val row = Table()
+                val isDead = e.health <= 0f
+                val statusText = if (isDead) "ROOF" else "${e.health.toInt()}HP"
+                val rowColor = when {
+                    isDead -> colCyberDanger
+                    e.isLocal -> colCyberCyan
+                    else -> Color.WHITE
+                }
+                val displayName = if (e.isLocal) "${e.name} (YOU)" else e.name
+                val nameLbl = Label(displayName.take(14), Label.LabelStyle(fontTiny, rowColor))
+                val hpLbl = Label(statusText, Label.LabelStyle(fontTiny, if (isDead) colCyberDanger else colCyberYellow))
+                val kdLbl = Label("${e.kills}K/${e.deaths}D", Label.LabelStyle(fontTiny, Color.LIGHT_GRAY))
+
+                row.add(nameLbl).width(120f).left()
+                row.add(hpLbl).width(64f).left()
+                row.add(kdLbl).width(64f).right()
+                scoreboardRowsTable.add(row).left().padBottom(2f).row()
+            }
+        }
+    }
+
+    private fun healthFrameTableInvalidate(img: Image) {
+        (img.parent as? com.badlogic.gdx.scenes.scene2d.utils.Layout)?.invalidateHierarchy()
     }
 
     override fun onDispose() {

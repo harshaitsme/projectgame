@@ -1,5 +1,6 @@
 package io.github.shootgame.system
 
+import com.badlogic.gdx.graphics.Color
 import com.badlogic.gdx.graphics.OrthographicCamera
 import com.badlogic.gdx.graphics.Pixmap
 import com.badlogic.gdx.graphics.Texture
@@ -201,22 +202,18 @@ class RenderSystem(
     }
 
     override fun handle(event: Event?): Boolean {
+        when (event) {
+            is MapChangeEvent -> {
+                bgdLayers.clear()
+                fgdLayers.clear()
 
-        when(event){
-             is MapChangeEvent -> {
-
-                  bgdLayers.clear()
-                  fgdLayers.clear()
-
-                  event.map.forEachLayer<TiledMapTileLayer> { layer ->
-
-                      if(layer.name.startsWith("fg")){
-
-                             fgdLayers.add(layer)
-                      }else{
-                             bgdLayers.add(layer)
-                      }
-                  }
+                event.map.forEachLayer<TiledMapTileLayer> { layer ->
+                    if (layer.name.startsWith("fg")) {
+                        fgdLayers.add(layer)
+                    } else {
+                        bgdLayers.add(layer)
+                    }
+                }
                 return true
             }
         }

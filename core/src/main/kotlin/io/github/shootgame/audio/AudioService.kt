@@ -77,7 +77,7 @@ class AudioService {
         basePitch: Float = 1f
     ) {
         if (isDisposed) {
-            log.warn { "Attempted to play sound after AudioService was disposed" }
+            log.debug { "Attempted to play sound after AudioService was disposed" }
             return
         }
         if (!isSoundEnabled) return
@@ -95,7 +95,7 @@ class AudioService {
 
     fun playMusic() {
         if (isDisposed) {
-            log.warn { "Attempted to play music after AudioService was disposed" }
+            log.debug { "Attempted to play music after AudioService was disposed" }
             return
         }
         val currentMusic = music ?: return

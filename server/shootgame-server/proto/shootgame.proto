@@ -10,18 +10,25 @@ syntax = "proto3";
 option java_multiple_files = true;
 option java_package = "io.github.shootgame.proto";
 
-// Client -> server (TCP): request login. On reconnect, echo the last token.
+// Client -> server (TCP): request login & room matchmaking.
 message LoginPacket {
   string player_name = 1;
   string session_token = 2;
+  string room_code = 3;
+  string game_mode = 4;
+  bool create_room = 5;
 }
 
-// Server -> client (TCP): assigned identity + session token to persist.
+// Server -> client (TCP): assigned identity + room code + session token.
 message LoginResponsePacket {
   uint32 assigned_id = 1;
   float spawn_x = 2;
   float spawn_y = 3;
   string session_token = 4;
+  string room_code = 5;
+  string game_mode = 6;
+  uint32 max_players = 7;
+  uint32 current_players = 8;
 }
 
 // Bidirectional (server->client UDP/TCP broadcast, client->server TCP/UDP input).
@@ -39,6 +46,7 @@ message PlayerStatePacket {
   uint32 deaths = 11;
   string player_name = 12;
   uint32 weapon_index = 13;
+  string room_code = 14;
 }
 
 // Client -> server (TCP) & Server -> client broadcast: a player fired.
@@ -49,6 +57,7 @@ message PlayerShootPacket {
   float origin_y = 4;
   float direction_x = 5;
   float direction_y = 6;
+  string room_code = 7;
 }
 
 // Server -> client (TCP/UDP): authoritative combat resolution.
@@ -62,6 +71,7 @@ message PlayerHitPacket {
   bool is_kill = 7;
   uint32 attacker_kills = 8;
   uint32 victim_deaths = 9;
+  string room_code = 10;
 }
 
 // Server -> client: a player joined.
@@ -69,9 +79,12 @@ message PlayerConnectedPacket {
   uint32 id = 1;
   float x = 2;
   float y = 3;
+  string room_code = 4;
+  string player_name = 5;
 }
 
 // Server -> client: a player left.
 message PlayerDisconnectedPacket {
   uint32 id = 1;
+  string room_code = 2;
 }
