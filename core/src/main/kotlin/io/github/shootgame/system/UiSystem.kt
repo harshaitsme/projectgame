@@ -17,6 +17,9 @@ import com.badlogic.gdx.utils.Align
 import com.github.quillraven.fleks.ComponentMapper
 import com.github.quillraven.fleks.IntervalSystem
 import com.github.quillraven.fleks.Qualifier
+import com.kotcrab.vis.ui.widget.VisLabel
+import com.kotcrab.vis.ui.widget.VisTable
+import com.kotcrab.vis.ui.widget.VisTextButton
 import io.github.shootgame.audio.AudioService
 import io.github.shootgame.audio.SoundType
 import io.github.shootgame.component.AttackComponent
@@ -31,8 +34,13 @@ class UiSystem(
     private val healthCmps: ComponentMapper<HealthComponent>,
     private val weaponCmps: ComponentMapper<WeaponComponent>,
     private val playerCmps: ComponentMapper<PlayerComponent>,
-    private val audioService: AudioService
+    private val remotePlayerCmps: ComponentMapper<RemotePlayerComponent>,
+    private val deadCmps: ComponentMapper<DeadComponent>,
+    private val audioService: AudioService,
+    private val config: GameConfig
 ) : IntervalSystem() {
+
+    private val networkSystem: NetworkSystem by lazy { world.system<NetworkSystem>() }
 
     var touchLeft = false
     var touchRight = false
@@ -41,6 +49,7 @@ class UiSystem(
     var touchJump = false
     var touchGrenade = false
     var touchSwitchWeapon = false
+    var requestedWeaponSelect: WeaponType? = null
 
     fun consumeWeaponSwitch(): Boolean {
         val res = touchSwitchWeapon
@@ -81,7 +90,10 @@ class UiSystem(
     private val maxHealthBarWidth = 190f
 
     init {
-        initFonts()
+        panelBgTexture = makeSolidTexture(0.05f, 0.08f, 0.14f, 0.78f)
+        barBgTexture = makeSolidTexture(0.22f, 0.08f, 0.08f, 0.9f)
+        barFillTexture = makeSolidTexture(1f, 1f, 1f, 1f)
+
         setupHud()
         if (Gdx.app.type == Application.ApplicationType.Android) {
             setupTouchControls()
@@ -370,10 +382,12 @@ class UiSystem(
         return stack
     }
 
-    override fun onTick() {
+        // Update local player HUD (filter out RemotePlayerComponent!)
         world.family(
             allOf = arrayOf(PlayerComponent::class, HealthComponent::class)
         ).forEach { player ->
+            if (player in remotePlayerCmps) return@forEach
+
             val health = healthCmps[player]
             val hpRatio = (health.currentHealth / health.maxHealth).coerceIn(0f, 1f)
             val fillW = max(2f, maxHealthBarWidth * hpRatio)
@@ -388,6 +402,18 @@ class UiSystem(
 
             val attackCmp = attackCmps.getOrNull(player) ?: return@forEach
             val weaponCmp = weaponCmps.getOrNull(player)
+
+            // Apply weapon click from HUD if requested
+            val reqWeapon = requestedWeaponSelect
+            if (reqWeapon != null && weaponCmp != null) {
+                requestedWeaponSelect = null
+                if (weaponCmp.currentWeapon != reqWeapon) {
+                    weaponCmp.selectWeapon(reqWeapon)
+                    attackCmp.isReloading = false
+                    attackCmp.stateTime = 0.15f
+                }
+            }
+
             val currentWeapon = weaponCmp?.currentWeapon
 
             if (weaponCmp != null && currentWeapon != null) {
