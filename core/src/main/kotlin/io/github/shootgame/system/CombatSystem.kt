@@ -11,7 +11,7 @@ import io.github.shootgame.audio.SoundType
 import io.github.shootgame.component.*
 
 @AllOf([AttackComponent::class, MoveComponent::class, ImageComponent::class, AnimationComponent::class])
-@NoneOf([DeadComponent::class])
+@NoneOf([DeadComponent::class, RemotePlayerComponent::class])
 class CombatSystem(
     private val attackCmps: ComponentMapper<AttackComponent>,
     private val moveCmps: ComponentMapper<MoveComponent>,
@@ -41,10 +41,21 @@ class CombatSystem(
         } else {
             attackCmp.ammo
         }
+        val reserveAmmo = if (weaponCmp != null && currentWeapon != null) {
+            weaponCmp.reserveAmmoMap.getOrPut(currentWeapon) { currentWeapon.maxReserveAmmo }
+        } else {
+            0
+        }
         val reloadDuration = currentWeapon?.reloadTime ?: attackCmp.reloadTime
         val fireRate = currentWeapon?.fireRate ?: attackCmp.fireRate
 
         if (attackCmp.isReloading) {
+            if (weaponCmp != null && currentWeapon != null && (reserveAmmo <= 0 || currentAmmo >= maxAmmo)) {
+                attackCmp.isReloading = false
+                attackCmp.stateTime = 0f
+                reloadingEntities.remove(entity)
+                return
+            }
             if (entity !in reloadingEntities) {
                 reloadingEntities.add(entity)
                 audioService.play(SoundType.RELOAD)
@@ -52,7 +63,13 @@ class CombatSystem(
             attackCmp.stateTime += deltaTime
             if (attackCmp.stateTime >= reloadDuration) {
                 if (weaponCmp != null && currentWeapon != null) {
-                    weaponCmp.ammoMap[currentWeapon] = maxAmmo
+                    val needed = (maxAmmo - currentAmmo).coerceAtLeast(0)
+                    val reserve = weaponCmp.reserveAmmoMap.getOrPut(currentWeapon) { currentWeapon.maxReserveAmmo }
+                    if (reserve > 0 && needed > 0) {
+                        val toLoad = needed.coerceAtMost(reserve)
+                        weaponCmp.ammoMap[currentWeapon] = currentAmmo + toLoad
+                        weaponCmp.reserveAmmoMap[currentWeapon] = (reserve - toLoad).coerceAtLeast(0)
+                    }
                 } else {
                     attackCmp.ammo = attackCmp.maxAmmo
                 }
@@ -76,9 +93,9 @@ class CombatSystem(
                 if (animationCmp.type == AnimationType.SHOT1 && animationCmp.stateTime >= minAnimDelay) {
                     spawnBulletsForWeapon(entity, imageCmp, currentWeapon)
                     if (weaponCmp != null && currentWeapon != null) {
-                        weaponCmp.ammoMap[currentWeapon] = currentAmmo - 1
+                        weaponCmp.ammoMap[currentWeapon] = (currentAmmo - 1).coerceAtLeast(0)
                     } else {
-                        attackCmp.ammo--
+                        attackCmp.ammo = (attackCmp.ammo - 1).coerceAtLeast(0)
                     }
                     attackCmp.stateTime = fireRate
 
@@ -87,9 +104,14 @@ class CombatSystem(
                         cameraShakeSystem.trigger(amount = currentWeapon.cameraShake)
                     }
                 }
-            } else {
+            } else if (reserveAmmo > 0) {
+                attackCmp.isAttacking = false
                 attackCmp.isReloading = true
                 attackCmp.stateTime = 0f
+            } else {
+                // Out of both clip and reserve ammo: cannot shoot or reload
+                attackCmp.isAttacking = false
+                attackCmp.isReloading = false
             }
         } else if (attackCmp.isThrowing && attackCmp.stateTime <= 0) {
             if (attackCmp.fragAmmo > 0) {
@@ -125,10 +147,21 @@ class CombatSystem(
         }
     }
 
+    fun spawnRemoteShot(shooter: Entity, weapon: WeaponType?, dirX: Float) {
+        val imageCmp = imageCmps.getOrNull(shooter) ?: return
+        if (dirX != 0f) {
+            imageCmp.image.originX = imageCmp.image.width * 0.5f
+            imageCmp.image.scaleX = if (dirX < 0f) -1f else 1f
+        }
+        spawnBulletsForWeapon(shooter, imageCmp, weapon, isRemote = true)
+        playWeaponSound(weapon)
+    }
+
     private fun spawnBulletsForWeapon(
         shooter: Entity,
         imageCmp: ImageComponent,
-        weapon: WeaponType?
+        weapon: WeaponType?,
+        isRemote: Boolean = false
     ) {
         val image = imageCmp.image
         val facingRight = image.scaleX > 0
@@ -136,13 +169,15 @@ class CombatSystem(
         val offsetX = if (facingRight) 0.6f else -0.6f
         val offsetY = -0.9f
 
-        val startX = image.x + image.width * 0.5f + offsetX
-        val startY = image.y + image.height * 0.5f + offsetY
+        val bodyCenterX = image.x + image.width * 0.5f
+        val bodyCenterY = image.y + image.height * 0.5f
+        val startX = bodyCenterX + offsetX
+        val startY = bodyCenterY + offsetY
 
-        if (shooter in playerCmps && shooter !in remotePlayerCmps && networkSystem.isConnected) {
+        if (!isRemote && shooter in playerCmps && shooter !in remotePlayerCmps && networkSystem.isConnected) {
             networkSystem.sendShoot(
                 originX = startX,
-                originY = startY,
+                originY = bodyCenterY,
                 dirX = if (facingRight) 1f else -1f,
                 dirY = 0f,
                 weaponIndex = weapon?.ordinal ?: 0
@@ -156,15 +191,14 @@ class CombatSystem(
         val spreadAngle = weapon?.spreadAngle ?: 0f
 
         val bulletWidth = when (weapon) {
-            WeaponType.SHOTGUN -> 0.14f
-            WeaponType.SNIPER -> 0.35f
-            WeaponType.MACHINE_GUN -> 0.18f
-            else -> 0.2f
+            WeaponType.SHOTGUN -> 0.07f
+            WeaponType.MACHINE_GUN -> 0.10f
+            else -> 0.09f
         }
         val bulletHeight = when (weapon) {
-            WeaponType.SHOTGUN -> 0.14f
-            WeaponType.SNIPER -> 0.12f
-            else -> 0.2f
+            WeaponType.SHOTGUN -> 0.06f
+            WeaponType.MACHINE_GUN -> 0.06f
+            else -> 0.06f
         }
 
         val baseAngleDeg = if (facingRight) 0f else 180f
@@ -220,12 +254,6 @@ class CombatSystem(
                 volumeModifier = 0.75f,
                 pitchVariation = 0.12f,
                 basePitch = 1.25f
-            )
-            WeaponType.SNIPER -> audioService.play(
-                SoundType.SHOT,
-                volumeModifier = 1.0f,
-                pitchVariation = 0.02f,
-                basePitch = 0.55f
             )
             else -> audioService.play(
                 SoundType.SHOT,

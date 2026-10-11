@@ -27,6 +27,8 @@ import ktx.box2d.box
 import ktx.box2d.circle
 import ktx.math.vec2
 import ktx.tiled.layer
+import io.github.shootgame.screen.GameConfig
+import io.github.shootgame.screen.GameMode
 import ktx.tiled.type
 import ktx.tiled.x
 import ktx.tiled.y
@@ -35,6 +37,7 @@ import ktx.tiled.y
 class EntitySpawnSystem(
     private val phWorld: World,
     private val atlas: TextureAtlas,
+    private val config: GameConfig,
     private val spawnCmps: ComponentMapper<SpawnComponent>,
     private val moveCmps: ComponentMapper<MoveComponent>,
     private val ownerCmps: ComponentMapper<OwnerComponent>,
@@ -47,7 +50,7 @@ class EntitySpawnSystem(
 
     private val bulletRegion: TextureRegion by lazy {
         val pixmap = Pixmap(8, 8, Pixmap.Format.RGBA8888)
-        pixmap.setColor(1f, 1f, 0f, 1f) // Yellow bullet
+        pixmap.setColor(0.05f, 0.05f, 0.05f, 1f) // Solid black bullet
         pixmap.fill()
         val texture = Texture(pixmap)
         pixmap.dispose()
@@ -90,8 +93,8 @@ class EntitySpawnSystem(
                 image = Image().apply {
                     if (spawnCmp.type == "Bullet") {
                         drawable = TextureRegionDrawable(bulletRegion)
-                        val bWidth = originalBulletCmp?.width ?: 0.2f
-                        val bHeight = originalBulletCmp?.height ?: 0.2f
+                        val bWidth = originalBulletCmp?.width ?: 0.09f
+                        val bHeight = originalBulletCmp?.height ?: 0.06f
                         setSize(bWidth, bHeight)
                     } else if (spawnCmp.type == "Frag") {
                         drawable = TextureRegionDrawable(grenadeRegion)
@@ -105,8 +108,8 @@ class EntitySpawnSystem(
                     }
 
                     if (spawnCmp.type == "Bullet" || spawnCmp.type == "Frag" || spawnCmp.type == "Explosion") {
-                        val bWidth = originalBulletCmp?.width ?: 0.2f
-                        val bHeight = originalBulletCmp?.height ?: 0.2f
+                        val bWidth = originalBulletCmp?.width ?: 0.09f
+                        val bHeight = originalBulletCmp?.height ?: 0.06f
                         val finalWidth = if (spawnCmp.type == "Bullet") bWidth
                                         else if (spawnCmp.type == "Frag") 0.4f
                                         else size(cfg.model, cfg.type).x * 2.5f
@@ -121,8 +124,12 @@ class EntitySpawnSystem(
                         }
 
                         setPosition(positionX, positionY)
+                    } else if (spawnCmp.type == "RemotePlayer") {
+                        // spawnCmp.location is the Box2D body center (x, y) from network packets
+                        val size = size(cfg.model, cfg.type)
+                        setPosition(spawnCmp.location.x - size.x * 0.5f, spawnCmp.location.y - size.y * 0.5f)
                     } else {
-                        // Standard bottom-left for player/map objects
+                        // Standard bottom-left for Tiled map objects
                         setPosition(spawnCmp.location.x, spawnCmp.location.y)
                     }
                     setScaling(Scaling.fill)
@@ -141,7 +148,9 @@ class EntitySpawnSystem(
 
             if (spawnCmp.type == "Player") {
                 println("SPAWNING PLAYER at: ${spawnCmp.location}")
-                add<PlayerComponent>()
+                add<PlayerComponent> {
+                    playerName = config.playerName
+                }
                 add<MoveComponent>()
                 add<AttackComponent>()
                 add<WeaponComponent>()
@@ -152,14 +161,26 @@ class EntitySpawnSystem(
             }
 
             if (spawnCmp.type == "RemotePlayer") {
-                println("SPAWNING REMOTE PLAYER at: ${spawnCmp.location}")
-                imageCmp.image.color = Color(0.4f, 0.7f, 1f, 1f) // Distinct ally cyan/blue tint
-                add<PlayerComponent>()
+                println("SPAWNING REMOTE PLAYER at: ${spawnCmp.location} (netId=${spawnCmp.networkId})")
+                imageCmp.image.color = Color(0.4f, 0.85f, 1f, 1f) // Distinct multiplayer cyan tint
+                add<PlayerComponent> {
+                    playerName = "Player_${spawnCmp.networkId}"
+                }
                 add<RemotePlayerComponent>()
                 add<MoveComponent>()
                 add<AttackComponent>()
                 add<WeaponComponent>()
                 add<HealthComponent>()
+                add<NetworkComponent> {
+                    networkId = spawnCmp.networkId
+                    isLocal = false
+                    playerName = "Player_${spawnCmp.networkId}"
+                    targetX = spawnCmp.location.x
+                    targetY = spawnCmp.location.y
+                    targetCos = 0f
+                    targetSin = 1f
+                    hasInitializedPos = true
+                }
                 add<OwnerComponent> {
                     owner = spawnedEntity
                 }
@@ -264,7 +285,15 @@ class EntitySpawnSystem(
             }
 else if (spawnCmp.type == "Explosion") {
                 // No physics for explosion, just visuals
-            } else if (spawnCmp.type == "Player" || spawnCmp.type == "RemotePlayer" || spawnCmp.type == "Enemy") {
+            } else if (spawnCmp.type == "RemotePlayer") {
+                physicCmpFromImage(phWorld, imageCmp.image, BodyDef.BodyType.KinematicBody) { _, width, height ->
+                    gravityScale = 0f
+                    box(width = width * 0.25f, height = height * 0.85f) {
+                        isSensor = true
+                        friction = 0f
+                    }
+                }
+            } else if (spawnCmp.type == "Player" || spawnCmp.type == "Enemy") {
                 physicCmpFromImage(phWorld, imageCmp.image, BodyDef.BodyType.DynamicBody) { _, width, height ->
                     // Narrower box (25% width) to fit the character and not the whitespace
                     box(width = width * 0.25f, height = height * 0.85f) {
@@ -321,6 +350,9 @@ else if (spawnCmp.type == "Explosion") {
                     }
 
                     if (type == "Enemy") {
+                        if (config.mode != GameMode.OFFLINE) {
+                            return@forEach
+                        }
                         enemyCount++
                     }
 
@@ -332,12 +364,13 @@ else if (spawnCmp.type == "Explosion") {
                     }
                 }
 
-                if (enemyCount == 0) {
-                    println("Spawning default test enemies on map platforms...")
+                // Only spawn AI practice bots in OFFLINE solo mode
+                if (enemyCount == 0 && config.mode == GameMode.OFFLINE) {
+                    println("Spawning default practice enemies on map platforms...")
                     val defaultEnemyPositions = listOf(
-                        Vector2(16f, 14.6f),
-                        Vector2(22f, 8.5f),
-                        Vector2(6f, 9.5f)
+                        Vector2(5.5f, 3.34f),
+                        Vector2(15.0f, 3.34f),
+                        Vector2(22.0f, 4.34f)
                     )
                     defaultEnemyPositions.forEach { pos ->
                         world.entity {

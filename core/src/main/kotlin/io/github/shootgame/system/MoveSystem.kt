@@ -18,7 +18,7 @@ import io.github.shootgame.component.*
 import kotlin.math.abs
 
 @AllOf([MoveComponent::class, PhysicComponent::class])
-@NoneOf([DeadComponent::class])
+@NoneOf([DeadComponent::class, RemotePlayerComponent::class])
 class MoveSystem(
     private val moveCmps: ComponentMapper<MoveComponent>,
     private val physicCmps: ComponentMapper<PhysicComponent>,
@@ -28,6 +28,7 @@ class MoveSystem(
     private val bulletCmps: ComponentMapper<BulletComponent>,
     private val playerCmps: ComponentMapper<PlayerComponent>,
     private val fragCmps: ComponentMapper<FragComponent>,
+    private val remotePlayerCmps: ComponentMapper<RemotePlayerComponent>,
     private val audioService: AudioService
 ) : IteratingSystem() {
 
@@ -36,7 +37,6 @@ class MoveSystem(
         val physicCmp = physicCmps[entity]
         val isBullet = entity in bulletCmps
         val isFrag = entity in fragCmps
-
         val body = physicCmp.body
         val currentVelocity = body.linearVelocity
 
@@ -53,16 +53,22 @@ class MoveSystem(
                 moveCmp.cos * moveCmp.speed,
                 currentVelocity.y
             )
-        } else {
-            // Non-projectiles (Player) move horizontally via input
-            body.setLinearVelocity(
-                moveCmp.cos * moveCmp.speed,
-                currentVelocity.y
-            )
+        } else if (entity !in remotePlayerCmps) {
+            // Keep local player & enemies inside the indoor map arena (prevent roof/void trapping)
+            if (body.position.y > 9.5f || body.position.y < 1.0f) {
+                body.setTransform(12.47f, 5.2f, 0f)
+                body.setLinearVelocity(0f, 0f)
+            } else {
+                // Non-projectiles (Local Player & Enemies) move horizontally via input
+                body.setLinearVelocity(
+                    moveCmp.cos * moveCmp.speed,
+                    currentVelocity.y
+                )
+            }
         }
 
-        // Jump logic (only for non-bullets)
-        if (!isBullet && moveCmp.doJump) {
+        // Jump logic (only for local player / enemies)
+        if (!isBullet && !isFrag && entity !in remotePlayerCmps && moveCmp.doJump) {
             // Simple grounded check: check if vertical velocity is near 0
             if (abs(currentVelocity.y) < 0.1f) {
                 body.applyLinearImpulse(0f, moveCmp.jumpImpulse, body.worldCenter.x, body.worldCenter.y, true)

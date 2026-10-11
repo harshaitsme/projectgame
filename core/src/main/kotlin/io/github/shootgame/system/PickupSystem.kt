@@ -24,6 +24,7 @@ import io.github.shootgame.component.PhysicComponent.Companion.physicCmpFromImag
 import io.github.shootgame.component.PickupComponent
 import io.github.shootgame.component.PickupType
 import io.github.shootgame.component.PlayerComponent
+import io.github.shootgame.component.RemotePlayerComponent
 import io.github.shootgame.component.WeaponComponent
 import ktx.box2d.circle
 import kotlin.math.sin
@@ -132,10 +133,11 @@ class PickupSystem(
             }
         }
 
-        // Find player entity
+        // Find local player entity
         var player: Entity? = null
         world.family(
-            allOf = arrayOf(PlayerComponent::class, PhysicComponent::class)
+            allOf = arrayOf(PlayerComponent::class, PhysicComponent::class),
+            noneOf = arrayOf(RemotePlayerComponent::class)
         ).forEach {
             player = it
         }
@@ -175,11 +177,7 @@ class PickupSystem(
             }
             PickupType.AMMO -> {
                 val weaponCmp = weaponCmps.getOrNull(player)
-                if (weaponCmp != null) {
-                    weaponCmp.weapons.forEach { weapon ->
-                        weaponCmp.ammoMap[weapon] = weapon.maxAmmo
-                    }
-                }
+                weaponCmp?.refillAllAmmo()
                 val attackCmp = attackCmps.getOrNull(player)
                 if (attackCmp != null) {
                     attackCmp.ammo = attackCmp.maxAmmo
