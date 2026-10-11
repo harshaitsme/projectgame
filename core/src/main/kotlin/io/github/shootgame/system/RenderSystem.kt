@@ -1,6 +1,5 @@
 package io.github.shootgame.system
 
-import com.artemis.annotations.All
 import com.badlogic.gdx.graphics.OrthographicCamera
 import com.badlogic.gdx.maps.tiled.TiledMapTileLayer
 import com.badlogic.gdx.maps.tiled.renderers.OrthogonalTiledMapRenderer
@@ -98,18 +97,18 @@ class RenderSystem(
         when(event){
              is MapChangeEvent -> {
 
-                 bgdLayers.clear()
-                 fgdLayers.clear()
+                  bgdLayers.clear()
+                  fgdLayers.clear()
 
-                 event.map.forEachLayer<TiledMapTileLayer> { layer ->
+                  event.map.forEachLayer<TiledMapTileLayer> { layer ->
 
-                     if(layer.name.startsWith("fg")){
+                      if(layer.name.startsWith("fg")){
 
-                            fgdLayers.add(layer)
-                     }else{
-                            bgdLayers.add(layer)
-                     }
-                 }
+                             fgdLayers.add(layer)
+                      }else{
+                             bgdLayers.add(layer)
+                      }
+                  }
                 return true
             }
         }
