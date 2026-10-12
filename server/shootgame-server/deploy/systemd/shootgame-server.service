@@ -9,7 +9,6 @@ Type=simple
 User=shootgame
 Group=shootgame
 
-# Where you deployed the binary + working directory.
 WorkingDirectory=/opt/shootgame
 ExecStart=/opt/shootgame/shootgame-server
 
@@ -18,18 +17,27 @@ RestartSec=5
 TimeoutStopSec=10
 KillSignal=SIGTERM
 
-# Ports via environment (matches the server's env config).
+# Load environment from a file for easier management
+EnvironmentFile=-/etc/shootgame/server.env
 Environment=SHOOTGAME_TCP_PORT=54555
 Environment=SHOOTGAME_UDP_PORT=54777
-# Uncomment to raise log verbosity if you switch to tracing later:
-# Environment=RUST_LOG=info
 
-# Resource + security hardening.
+# Performance Tuning
+Nice=-10
+CPUSchedulingPolicy=rr
+CPUSchedulingPriority=50
 LimitNOFILE=65535
+LimitMEMLOCK=64M
+
+# Security Hardening
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=full
 ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+MemoryDenyWriteExecute=true
 ReadWritePaths=/opt/shootgame
 RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
 
