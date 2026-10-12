@@ -22,14 +22,14 @@ class AndroidSqliteBackend(context: Context) :
     }
 
     override fun initTable() {
-        writableDatabase.execSQL(SqliteSessionStore.SQL_CREATE_TABLE)
+        // No-op: onCreate handles this automatically
     }
 
     override fun saveSession(record: AuthSessionRecord) {
         val db = writableDatabase
+        // Using a single immediate transaction
         db.beginTransaction()
         try {
-            db.delete("user_sessions", null, null)
             val values = ContentValues().apply {
                 put("username", record.username)
                 put("jwt_token", record.jwtToken)
@@ -37,6 +37,7 @@ class AndroidSqliteBackend(context: Context) :
                 put("created_at", record.createdAt)
                 put("expires_at", record.expiresAt)
             }
+            // Relies on PRIMARY KEY constraint to replace old sessions
             db.insertWithOnConflict("user_sessions", null, values, SQLiteDatabase.CONFLICT_REPLACE)
             db.setTransactionSuccessful()
         } finally {
@@ -46,22 +47,27 @@ class AndroidSqliteBackend(context: Context) :
 
     override fun loadActiveSession(): AuthSessionRecord? {
         val db = readableDatabase
-        val cursor = db.rawQuery(
-            "SELECT username, jwt_token, session_token, created_at, expires_at FROM user_sessions ORDER BY created_at DESC LIMIT 1;",
-            null
+        val cursor = db.query(
+            "user_sessions",
+            arrayOf("username", "jwt_token", "session_token", "created_at", "expires_at"),
+            null, null, null, null,
+            "created_at DESC",
+            "1"
         )
-        cursor.use { c ->
+        
+        return cursor.use { c ->
             if (c.moveToFirst()) {
-                return AuthSessionRecord(
+                AuthSessionRecord(
                     username = c.getString(0),
                     jwtToken = c.getString(1),
                     sessionToken = c.getString(2),
                     createdAt = c.getLong(3),
                     expiresAt = c.getLong(4)
                 )
+            } else {
+                null
             }
         }
-        return null
     }
 
     override fun clearSessions() {
