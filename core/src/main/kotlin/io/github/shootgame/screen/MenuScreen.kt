@@ -12,6 +12,7 @@ import com.badlogic.gdx.scenes.scene2d.Stage
 import com.badlogic.gdx.scenes.scene2d.ui.Image
 import com.badlogic.gdx.scenes.scene2d.ui.Stack
 import com.badlogic.gdx.scenes.scene2d.ui.Table
+import com.badlogic.gdx.scenes.scene2d.ui.TextField
 import com.badlogic.gdx.scenes.scene2d.utils.ClickListener
 import com.badlogic.gdx.scenes.scene2d.utils.TextureRegionDrawable
 import com.badlogic.gdx.utils.Align
@@ -29,15 +30,28 @@ import io.github.shootgame.auth.AuthSessionRecord
 import io.github.shootgame.auth.FirebaseAuthService
 import io.github.shootgame.auth.SqliteSessionStore
 import io.github.shootgame.network.NetworkConfig
+import io.github.shootgame.proto.LoginResponsePacket
+import io.github.shootgame.proto.PlayerConnectedPacket
+import io.github.shootgame.proto.PlayerDisconnectedPacket
+import io.github.shootgame.proto.PlayerStatePacket
 import ktx.app.KtxScreen
 import ktx.assets.disposeSafely
 import java.net.InetSocketAddress
 import java.net.Socket
+import kotlin.math.max
 
 enum class MenuStep {
     AUTH,
     LOBBY
 }
+
+data class WaitingRoomMember(
+    val id: Int,
+    var name: String,
+    val isLocal: Boolean,
+    var x: Float = 12.47f,
+    var y: Float = 5.34f
+)
 
 class MenuScreen(private val game: Main) : KtxScreen {
 
@@ -868,16 +882,29 @@ class MenuScreen(private val game: Main) : KtxScreen {
     private fun pingServer() {
         val host = System.getProperty("shootgame.host", NetworkConfig.serverHost)
         Thread {
-            val start = System.currentTimeMillis()
-            val reachable = try {
+            val host = System.getProperty("shootgame.host", NetworkConfig.serverHost)
+            val serverOk = try {
                 Socket().use { s ->
-                    s.connect(InetSocketAddress(host, NetworkConfig.TCP_PORT), 2200)
+                    s.connect(InetSocketAddress(host, NetworkConfig.TCP_PORT), 1500)
                 }
                 true
             } catch (_: Exception) {
                 false
             }
-            val ping = System.currentTimeMillis() - start
+
+            val netOk = if (serverOk) {
+                true
+            } else {
+                try {
+                    Socket().use { s ->
+                        s.connect(InetSocketAddress("8.8.8.8", 53), 1200)
+                    }
+                    true
+                } catch (_: Exception) {
+                    false
+                }
+            }
+
             Gdx.app.postRunnable {
                 serverOnline = reachable
                 serverPingMs = ping
@@ -921,6 +948,7 @@ class MenuScreen(private val game: Main) : KtxScreen {
     }
 
     override fun dispose() {
+        stopWaitingRoomClient()
         stage.disposeSafely()
         audioService.dispose()
         bgFrameTexture?.disposeSafely()
@@ -929,5 +957,9 @@ class MenuScreen(private val game: Main) : KtxScreen {
         rankShieldTexture?.disposeSafely()
         generatedTextures.forEach { it.disposeSafely() }
         generatedTextures.clear()
+        generatedFonts.forEach { it.disposeSafely() }
+        generatedFonts.clear()
+        fontGenerator?.disposeSafely()
+        fontGenerator = null
     }
 }

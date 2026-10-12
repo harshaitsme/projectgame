@@ -100,6 +100,8 @@ class GameClient(
 
                 println("TCP connection established to $host:$tcpPort as '$name' [Room=$activeRoomCode, Mode=$activeGameMode]")
             } catch (e: Exception) {
+                lastError = e.message ?: "Unable to reach multiplayer server"
+                connectionFailed = true
                 println("Could not connect to multiplayer server at $host: ${e.message}. Running in offline mode.")
                 close()
             }

@@ -836,13 +836,38 @@ fn handle_message(
                     if tick < cd.next_tick {
                         return;
                     }
-                    cd.next_tick = tick + SHOOT_COOLDOWN_TICKS;
                 }
                 let mut metas = world.write::<PlayerMeta>();
                 if let Some(meta) = metas.get_mut(entity) {
                     meta.weapon_index = pkt.weapon_index;
                     meta.shots_fired = meta.shots_fired.saturating_add(1);
                 }
+
+                let (nx, ny) = (pkt.direction_x / mag, pkt.direction_y / mag);
+                let dmg = weapon_damage(pkt.weapon_index);
+
+                // Spawn a server-authoritative projectile entity (scoped to shooter's room).
+                let entity = world
+                    .create_entity()
+                    .with(Position {
+                        x: pkt.origin_x,
+                        y: pkt.origin_y,
+                    })
+                    .with(Velocity {
+                        dx: nx * PROJECTILE_SPEED,
+                        dy: ny * PROJECTILE_SPEED,
+                    })
+                    .with(Lifetime {
+                        remaining: PROJECTILE_LIFE,
+                    })
+                    .with(Owner {
+                        id: pkt.id,
+                        damage: dmg,
+                        weapon_index: pkt.weapon_index,
+                        room_code: shooter_room.clone(),
+                    })
+                    .build();
+                projectiles.push(entity);
             }
             if let Some(room) = rooms.get_mut(&shooter_room) {
                 room.total_shots = room.total_shots.saturating_add(1);

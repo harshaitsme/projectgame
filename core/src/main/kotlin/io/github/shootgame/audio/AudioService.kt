@@ -4,6 +4,7 @@ import com.badlogic.gdx.Gdx
 import com.badlogic.gdx.audio.Music
 import com.badlogic.gdx.audio.Sound
 import com.badlogic.gdx.math.MathUtils
+import io.github.shootgame.screen.GameSettings
 import ktx.assets.disposeSafely
 import ktx.log.logger
 
@@ -33,6 +34,11 @@ class AudioService {
         }
 
     init {
+        GameSettings.ensureLoaded()
+        isSoundEnabled = GameSettings.sfxEnabled
+        soundVolume = GameSettings.sfxVolume
+        isMusicEnabled = GameSettings.bgmEnabled
+        musicVolume = GameSettings.bgmVolume
         loadSounds()
         loadMusic()
     }
@@ -77,10 +83,10 @@ class AudioService {
         basePitch: Float = 1f
     ) {
         if (isDisposed) {
-            log.warn { "Attempted to play sound after AudioService was disposed" }
+            log.debug { "Attempted to play sound after AudioService was disposed" }
             return
         }
-        if (!isSoundEnabled) return
+        if (!isSoundEnabled || soundVolume <= 0.001f) return
         val sound = soundCache[type] ?: return
 
         val finalVolume = (soundVolume * volumeModifier).coerceIn(0f, 1f)
@@ -95,12 +101,12 @@ class AudioService {
 
     fun playMusic() {
         if (isDisposed) {
-            log.warn { "Attempted to play music after AudioService was disposed" }
+            log.debug { "Attempted to play music after AudioService was disposed" }
             return
         }
         val currentMusic = music ?: return
         currentMusic.volume = if (isMusicEnabled) musicVolume else 0f
-        if (!currentMusic.isPlaying) {
+        if (isMusicEnabled && !currentMusic.isPlaying) {
             currentMusic.play()
         }
     }
@@ -125,12 +131,26 @@ class AudioService {
     fun toggleSound(): Boolean {
         if (isDisposed) return false
         isSoundEnabled = !isSoundEnabled
+        if (isSoundEnabled && soundVolume <= 0.05f) {
+            soundVolume = 0.8f
+        }
+        GameSettings.updateSfx(isSoundEnabled, soundVolume)
         return isSoundEnabled
+    }
+
+    fun setSoundVolumeLevel(newVolume: Float) {
+        if (isDisposed) return
+        soundVolume = newVolume.coerceIn(0f, 1f)
+        isSoundEnabled = soundVolume > 0.005f
+        GameSettings.updateSfx(isSoundEnabled, soundVolume)
     }
 
     fun toggleMusic(): Boolean {
         if (isDisposed) return false
         isMusicEnabled = !isMusicEnabled
+        if (isMusicEnabled && musicVolume <= 0.05f) {
+            musicVolume = 0.5f
+        }
         if (music != null) {
             if (isMusicEnabled) {
                 music?.volume = musicVolume
@@ -141,7 +161,26 @@ class AudioService {
                 music?.pause()
             }
         }
+        GameSettings.updateBgm(isMusicEnabled, musicVolume)
         return isMusicEnabled
+    }
+
+    fun setMusicVolumeLevel(newVolume: Float) {
+        if (isDisposed) return
+        val clamped = newVolume.coerceIn(0f, 1f)
+        isMusicEnabled = clamped > 0.005f
+        musicVolume = clamped
+        if (music != null) {
+            if (isMusicEnabled) {
+                music?.volume = musicVolume
+                if (!music!!.isPlaying) {
+                    music?.play()
+                }
+            } else {
+                music?.pause()
+            }
+        }
+        GameSettings.updateBgm(isMusicEnabled, musicVolume)
     }
 
     fun dispose() {
