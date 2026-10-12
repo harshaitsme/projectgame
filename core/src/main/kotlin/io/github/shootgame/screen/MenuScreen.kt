@@ -5,15 +5,11 @@ import com.badlogic.gdx.Input
 import com.badlogic.gdx.graphics.Color
 import com.badlogic.gdx.graphics.Pixmap
 import com.badlogic.gdx.graphics.Texture
-import com.badlogic.gdx.graphics.g2d.BitmapFont
-import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator
-import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator.FreeTypeFontParameter
 import com.badlogic.gdx.scenes.scene2d.Actor
 import com.badlogic.gdx.scenes.scene2d.InputEvent
 import com.badlogic.gdx.scenes.scene2d.InputListener
 import com.badlogic.gdx.scenes.scene2d.Stage
 import com.badlogic.gdx.scenes.scene2d.ui.Image
-import com.badlogic.gdx.scenes.scene2d.ui.Label
 import com.badlogic.gdx.scenes.scene2d.ui.Stack
 import com.badlogic.gdx.scenes.scene2d.ui.Table
 import com.badlogic.gdx.scenes.scene2d.ui.TextField
@@ -23,13 +19,16 @@ import com.badlogic.gdx.utils.Align
 import com.badlogic.gdx.utils.Scaling
 import com.badlogic.gdx.utils.ScreenUtils
 import com.badlogic.gdx.utils.viewport.StretchViewport
+import com.kotcrab.vis.ui.widget.VisLabel
+import com.kotcrab.vis.ui.widget.VisTable
+import com.kotcrab.vis.ui.widget.VisTextButton
+import com.kotcrab.vis.ui.widget.VisTextField
 import io.github.shootgame.Main
 import io.github.shootgame.audio.AudioService
 import io.github.shootgame.audio.SoundType
 import io.github.shootgame.auth.AuthSessionRecord
 import io.github.shootgame.auth.FirebaseAuthService
 import io.github.shootgame.auth.SqliteSessionStore
-import io.github.shootgame.network.GameClient
 import io.github.shootgame.network.NetworkConfig
 import io.github.shootgame.proto.LoginResponsePacket
 import io.github.shootgame.proto.PlayerConnectedPacket
@@ -43,8 +42,7 @@ import kotlin.math.max
 
 enum class MenuStep {
     AUTH,
-    LOBBY,
-    WAITING_ROOM
+    LOBBY
 }
 
 data class WaitingRoomMember(
@@ -70,1380 +68,819 @@ class MenuScreen(private val game: Main) : KtxScreen {
     private var activeSession: AuthSessionRecord? = null
     private var authBusy = false
 
-    // Live connectivity state
-    @Volatile private var internetAvailable = true
-    @Volatile private var serverOnline = false
-    @Volatile private var checkingNetwork = false
+    private var serverPingMs = 109L
+    private var serverOnline = true
 
-    // Waiting Room state
-    private var lobbyClient: GameClient? = null
-    private var waitingRoomCode: String = ""
-    private var waitingCreateRoom: Boolean = true
-    private var waitingAutoStart: Boolean = true
-    private var waitingConnectElapsed: Float = 0f
-    private var waitingHeartbeatTimer: Float = 0f
-    private var waitingDotTimer: Float = 0f
-    private var waitingDotCount: Int = 1
-    private var waitingCountdown: Float = -1f
-    private var savedLoginResponse: LoginResponsePacket? = null
-    private val waitingMembers = linkedMapOf<Int, WaitingRoomMember>()
+    private var authFeedbackLabel: VisLabel? = null
+    private var sessionSubLabel: VisLabel? = null
+    private var joinRoomCodeField: VisTextField? = null
+    private var roomHintLabel: VisLabel? = null
+    private var generatedRoomCode: String = GameConfig.generateRoomCode()
+    private var generatedCodeLabel: VisLabel? = null
 
-    // Dynamic UI references
-    private var authFeedbackLabel: Label? = null
-    private var roomCodeField: TextField? = null
-    private var networkBadgeLabel: Label? = null
+    private val modeSlotTables = mutableMapOf<GameMode, Table>()
+    private val modeSlotLabels = mutableMapOf<GameMode, VisLabel>()
 
-    // Waiting Room UI references
-    private var waitingCodeValueLabel: Label? = null
-    private var waitingStatusBannerLabel: Label? = null
-    private var waitingCountLabel: Label? = null
-    private var waitingSlotsContainer: Table? = null
-    private var waitingAutoStartBtnLabel: Label? = null
-
-    // Modal Popup overlay reference
-    private var activePopupOverlay: Table? = null
-
-    // Textures & Fonts
+    // Loaded textures
     private var bgFrameTexture: Texture? = null
     private var avatarTexture: Texture? = null
+    private var rankChevronTexture: Texture? = null
+    private var rankShieldTexture: Texture? = null
     private val generatedTextures = mutableListOf<Texture>()
 
-    private var fontGenerator: FreeTypeFontGenerator? = null
-    private val generatedFonts = mutableListOf<BitmapFont>()
-    private lateinit var fontTiny: BitmapFont
-    private lateinit var fontSmall: BitmapFont
-    private lateinit var fontMedium: BitmapFont
-    private lateinit var fontLarge: BitmapFont
-    private lateinit var fontXLarge: BitmapFont
-
-    // Sci-Fi Cyber-Yellow & Orange Palette (Matched to Gameplay HUD)
-    private val colCyberOrange = Color(1.0f, 0.58f, 0.02f, 1f)
-    private val colCyberOrangeDark = Color(0.75f, 0.36f, 0.01f, 1f)
-    private val colCyberYellow = Color(1.0f, 0.90f, 0.04f, 1f)
-    private val colCyberDanger = Color(0.96f, 0.22f, 0.26f, 1f)
-    private val colCyberGreen = Color(0.24f, 0.96f, 0.48f, 1f)
-    private val colCyberGrey = Color(0.38f, 0.40f, 0.44f, 1f)
-    private val colDarkChamber = Color(0.08f, 0.09f, 0.12f, 0.94f)
-    private val colDarkPanel = Color(0.12f, 0.14f, 0.18f, 0.92f)
-    private val colDarkTrack = Color(0.16f, 0.18f, 0.22f, 0.98f)
-    private val colButtonBg = Color(0.13f, 0.15f, 0.20f, 0.94f)
-    private val colButtonPressed = Color(0.34f, 0.22f, 0.04f, 0.96f)
-    private val colTextDim = Color(0.72f, 0.76f, 0.82f, 1f)
-
-    override fun show() {
-        Gdx.input.inputProcessor = stage
-        initFonts()
-        loadMenuAssets()
-        audioService.playMusic()
-
-        val cached = SqliteSessionStore.loadActiveSession()
-        if (cached != null && cached.jwtToken.isNotBlank()) {
-            activeSession = cached
-            currentStep = MenuStep.LOBBY
-        } else {
-            currentStep = MenuStep.AUTH
-        }
-
-        probeServerAsync()
-        rebuildUi()
-    }
-
-    private fun initFonts() {
-        if (generatedFonts.isNotEmpty()) return
-        val candidates = listOf(
-            "fonts/KnightWarrior.otf",
-            "assets/fonts/KnightWarrior.otf"
-        )
-        val fontHandle = candidates
-            .map { Gdx.files.internal(it) }
-            .firstOrNull { it.exists() }
-
-        if (fontHandle != null) {
-            try {
-                val generator = FreeTypeFontGenerator(fontHandle)
-                fontGenerator = generator
-
-                val makeFont = { size: Int, border: Float, shadow: Float ->
-                    val param = FreeTypeFontParameter().apply {
-                        this.size = size
-                        this.color = Color.WHITE
-                        this.borderWidth = border
-                        this.borderColor = Color(0f, 0f, 0f, 1f)
-                        this.shadowOffsetX = shadow.toInt()
-                        this.shadowOffsetY = shadow.toInt()
-                        this.shadowColor = Color(0f, 0f, 0f, 0.92f)
-                        this.minFilter = Texture.TextureFilter.Linear
-                        this.magFilter = Texture.TextureFilter.Linear
-                    }
-                    generator.generateFont(param).also { generatedFonts.add(it) }
-                }
-
-                fontTiny = makeFont(13, 1.2f, 1f)
-                fontSmall = makeFont(16, 1.5f, 2f)
-                fontMedium = makeFont(21, 1.8f, 2f)
-                fontLarge = makeFont(28, 2.2f, 3f)
-                fontXLarge = makeFont(36, 2.6f, 3f)
-                return
-            } catch (e: Exception) {
-                Gdx.app.error("MenuScreen", "Failed to load KnightWarrior.otf, using default font", e)
-            }
-        }
-
-        val fallback = BitmapFont()
-        generatedFonts.add(fallback)
-        fontTiny = fallback
-        fontSmall = fallback
-        fontMedium = fallback
-        fontLarge = fallback
-        fontXLarge = fallback
-    }
-
-    private fun loadMenuAssets() {
-        bgFrameTexture = loadTexSafely("graphics/sp_menu_frame_bg.png")
-        avatarTexture = loadTexSafely("graphics/sp_avatar.png")
-    }
-
-    private fun loadTexSafely(path: String): Texture? {
+    private fun loadTextureSafe(path: String): Texture? {
         return try {
-            val file = Gdx.files.internal(path)
-            if (file.exists()) {
-                Texture(file).apply {
-                    setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear)
-                }
-            } else null
+            Texture(Gdx.files.internal(path)).apply {
+                setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear)
+            }
         } catch (_: Exception) {
             null
         }
     }
 
-    private fun makeSolidDrawable(r: Float, g: Float, b: Float, a: Float): TextureRegionDrawable {
-        val pm = Pixmap(4, 4, Pixmap.Format.RGBA8888)
-        pm.setColor(r, g, b, a)
-        pm.fill()
-        val tex = Texture(pm)
-        pm.dispose()
-        generatedTextures.add(tex)
-        return TextureRegionDrawable(tex)
+    private fun ensureAssetsLoaded() {
+        if (bgFrameTexture == null) bgFrameTexture = loadTextureSafe("graphics/sp_menu_frame_bg.png")
+        if (avatarTexture == null) avatarTexture = loadTextureSafe("graphics/sp_avatar.png")
+        if (rankChevronTexture == null) rankChevronTexture = loadTextureSafe("graphics/sp_rank_chevron.png")
+        if (rankShieldTexture == null) rankShieldTexture = loadTextureSafe("graphics/sp_rank_shield.png")
     }
 
+    /**
+     * Creates a chamfered sci-fi metallic panel/button drawable with optional carbon weave and glowing border.
+     */
     private fun createSciFiPanelDrawable(
         w: Int,
         h: Int,
-        bgColor: Color = colDarkChamber,
-        borderColor: Color = colCyberOrange,
-        borderWidth: Int = 2,
-        chamfer: Int = 10,
-        withTechTab: Boolean = true,
-        accentPipsColor: Color = colCyberYellow
+        bgR: Float,
+        bgG: Float,
+        bgB: Float,
+        bgA: Float,
+        borderR: Float,
+        borderG: Float,
+        borderB: Float,
+        borderA: Float,
+        chamfer: Int = 6,
+        carbonWeave: Boolean = true,
+        leftCyanBar: Boolean = false
     ): TextureRegionDrawable {
-        val width = w.coerceAtLeast(32)
-        val height = h.coerceAtLeast(24)
-        val pm = Pixmap(width, height, Pixmap.Format.RGBA8888)
-        pm.blending = Pixmap.Blending.None
-        pm.setColor(0f, 0f, 0f, 0f)
-        pm.fill()
-        pm.blending = Pixmap.Blending.SourceOver
+        val p = Pixmap(w, h, Pixmap.Format.RGBA8888)
+        for (y in 0 until h) {
+            for (x in 0 until w) {
+                val distCorner = minOf(
+                    x + y,
+                    (w - 1 - x) + y,
+                    x + (h - 1 - y),
+                    (w - 1 - x) + (h - 1 - y)
+                )
+                if (distCorner < chamfer) continue
 
-        val tabH = if (withTechTab && height >= 48) 5 else 0
-        val ch = chamfer.coerceAtMost(width / 4).coerceAtMost((height - tabH) / 3)
-
-        fun fillChamferedBox(ox: Int, oy: Int, bw: Int, bh: Int, c: Int, col: Color) {
-            pm.setColor(col)
-            pm.fillRectangle(ox + c, oy, bw - c * 2, bh)
-            pm.fillRectangle(ox, oy + c, c, bh - c * 2)
-            pm.fillRectangle(ox + bw - c, oy + c, c, bh - c * 2)
-            pm.fillTriangle(ox, oy + c, ox + c, oy + c, ox + c, oy)
-            pm.fillTriangle(ox + bw - c, oy, ox + bw - c, oy + c, ox + bw - 1, oy + c)
-            pm.fillTriangle(ox, oy + bh - c, ox + c, oy + bh - c, ox + c, oy + bh - 1)
-            pm.fillTriangle(ox + bw - c, oy + bh - 1, ox + bw - c, oy + bh - c, ox + bw - 1, oy + bh - c)
-        }
-
-        val baseY = tabH
-        val baseH = height - tabH
-        fillChamferedBox(0, baseY, width, baseH, ch, borderColor)
-
-        if (tabH > 0) {
-            val tabW = (width * 0.28f).toInt().coerceIn(36, 140)
-            val tabStart = (width - tabW - ch - 8).coerceAtLeast(ch + 8)
-            pm.setColor(borderColor)
-            pm.fillRectangle(tabStart, 0, tabW, tabH + 1)
-            pm.fillTriangle(tabStart - tabH, tabH, tabStart, tabH, tabStart, 0)
-            pm.fillTriangle(tabStart + tabW, 0, tabStart + tabW, tabH, tabStart + tabW + tabH, tabH)
-        }
-
-        fillChamferedBox(
-            borderWidth,
-            baseY + borderWidth,
-            width - borderWidth * 2,
-            baseH - borderWidth * 2,
-            max(2, ch - borderWidth),
-            bgColor
-        )
-
-        // Diagonal hazard chevrons (///)
-        if (width >= 90 && height >= 36) {
-            val chevStart = width - ch - 36
-            val chevY = baseY + 4
-            for (i in 0 until 3) {
-                val sx = chevStart + i * 8
-                pm.setColor(if (i < 2) accentPipsColor else colCyberGrey)
-                pm.drawLine(sx, chevY + 4, sx + 4, chevY)
-                pm.drawLine(sx + 1, chevY + 4, sx + 5, chevY)
+                val isBorder = x <= 1 || x >= w - 2 || y <= 1 || y >= h - 2 || distCorner <= chamfer + 1
+                if (isBorder) {
+                    p.setColor(borderR, borderG, borderB, borderA)
+                    p.drawPixel(x, y)
+                } else {
+                    var r = bgR
+                    var g = bgG
+                    var b = bgB
+                    if (carbonWeave && (x + y) % 5 == 0) {
+                        r = (r + 0.025f).coerceAtMost(1f)
+                        g = (g + 0.03f).coerceAtMost(1f)
+                        b = (b + 0.04f).coerceAtMost(1f)
+                    }
+                    p.setColor(r, g, b, bgA)
+                    p.drawPixel(x, y)
+                }
             }
         }
-
-        val tex = Texture(pm).apply {
+        if (leftCyanBar) {
+            p.setColor(0.15f, 0.92f, 1f, 0.95f)
+            p.fillRectangle(1, h / 4, 3, h / 2)
+        }
+        val tex = Texture(p).apply {
             setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear)
         }
-        pm.dispose()
+        p.dispose()
         generatedTextures.add(tex)
         return TextureRegionDrawable(tex)
     }
 
-    private fun createCyberTextFieldStyle(): TextField.TextFieldStyle {
-        val bg = createSciFiPanelDrawable(
-            w = 240,
-            h = 38,
-            bgColor = colDarkTrack,
-            borderColor = colCyberOrange,
-            borderWidth = 2,
-            chamfer = 6,
-            withTechTab = false
-        ).apply {
-            leftWidth = 12f
-            rightWidth = 12f
-            topHeight = 4f
-            bottomHeight = 4f
-        }
+    /**
+     * Creates the signature hexagonal red-to-green neon bordered "PLAY / QUICK MATCH" button drawable.
+     */
+    private fun createPlayQuickMatchDrawable(w: Int = 216, h: Int = 64): TextureRegionDrawable {
+        val p = Pixmap(w, h, Pixmap.Format.RGBA8888)
+        val chamfer = 14
+        for (y in 0 until h) {
+            for (x in 0 until w) {
+                val d = minOf(
+                    x + y,
+                    (w - 1 - x) + y,
+                    x + (h - 1 - y),
+                    (w - 1 - x) + (h - 1 - y)
+                )
+                if (d < chamfer) continue
 
-        val focusedBg = createSciFiPanelDrawable(
-            w = 240,
-            h = 38,
-            bgColor = Color(0.20f, 0.17f, 0.07f, 0.98f),
-            borderColor = colCyberYellow,
-            borderWidth = 2,
-            chamfer = 6,
-            withTechTab = false
-        ).apply {
-            leftWidth = 12f
-            rightWidth = 12f
-            topHeight = 4f
-            bottomHeight = 4f
+                // Outer metallic gunmetal frame
+                if (x < 4 || x >= w - 4 || y < 4 || y >= h - 4 || d < chamfer + 4) {
+                    p.setColor(0.22f, 0.28f, 0.36f, 0.98f)
+                    p.drawPixel(x, y)
+                } else if (x < 7 || x >= w - 7 || y < 7 || y >= h - 7 || d < chamfer + 7) {
+                    // Glowing neon inner ring: red on left/right edges blending into bright green at center
+                    val centerRatio = 1f - kotlin.math.abs((x - w / 2f) / (w / 2f))
+                    val nr = (0.95f * (1f - centerRatio * 0.75f)).coerceIn(0.2f, 1f)
+                    val ng = (0.25f + centerRatio * 0.72f).coerceIn(0.2f, 1f)
+                    val nb = (0.32f + centerRatio * 0.25f).coerceIn(0.2f, 1f)
+                    p.setColor(nr, ng, nb, 1f)
+                    p.drawPixel(x, y)
+                } else {
+                    // Dark green/gunmetal illuminated interior
+                    val centerGlow = (1f - kotlin.math.abs((x - w / 2f) / (w / 2f))) *
+                        (1f - kotlin.math.abs((y - h / 2f) / (h / 2f)))
+                    val ir = 0.08f + centerGlow * 0.06f
+                    val ig = 0.14f + centerGlow * 0.22f
+                    val ib = 0.16f + centerGlow * 0.12f
+                    p.setColor(ir, ig, ib, 0.96f)
+                    p.drawPixel(x, y)
+                }
+            }
         }
-
-        return TextField.TextFieldStyle().apply {
-            font = fontSmall
-            fontColor = colCyberYellow
-            focusedFontColor = Color.WHITE
-            messageFont = fontSmall
-            messageFontColor = colCyberGrey
-            background = bg
-            focusedBackground = focusedBg
-            cursor = makeSolidDrawable(1f, 0.90f, 0.04f, 1f).apply { minWidth = 2f }
-            selection = makeSolidDrawable(1f, 0.58f, 0.02f, 0.45f)
+        val tex = Texture(p).apply {
+            setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear)
         }
+        p.dispose()
+        generatedTextures.add(tex)
+        return TextureRegionDrawable(tex)
     }
 
-    private fun rebuildUi() {
+    private fun createProgressBarDrawable(
+        w: Int,
+        h: Int,
+        fillRatio: Float
+    ): TextureRegionDrawable {
+        val p = Pixmap(w, h, Pixmap.Format.RGBA8888)
+        p.setColor(0.06f, 0.09f, 0.14f, 0.95f)
+        p.fill()
+        p.setColor(0.22f, 0.34f, 0.48f, 0.9f)
+        p.drawRectangle(0, 0, w, h)
+
+        val fillW = ((w - 4) * fillRatio.coerceIn(0f, 1f)).toInt()
+        for (x in 2 until 2 + fillW) {
+            val t = x.toFloat() / w.toFloat()
+            val r = 0.12f + t * 0.18f
+            val g = 0.72f + t * 0.24f
+            val b = 0.95f - t * 0.35f
+            p.setColor(r, g, b, 1f)
+            p.drawLine(x, 2, x, h - 3)
+        }
+        val tex = Texture(p)
+        p.dispose()
+        generatedTextures.add(tex)
+        return TextureRegionDrawable(tex)
+    }
+
+    override fun show() {
+        Gdx.input.inputProcessor = stage
+        ensureAssetsLoaded()
+
+        val savedSession = SqliteSessionStore.loadActiveSession()
+        if (savedSession != null && !savedSession.isExpired) {
+            activeSession = savedSession
+            currentStep = MenuStep.LOBBY
+        } else {
+            activeSession = null
+            currentStep = MenuStep.AUTH
+        }
+
+        pingServer()
+        rebuildStage()
+    }
+
+    private fun switchStep(step: MenuStep) {
+        currentStep = step
+        rebuildStage()
+    }
+
+    private fun rebuildStage() {
         stage.clear()
-        activePopupOverlay = null
+        authFeedbackLabel = null
+        sessionSubLabel = null
+        joinRoomCodeField = null
+        roomHintLabel = null
+        generatedCodeLabel = null
+        modeSlotTables.clear()
+        modeSlotLabels.clear()
 
-        val rootStack = Stack()
-        rootStack.setFillParent(true)
-
-        if (bgFrameTexture != null) {
-            val bgImg = Image(TextureRegionDrawable(bgFrameTexture!!)).apply {
+        // 1. Add full-bleed SHOOT POWER 3D metallic frame & sci-fi corridor background
+        val bgTex = bgFrameTexture
+        if (bgTex != null) {
+            val bgImage = Image(TextureRegionDrawable(bgTex)).apply {
+                setFillParent(true)
                 setScaling(Scaling.stretch)
             }
-            rootStack.add(bgImg)
-            rootStack.add(Image(makeSolidDrawable(0.04f, 0.05f, 0.08f, 0.58f)))
-        } else {
-            val fallbackBg = Table().apply {
-                background = makeSolidDrawable(0.05f, 0.06f, 0.09f, 1f)
-            }
-            rootStack.add(fallbackBg)
+            stage.addActor(bgImage)
         }
 
-        val fgLayer = Table()
-        fgLayer.setFillParent(true)
+        // Top-right gear hotspots on the metallic frame (toggle audio)
+        val gearHotspot = Actor().apply {
+            setBounds(724f, 461f - 82f, 66f, 34f)
+            addListener(object : ClickListener() {
+                override fun clicked(event: InputEvent?, x: Float, y: Float) {
+                    audioService.toggleSound()
+                    audioService.play(SoundType.CLICK, volumeModifier = 0.5f)
+                }
+            })
+        }
+        stage.addActor(gearHotspot)
 
         when (currentStep) {
-            MenuStep.AUTH -> buildAuthOverlay(fgLayer)
-            MenuStep.LOBBY -> buildMainMenuLobby(fgLayer)
-            MenuStep.WAITING_ROOM -> buildWaitingRoomMenu(fgLayer)
+            MenuStep.AUTH -> buildAuthInterior()
+            MenuStep.LOBBY -> buildLobbyInterior()
         }
-
-        rootStack.add(fgLayer)
-        stage.addActor(rootStack)
     }
 
     // =========================================================================
-    // CLEAN MODAL POPUP MENU (Network Errors, Room Code Alerts, Auth Errors)
+    // 1. USERNAME & PASSWORD LOGIN / REGISTER SCREEN (Inside SHOOT POWER Frame)
     // =========================================================================
-    private fun showPopupModal(
-        title: String,
-        message: String,
-        isDanger: Boolean = true,
-        primaryText: String = "OK",
-        onPrimary: () -> Unit = {},
-        secondaryText: String? = null,
-        onSecondary: (() -> Unit)? = null,
-        tertiaryText: String? = null,
-        onTertiary: (() -> Unit)? = null
-    ) {
-        activePopupOverlay?.remove()
+    private fun buildAuthInterior() {
+        val interior = VisTable(false)
+        // Exact bounds of the dark sci-fi screen interior (x=256..768, y=62..362)
+        interior.setBounds(258f, 64f, 508f, 296f)
+        interior.center()
 
-        val borderCol = if (isDanger) colCyberDanger else colCyberOrange
-
-        val backdrop = Table()
-        backdrop.setFillParent(true)
-        backdrop.background = makeSolidDrawable(0.02f, 0.02f, 0.04f, 0.82f)
-        backdrop.addListener(object : ClickListener() {
-            override fun clicked(event: InputEvent?, x: Float, y: Float) {}
-        })
-
-        val modalW = 500f
-        val modalH = 230f
-        val card = Table()
-        card.background = createSciFiPanelDrawable(
-            w = modalW.toInt(),
-            h = modalH.toInt(),
-            bgColor = Color(0.08f, 0.09f, 0.12f, 0.98f),
-            borderColor = borderCol,
-            borderWidth = 3,
-            chamfer = 14,
-            withTechTab = true,
-            accentPipsColor = if (isDanger) colCyberDanger else colCyberYellow
+        val authPanel = VisTable(false)
+        authPanel.background = createSciFiPanelDrawable(
+            440, 250,
+            0.07f, 0.11f, 0.17f, 0.94f,
+            0.22f, 0.78f, 0.98f, 0.9f,
+            chamfer = 10,
+            leftCyanBar = true
         )
-        card.pad(20f, 24f, 18f, 24f)
+        authPanel.pad(18f, 26f, 18f, 26f)
 
-        val titleLbl = Label(title, Label.LabelStyle(fontLarge, colCyberYellow))
-        card.add(titleLbl).left().padBottom(8f).row()
-
-        val div = Image(makeSolidDrawable(borderCol.r, borderCol.g, borderCol.b, 0.65f))
-        card.add(div).height(2f).fillX().padBottom(12f).row()
-
-        val msgLbl = Label(message, Label.LabelStyle(fontSmall, Color.WHITE)).apply {
-            wrap = true
-            setAlignment(Align.topLeft)
+        val header = VisLabel("OPERATIVE ACCOUNT LOGIN").apply {
+            color = Color(0.35f, 0.92f, 1f, 1f)
+            setFontScale(1.05f)
         }
-        card.add(msgLbl).width(modalW - 52f).expandY().top().left().padBottom(14f).row()
+        authPanel.add(header).colspan(2).center().padBottom(4f).row()
 
-        val btnRow = Table()
-        val pBtn = createCyberButton(
-            text = primaryText,
-            width = 142f,
-            height = 40f,
-            fillColor = colButtonPressed,
-            borderColor = colCyberYellow,
-            textColor = colCyberYellow,
-            fontOverride = fontSmall
-        ) {
-            dismissPopupModal()
-            onPrimary()
+        val sub = VisLabel("Firebase Realtime DB Auth  •  SQLite JWT Session Storage").apply {
+            color = Color(0.68f, 0.78f, 0.9f, 1f)
+            setFontScale(0.72f)
         }
-        btnRow.add(pBtn).width(142f).height(40f)
+        authPanel.add(sub).colspan(2).center().padBottom(14f).row()
 
-        if (secondaryText != null && onSecondary != null) {
-            val sBtn = createCyberButton(
-                text = secondaryText,
-                width = 148f,
-                height = 40f,
-                fillColor = colButtonBg,
-                borderColor = colCyberOrange,
-                textColor = Color.WHITE,
-                fontOverride = fontSmall
-            ) {
-                dismissPopupModal()
-                onSecondary()
-            }
-            btnRow.add(sBtn).width(148f).height(40f).padLeft(10f)
+        val userLbl = VisLabel("Username:").apply {
+            color = Color(0.9f, 0.95f, 1f, 1f)
+            setFontScale(0.82f)
         }
-
-        if (tertiaryText != null && onTertiary != null) {
-            val tBtn = createCyberButton(
-                text = tertiaryText,
-                width = 110f,
-                height = 40f,
-                fillColor = Color(0.16f, 0.10f, 0.12f, 0.95f),
-                borderColor = colCyberDanger,
-                textColor = colTextDim,
-                fontOverride = fontSmall
-            ) {
-                dismissPopupModal()
-                onTertiary()
-            }
-            btnRow.add(tBtn).width(110f).height(40f).padLeft(10f)
-        }
-
-        card.add(btnRow).right()
-
-        backdrop.add(card).width(modalW).height(modalH).center()
-        activePopupOverlay = backdrop
-        stage.addActor(backdrop)
-    }
-
-    private fun dismissPopupModal() {
-        activePopupOverlay?.remove()
-        activePopupOverlay = null
-    }
-
-    private fun showNetworkUnavailablePopup(onRetry: () -> Unit) {
-        val statusMsg = if (!internetAvailable) {
-            "No internet connection detected.\nConnect to the internet to play ${selectedMode.displayName}, or play Solo offline."
-        } else {
-            "Multiplayer server is unreachable.\nCheck your connection to play ${selectedMode.displayName}, or play Solo offline."
-        }
-        showPopupModal(
-            title = "CONNECTION ERROR",
-            message = statusMsg,
-            isDanger = true,
-            primaryText = "RETRY",
-            onPrimary = { probeServerAsync(forceCallback = onRetry) },
-            secondaryText = "PLAY SOLO",
-            onSecondary = {
-                selectedMode = GameMode.OFFLINE
-                rebuildUi()
-                launchMatch(roomCode = "", createRoom = false)
-            },
-            tertiaryText = "CLOSE",
-            onTertiary = {}
-        )
-    }
-
-    // =========================================================================
-    // STEP 1: SIMPLE LOGIN / REGISTER SCREEN
-    // =========================================================================
-    private fun buildAuthOverlay(parent: Table) {
-        val wrapper = Table()
-        wrapper.setFillParent(true)
-
-        val cardW = 440f
-        val cardH = 300f
-        val card = Table()
-        card.background = createSciFiPanelDrawable(
-            w = cardW.toInt(),
-            h = cardH.toInt(),
-            bgColor = colDarkChamber,
-            borderColor = colCyberOrange,
-            borderWidth = 3,
-            chamfer = 14,
-            withTechTab = true,
-            accentPipsColor = colCyberYellow
-        )
-        card.pad(20f, 26f, 20f, 26f)
-
-        val title = Label("SHOOT POWER", Label.LabelStyle(fontXLarge, colCyberYellow))
-        card.add(title).center().padBottom(14f).row()
-
-        val tfStyle = createCyberTextFieldStyle()
-
-        val usernameField = TextField("", tfStyle).apply {
-            messageText = "USERNAME"
+        val usernameField = VisTextField("").apply {
+            messageText = "Enter username..."
             maxLength = 20
         }
-        card.add(usernameField).width(384f).height(40f).padBottom(12f).row()
+        authPanel.add(userLbl).left().padRight(12f).padBottom(10f)
+        authPanel.add(usernameField).width(240f).height(32f).left().padBottom(10f).row()
 
-        val passwordField = TextField("", tfStyle).apply {
-            messageText = "PASSWORD"
+        val passLbl = VisLabel("Password:").apply {
+            color = Color(0.9f, 0.95f, 1f, 1f)
+            setFontScale(0.82f)
+        }
+        val passwordField = VisTextField("").apply {
+            messageText = "Enter password..."
             isPasswordMode = true
             setPasswordCharacter('*')
             maxLength = 32
         }
-        card.add(passwordField).width(384f).height(40f).padBottom(10f).row()
+        authPanel.add(passLbl).left().padRight(12f).padBottom(12f)
+        authPanel.add(passwordField).width(240f).height(32f).left().padBottom(12f).row()
 
-        val feedback = Label("", Label.LabelStyle(fontTiny, colCyberYellow))
+        val feedback = VisLabel("Enter your username & password to Login or Register.").apply {
+            setAlignment(Align.center)
+            color = Color(0.75f, 0.88f, 1f, 1f)
+            setFontScale(0.72f)
+        }
         authFeedbackLabel = feedback
-        card.add(feedback).center().height(18f).padBottom(10f).row()
+        authPanel.add(feedback).colspan(2).center().padBottom(12f).row()
 
-        val btnRow = Table()
-        val loginBtn = createCyberButton(
+        val btnRow = VisTable(false)
+
+        val loginBtnTable = createSciFiActionButton(
             text = "LOGIN",
-            width = 184f,
-            height = 44f,
-            fillColor = colButtonPressed,
-            borderColor = colCyberYellow,
-            textColor = colCyberYellow,
-            fontOverride = fontMedium
+            w = 156,
+            h = 38,
+            bgR = 0.12f, bgG = 0.28f, bgB = 0.38f,
+            borderR = 0.25f, borderG = 0.92f, borderB = 1f
         ) {
-            handleAuthSubmit(usernameField.text, passwordField.text, isRegister = false)
+            if (!authBusy) {
+                audioService.play(SoundType.CLICK)
+                performLogin(usernameField.text, passwordField.text)
+            }
         }
 
-        val registerBtn = createCyberButton(
+        val registerBtnTable = createSciFiActionButton(
             text = "REGISTER",
-            width = 184f,
-            height = 44f,
-            fillColor = colButtonBg,
-            borderColor = colCyberOrange,
-            textColor = Color.WHITE,
-            fontOverride = fontMedium
+            w = 156,
+            h = 38,
+            bgR = 0.12f, bgG = 0.32f, bgB = 0.24f,
+            borderR = 0.32f, borderG = 0.95f, borderB = 0.58f
         ) {
-            handleAuthSubmit(usernameField.text, passwordField.text, isRegister = true)
+            if (!authBusy) {
+                audioService.play(SoundType.CLICK)
+                performRegister(usernameField.text, passwordField.text)
+            }
         }
 
-        btnRow.add(loginBtn).width(184f).height(44f).padRight(16f)
-        btnRow.add(registerBtn).width(184f).height(44f)
-        card.add(btnRow).center()
+        btnRow.add(loginBtnTable).size(156f, 38f).padRight(14f)
+        btnRow.add(registerBtnTable).size(156f, 38f)
+        authPanel.add(btnRow).colspan(2).center()
 
         passwordField.addListener(object : InputListener() {
             override fun keyDown(event: InputEvent?, keycode: Int): Boolean {
-                if (keycode == Input.Keys.ENTER) {
-                    handleAuthSubmit(usernameField.text, passwordField.text, isRegister = false)
+                if (keycode == Input.Keys.ENTER && !authBusy) {
+                    audioService.play(SoundType.CLICK)
+                    performLogin(usernameField.text, passwordField.text)
                     return true
                 }
                 return false
             }
         })
 
-        wrapper.add(card).width(cardW).height(cardH).center()
-        parent.add(wrapper).expand().fill()
+        interior.add(authPanel).width(440f).height(250f)
+        stage.addActor(interior)
         stage.keyboardFocus = usernameField
     }
 
-    private fun handleAuthSubmit(rawUser: String, rawPass: String, isRegister: Boolean) {
-        if (authBusy) return
-        val username = rawUser.trim()
-        val password = rawPass.trim()
-
-        if (username.length < 3) {
-            showPopupModal(
-                title = "INVALID USERNAME",
-                message = "Username must be at least 3 characters.",
-                isDanger = true,
-                primaryText = "OK"
-            )
-            return
-        }
-        if (password.length < 4) {
-            showPopupModal(
-                title = "INVALID PASSWORD",
-                message = "Password must be at least 4 characters.",
-                isDanger = true,
-                primaryText = "OK"
-            )
-            return
-        }
-
+    private fun performLogin(username: String, password: String) {
         authBusy = true
-        authFeedbackLabel?.setText(if (isRegister) "CREATING ACCOUNT..." else "SIGNING IN...")
-        authFeedbackLabel?.color = colCyberYellow
+        authFeedbackLabel?.setText("Authenticating with Firebase Realtime DB...")
+        authFeedbackLabel?.color = Color(1f, 0.88f, 0.35f, 1f)
 
-        val callback: (Result<AuthSessionRecord>) -> Unit = { result ->
+        FirebaseAuthService.login(username, password) { result ->
             authBusy = false
             result.onSuccess { session ->
                 activeSession = session
-                currentStep = MenuStep.LOBBY
-                rebuildUi()
+                switchStep(MenuStep.LOBBY)
             }.onFailure { err ->
-                val errMsg = err.message ?: "Authentication failed."
-                authFeedbackLabel?.setText("")
-                showPopupModal(
-                    title = if (isRegister) "REGISTER FAILED" else "LOGIN FAILED",
-                    message = errMsg,
-                    isDanger = true,
-                    primaryText = "TRY AGAIN"
-                )
+                authFeedbackLabel?.setText(err.message ?: "Login failed.")
+                authFeedbackLabel?.color = Color(1f, 0.42f, 0.42f, 1f)
             }
         }
+    }
 
-        if (isRegister) {
-            FirebaseAuthService.register(username, password, callback)
-        } else {
-            FirebaseAuthService.login(username, password, callback)
+    private fun performRegister(username: String, password: String) {
+        authBusy = true
+        authFeedbackLabel?.setText("Creating account in Firebase & storing JWT in SQLite...")
+        authFeedbackLabel?.color = Color(1f, 0.88f, 0.35f, 1f)
+
+        FirebaseAuthService.register(username, password) { result ->
+            authBusy = false
+            result.onSuccess { session ->
+                activeSession = session
+                switchStep(MenuStep.LOBBY)
+            }.onFailure { err ->
+                authFeedbackLabel?.setText(err.message ?: "Registration failed.")
+                authFeedbackLabel?.color = Color(1f, 0.42f, 0.42f, 1f)
+            }
         }
     }
 
     // =========================================================================
-    // STEP 2: CLEAN, MINIMAL MAIN MENU LOBBY
+    // 2. SHOOT POWER MAIN MENU LOBBY (Matching Reference Image 1:1)
     // =========================================================================
-    private fun buildMainMenuLobby(parent: Table) {
-        val username = activeSession?.username ?: "PLAYER"
+    private fun buildLobbyInterior() {
+        val session = activeSession
+        val username = session?.username ?: "kushan"
 
-        val root = Table()
-        root.setFillParent(true)
-        root.pad(14f, 20f, 14f, 20f)
+        // --- A. TOP PLAYER BAR (x=268..752, y=326..364) ---
+        val topBar = VisTable(false)
+        topBar.setBounds(268f, 326f, 484f, 36f)
 
-        // 1. TOP BAR: Player Badge | SHOOT POWER | SFX / BGM / LOGOUT
-        val topBar = Table()
-        topBar.background = createSciFiPanelDrawable(
-            w = 984,
-            h = 56,
-            bgColor = colDarkChamber,
-            borderColor = colCyberOrange,
-            borderWidth = 2,
-            chamfer = 10,
-            withTechTab = false
-        )
-        topBar.pad(6f, 16f, 6f, 16f)
-
-        // Left: Avatar + Player Name + Online Status
-        val playerBox = Table()
-        if (avatarTexture != null) {
-            val avImg = Image(TextureRegionDrawable(avatarTexture!!)).apply {
+        val leftProfile = VisTable(false)
+        val avTex = avatarTexture
+        if (avTex != null) {
+            val avImg = Image(TextureRegionDrawable(avTex)).apply {
                 setScaling(Scaling.fit)
             }
-            playerBox.add(avImg).size(38f, 38f).padRight(10f)
+            leftProfile.add(avImg).size(30f, 30f).padRight(8f)
         }
-        val nameStack = Table()
-        val pNameLbl = Label(username.uppercase(), Label.LabelStyle(fontMedium, colCyberYellow))
-        val netText = when {
-            checkingNetwork -> "CHECKING..."
-            serverOnline -> "ONLINE"
-            else -> "OFFLINE"
-        }
-        val netCol = if (serverOnline) colCyberGreen else colCyberDanger
-        val netLbl = Label(netText, Label.LabelStyle(fontTiny, netCol))
-        networkBadgeLabel = netLbl
-        nameStack.add(pNameLbl).left().row()
-        nameStack.add(netLbl).left()
-        playerBox.add(nameStack).left()
-        topBar.add(playerBox).left().width(250f)
 
-        // Center: Game Title
-        val titleLbl = Label("SHOOT POWER", Label.LabelStyle(fontXLarge, colCyberYellow))
-        topBar.add(titleLbl).expandX().center()
+        val nameStack = VisTable(false)
+        val playerNameLbl = VisLabel("Player: $username").apply {
+            color = Color(0.35f, 0.95f, 0.52f, 1f)
+            setFontScale(0.84f)
+        }
+        val regionText = if (serverOnline) {
+            "SQLite Session Active  •  Region: Global West - ${serverPingMs}ms"
+        } else {
+            "SQLite Session Active  •  Region: Global West (Offline Ready)"
+        }
+        val subLbl = VisLabel(regionText).apply {
+            color = Color(0.78f, 0.84f, 0.92f, 1f)
+            setFontScale(0.62f)
+        }
+        sessionSubLabel = subLbl
+        nameStack.add(playerNameLbl).left().row()
+        nameStack.add(subLbl).left().padTop(1f)
+        leftProfile.add(nameStack).left()
 
-        // Right: Quick Audio & Logout Buttons
-        val rightBtns = Table()
-        val sfxBtn = createCyberButton(
-            text = if (audioService.isSoundEnabled) "SFX" else "MUTE",
-            width = 68f,
-            height = 36f,
-            fillColor = colButtonBg,
-            borderColor = colCyberOrange,
-            textColor = Color.WHITE,
-            fontOverride = fontTiny
-        ) {
-            audioService.toggleSound()
-            rebuildUi()
-        }
-        val bgmBtn = createCyberButton(
-            text = if (audioService.isMusicEnabled) "BGM" else "MUTE",
-            width = 68f,
-            height = 36f,
-            fillColor = colButtonBg,
-            borderColor = colCyberOrange,
-            textColor = Color.WHITE,
-            fontOverride = fontTiny
-        ) {
-            audioService.toggleMusic()
-            rebuildUi()
-        }
-        val logoutBtn = createCyberButton(
+        val logoutBtn = createSciFiActionButton(
             text = "LOGOUT",
-            width = 84f,
-            height = 36f,
-            fillColor = Color(0.24f, 0.10f, 0.12f, 0.94f),
-            borderColor = colCyberDanger,
-            textColor = colCyberYellow,
-            fontOverride = fontTiny
+            w = 78,
+            h = 28,
+            bgR = 0.14f, bgG = 0.19f, bgB = 0.26f,
+            borderR = 0.48f, borderG = 0.58f, borderB = 0.70f,
+            fontScale = 0.68f
         ) {
+            audioService.play(SoundType.CLICK)
             SqliteSessionStore.clearSession()
             activeSession = null
-            currentStep = MenuStep.AUTH
-            rebuildUi()
-        }
-        rightBtns.add(sfxBtn).width(68f).height(36f).padRight(8f)
-        rightBtns.add(bgmBtn).width(68f).height(36f).padRight(8f)
-        rightBtns.add(logoutBtn).width(84f).height(36f)
-        topBar.add(rightBtns).right().width(250f)
-
-        root.add(topBar).fillX().height(56f).padBottom(18f).row()
-
-        // 2. CENTER: 3 BIG, CLEAN MODE CARDS (SOLO | DUO | SQUAD)
-        val modesRow = Table()
-        modesRow.add(
-            buildSimpleModeCard(
-                mode = GameMode.OFFLINE,
-                title = "SOLO",
-                subtitle = "1 PLAYER • OFFLINE"
-            )
-        ).width(310f).height(210f).padRight(22f)
-
-        modesRow.add(
-            buildSimpleModeCard(
-                mode = GameMode.DUO,
-                title = "DUO",
-                subtitle = "2 PLAYERS • ONLINE"
-            )
-        ).width(310f).height(210f).padRight(22f)
-
-        modesRow.add(
-            buildSimpleModeCard(
-                mode = GameMode.SQUAD,
-                title = "SQUAD",
-                subtitle = "4 PLAYERS • ONLINE"
-            )
-        ).width(310f).height(210f)
-
-        root.add(modesRow).expandY().center().padBottom(18f).row()
-
-        // 3. BOTTOM ACTION BAR: Simple Play / Room Controls
-        val bottomBar = Table()
-        bottomBar.background = createSciFiPanelDrawable(
-            w = 984,
-            h = 88,
-            bgColor = colDarkChamber,
-            borderColor = colCyberYellow,
-            borderWidth = 3,
-            chamfer = 12,
-            withTechTab = false
-        )
-        bottomBar.pad(12f, 20f, 12f, 20f)
-
-        if (selectedMode == GameMode.OFFLINE) {
-            val playSoloBtn = createCyberButton(
-                text = "PLAY SOLO",
-                width = 360f,
-                height = 56f,
-                fillColor = colButtonPressed,
-                borderColor = colCyberYellow,
-                textColor = colCyberYellow,
-                fontOverride = fontLarge
-            ) {
-                launchMatch(roomCode = "", createRoom = false)
-            }
-            bottomBar.add(playSoloBtn).width(360f).height(56f).center()
-        } else {
-            val createRoomBtn = createCyberButton(
-                text = "CREATE ROOM",
-                width = 230f,
-                height = 54f,
-                fillColor = colButtonPressed,
-                borderColor = colCyberYellow,
-                textColor = colCyberYellow,
-                fontOverride = fontMedium
-            ) {
-                val newCode = GameConfig.generateRoomCode()
-                tryEnterWaitingRoom(roomCode = newCode, createRoom = true)
-            }
-
-            val tf = TextField("", createCyberTextFieldStyle()).apply {
-                messageText = "ROOM CODE"
-                maxLength = 8
-            }
-            roomCodeField = tf
-
-            val joinRoomBtn = createCyberButton(
-                text = "JOIN ROOM",
-                width = 180f,
-                height = 54f,
-                fillColor = colButtonBg,
-                borderColor = colCyberYellow,
-                textColor = colCyberYellow,
-                fontOverride = fontMedium
-            ) {
-                val entered = tf.text.trim().uppercase()
-                if (entered.length < 4) {
-                    showPopupModal(
-                        title = "ENTER ROOM CODE",
-                        message = "Enter a valid Room Code to join, or click CREATE ROOM.",
-                        isDanger = true,
-                        primaryText = "CREATE ROOM",
-                        onPrimary = {
-                            val newCode = GameConfig.generateRoomCode()
-                            tryEnterWaitingRoom(roomCode = newCode, createRoom = true)
-                        },
-                        secondaryText = "OK",
-                        onSecondary = {}
-                    )
-                } else {
-                    tryEnterWaitingRoom(roomCode = entered, createRoom = false)
-                }
-            }
-
-            val quickPlayBtn = createCyberButton(
-                text = "QUICK PLAY",
-                width = 210f,
-                height = 54f,
-                fillColor = colButtonBg,
-                borderColor = colCyberOrange,
-                textColor = Color.WHITE,
-                fontOverride = fontMedium
-            ) {
-                verifyMultiplayerThen {
-                    launchMatch(roomCode = "", createRoom = true)
-                }
-            }
-
-            bottomBar.add(createRoomBtn).width(230f).height(54f).padRight(18f)
-            bottomBar.add(tf).width(190f).height(46f).padRight(10f)
-            bottomBar.add(joinRoomBtn).width(180f).height(54f).padRight(18f)
-            bottomBar.add(quickPlayBtn).width(210f).height(54f)
+            switchStep(MenuStep.AUTH)
         }
 
-        root.add(bottomBar).fillX().height(88f)
-        parent.add(root).expand().fill()
-    }
+        topBar.add(leftProfile).expandX().left()
+        topBar.add(logoutBtn).size(78f, 28f).right()
+        stage.addActor(topBar)
 
-    private fun buildSimpleModeCard(
-        mode: GameMode,
-        title: String,
-        subtitle: String
-    ): Table {
-        val selected = (selectedMode == mode)
-        val borderCol = if (selected) colCyberYellow else colCyberOrangeDark
-        val bgCol = if (selected) Color(0.24f, 0.16f, 0.03f, 0.96f) else colDarkPanel
+        // --- B. SELECT GAME MODE SECTION (x=302..736, y=274..322) ---
+        val modeLabel = VisLabel("Select Game Mode:").apply {
+            color = Color(0.92f, 0.84f, 0.58f, 1f)
+            setFontScale(0.68f)
+            setPosition(302f, 308f)
+        }
+        stage.addActor(modeLabel)
 
-        val card = Table()
-        card.background = createSciFiPanelDrawable(
-            w = 310,
-            h = 210,
-            bgColor = bgCol,
-            borderColor = borderCol,
-            borderWidth = if (selected) 3 else 2,
-            chamfer = 14,
-            withTechTab = selected,
-            accentPipsColor = if (selected) colCyberYellow else colCyberOrange
+        val modesRow = VisTable(false)
+        modesRow.setBounds(302f, 272f, 444f, 34f)
+        listOf(
+            GameMode.DUO to "2 Players (Duo)",
+            GameMode.SQUAD to "4 Players (Squad)",
+            GameMode.OFFLINE to "Solo Practice"
+        ).forEachIndexed { idx, (mode, title) ->
+            val slot = Table()
+            val lbl = VisLabel(title).apply {
+                setAlignment(Align.center)
+                setFontScale(0.70f)
+            }
+            slot.add(lbl).expand().center()
+            slot.addListener(object : ClickListener() {
+                override fun clicked(event: InputEvent?, x: Float, y: Float) {
+                    audioService.play(SoundType.CLICK, volumeModifier = 0.5f)
+                    selectedMode = mode
+                    refreshModeSlots()
+                }
+            })
+            modeSlotTables[mode] = slot
+            modeSlotLabels[mode] = lbl
+            modesRow.add(slot).width(140f).height(32f).padRight(if (idx < 2) 12f else 0f)
+        }
+        stage.addActor(modesRow)
+
+        // --- C. MULTIPLAYER ROOM CODE PANEL (x=312..608, y=148..264) ---
+        val roomPanel = VisTable(false)
+        roomPanel.setBounds(312f, 146f, 294f, 120f)
+        roomPanel.background = createSciFiPanelDrawable(
+            294, 120,
+            0.07f, 0.10f, 0.15f, 0.96f,
+            0.25f, 0.42f, 0.58f, 0.9f,
+            chamfer = 8,
+            leftCyanBar = true
         )
-        card.pad(18f, 16f, 18f, 16f)
+        roomPanel.pad(8f, 12f, 8f, 10f)
+        roomPanel.top().left()
 
-        val titleLbl = Label(
-            title,
-            Label.LabelStyle(fontXLarge, if (selected) colCyberYellow else Color.WHITE)
+        val roomTitle = VisLabel("Multiplayer Room Code (Duo / Squad)").apply {
+            color = Color(0.45f, 0.82f, 1f, 1f)
+            setFontScale(0.68f)
+        }
+        roomPanel.add(roomTitle).left().padBottom(6f).row()
+
+        // Create Room Row: Room Code + COPY + NEW + CREATE
+        val createRow = VisTable(false)
+        val rCodeLbl = VisLabel("Room Code: $generatedRoomCode").apply {
+            color = Color(0.96f, 0.88f, 0.62f, 1f)
+            setFontScale(0.66f)
+        }
+        generatedCodeLabel = rCodeLbl
+
+        val copyBtn = createSciFiActionButton(
+            text = "COPY",
+            w = 46, h = 22,
+            bgR = 0.20f, bgG = 0.24f, bgB = 0.30f,
+            borderR = 0.45f, borderG = 0.52f, borderB = 0.62f,
+            fontScale = 0.58f
+        ) {
+            audioService.play(SoundType.CLICK, volumeModifier = 0.5f)
+            Gdx.app.clipboard.contents = generatedRoomCode
+            roomHintLabel?.setText("✓ Copied Room Code $generatedRoomCode to clipboard!")
+            roomHintLabel?.color = Color(0.35f, 0.95f, 0.55f, 1f)
+        }
+
+        val newBtn = createSciFiActionButton(
+            text = "NEW",
+            w = 42, h = 22,
+            bgR = 0.20f, bgG = 0.24f, bgB = 0.30f,
+            borderR = 0.45f, borderG = 0.52f, borderB = 0.62f,
+            fontScale = 0.58f
+        ) {
+            audioService.play(SoundType.CLICK, volumeModifier = 0.5f)
+            generatedRoomCode = GameConfig.generateRoomCode()
+            generatedCodeLabel?.setText("Room Code: $generatedRoomCode")
+        }
+
+        val createRoomBtn = createSciFiActionButton(
+            text = "CREATE",
+            w = 56, h = 22,
+            bgR = 0.12f, bgG = 0.30f, bgB = 0.36f,
+            borderR = 0.25f, borderG = 0.90f, borderB = 1f,
+            fontScale = 0.58f
+        ) {
+            audioService.play(SoundType.CLICK)
+            if (selectedMode == GameMode.OFFLINE) selectedMode = GameMode.DUO
+            Gdx.app.clipboard.contents = generatedRoomCode
+            launchMatch(roomCode = generatedRoomCode, createRoom = true)
+        }
+
+        createRow.add(rCodeLbl).width(116f).left().padRight(4f)
+        createRow.add(copyBtn).size(46f, 22f).padRight(4f)
+        createRow.add(newBtn).size(42f, 22f).padRight(4f)
+        createRow.add(createRoomBtn).size(56f, 22f)
+        roomPanel.add(createRow).left().padBottom(8f).row()
+
+        // Join by Code Row
+        val joinRow = VisTable(false)
+        val joinLbl = VisLabel("Join by Code:").apply {
+            color = Color(0.92f, 0.95f, 1f, 1f)
+            setFontScale(0.66f)
+        }
+        val codeField = VisTextField("").apply {
+            messageText = "Enter 6-char code"
+            maxLength = 8
+        }
+        joinRoomCodeField = codeField
+
+        val pasteBtn = createSciFiActionButton(
+            text = "PASTE",
+            w = 46, h = 22,
+            bgR = 0.20f, bgG = 0.24f, bgB = 0.30f,
+            borderR = 0.45f, borderG = 0.52f, borderB = 0.62f,
+            fontScale = 0.58f
+        ) {
+            audioService.play(SoundType.CLICK, volumeModifier = 0.5f)
+            val clip = Gdx.app.clipboard.contents?.trim()?.uppercase() ?: ""
+            val clean = clip.filter { it.isLetterOrDigit() }.take(8)
+            if (clean.isNotEmpty()) codeField.text = clean
+        }
+
+        val joinBtn = createSciFiActionButton(
+            text = "JOIN",
+            w = 48, h = 22,
+            bgR = 0.12f, bgG = 0.28f, bgB = 0.38f,
+            borderR = 0.28f, borderG = 0.88f, borderB = 1f,
+            fontScale = 0.58f
+        ) {
+            audioService.play(SoundType.CLICK)
+            val entered = codeField.text.trim().uppercase().filter { it.isLetterOrDigit() }
+            if (entered.length < 4) {
+                roomHintLabel?.setText("⚠ Enter a valid 4-6 char Room Code to join!")
+                roomHintLabel?.color = Color(1f, 0.45f, 0.4f, 1f)
+            } else {
+                if (selectedMode == GameMode.OFFLINE) selectedMode = GameMode.DUO
+                launchMatch(roomCode = entered, createRoom = false)
+            }
+        }
+
+        joinRow.add(joinLbl).width(70f).left().padRight(4f)
+        joinRow.add(codeField).width(96f).height(24f).padRight(4f)
+        joinRow.add(pasteBtn).size(46f, 22f).padRight(4f)
+        joinRow.add(joinBtn).size(48f, 22f)
+        roomPanel.add(joinRow).left().padBottom(6f).row()
+
+        val rHint = VisLabel("Create a room to share the code, or enter a friend's code.").apply {
+            color = Color(0.62f, 0.70f, 0.80f, 1f)
+            setFontScale(0.56f)
+        }
+        roomHintLabel = rHint
+        roomPanel.add(rHint).left()
+        stage.addActor(roomPanel)
+
+        // --- D. CURRENT MATCH STATS OVERLAY CARD (x=544..750, y=132..236) ---
+        val statsCard = VisTable(false)
+        statsCard.setBounds(546f, 128f, 204f, 108f)
+        statsCard.background = createSciFiPanelDrawable(
+            204, 108,
+            0.08f, 0.13f, 0.20f, 0.98f,
+            0.35f, 0.68f, 0.88f, 0.95f,
+            chamfer = 8
         )
-        card.add(titleLbl).center().padBottom(8f).row()
+        statsCard.pad(8f, 12f, 8f, 12f)
+        statsCard.top().left()
 
-        val subLbl = Label(
-            subtitle,
-            Label.LabelStyle(fontSmall, if (selected) Color.WHITE else colTextDim)
+        val statsHeader = VisLabel("Current Match Stats").apply {
+            color = Color(0.55f, 0.88f, 1f, 1f)
+            setFontScale(0.76f)
+        }
+        statsCard.add(statsHeader).left().colspan(2).padBottom(4f).row()
+
+        val leftStatsCol = VisTable(false)
+        val lvlLbl = VisLabel("» Level: 45").apply {
+            color = Color.WHITE
+            setFontScale(0.70f)
+        }
+        val killsLbl = VisLabel("• Kills: 347").apply {
+            color = Color.WHITE
+            setFontScale(0.70f)
+        }
+        val xpLbl = VisLabel("★ XP Earned: 15,250 / 20,000").apply {
+            color = Color(0.85f, 0.92f, 1f, 1f)
+            setFontScale(0.60f)
+        }
+        leftStatsCol.add(lvlLbl).left().padBottom(2f).row()
+        leftStatsCol.add(killsLbl).left().padBottom(2f).row()
+        leftStatsCol.add(xpLbl).left()
+
+        statsCard.add(leftStatsCol).expandX().left()
+        val chevTex = rankChevronTexture
+        if (chevTex != null) {
+            val chevImg = Image(TextureRegionDrawable(chevTex)).apply {
+                setScaling(Scaling.fit)
+            }
+            statsCard.add(chevImg).size(38f, 40f).right()
+        }
+        statsCard.row()
+
+        // XP Progress Bar + 76%
+        val xpBarRow = VisTable(false)
+        val xpBarImg = Image(createProgressBarDrawable(142, 10, 0.76f))
+        val pctLbl = VisLabel("76%").apply {
+            color = Color(0.45f, 0.92f, 1f, 1f)
+            setFontScale(0.60f)
+        }
+        xpBarRow.add(xpBarImg).width(142f).height(9f).padRight(6f)
+        xpBarRow.add(pctLbl).right()
+        statsCard.add(xpBarRow).colspan(2).left().padTop(5f)
+        stage.addActor(statsCard)
+
+        // --- E. BOTTOM-LEFT GLOBAL STATS PANEL (x=274..526, y=68..136) ---
+        val globalCard = VisTable(false)
+        globalCard.setBounds(274f, 66f, 250f, 68f)
+        globalCard.background = createSciFiPanelDrawable(
+            250, 68,
+            0.07f, 0.11f, 0.16f, 0.96f,
+            0.26f, 0.42f, 0.56f, 0.9f,
+            chamfer = 7
         )
-        card.add(subLbl).center().padBottom(24f).row()
+        globalCard.pad(6f, 10f, 6f, 10f)
+        globalCard.top().left()
 
-        val statusLbl = Label(
-            if (selected) "SELECTED" else "SELECT",
-            Label.LabelStyle(fontMedium, if (selected) colCyberGreen else colCyberOrange)
-        )
-        card.add(statusLbl).center()
+        val globalHeaderRow = VisTable(false)
+        val gTitle = VisLabel("GLOBAL STATS").apply {
+            color = Color(0.9f, 0.95f, 1f, 1f)
+            setFontScale(0.64f)
+        }
+        val gCount = VisLabel("16   ★").apply {
+            color = Color(0.68f, 0.78f, 0.88f, 1f)
+            setFontScale(0.60f)
+        }
+        globalHeaderRow.add(gTitle).expandX().left()
+        globalHeaderRow.add(gCount).right()
+        globalCard.add(globalHeaderRow).growX().padBottom(4f).row()
 
-        card.addListener(object : ClickListener() {
+        val globalBodyRow = VisTable(false)
+        if (avTex != null) {
+            val miniAv = Image(TextureRegionDrawable(avTex)).apply {
+                setScaling(Scaling.fit)
+            }
+            globalBodyRow.add(miniAv).size(26f, 26f).padRight(5f)
+        }
+        val onlineCol = VisTable(false)
+        val count48k = VisLabel("48k").apply {
+            color = Color(0.35f, 0.95f, 0.52f, 1f)
+            setFontScale(0.64f)
+        }
+        val onlineTxt = VisLabel("Online").apply {
+            color = Color(0.78f, 0.86f, 0.92f, 1f)
+            setFontScale(0.56f)
+        }
+        onlineCol.add(count48k).left().row()
+        onlineCol.add(onlineTxt).left()
+        globalBodyRow.add(onlineCol).padRight(10f)
+
+        val shTex = rankShieldTexture
+        if (shTex != null) {
+            val shImg = Image(TextureRegionDrawable(shTex)).apply {
+                setScaling(Scaling.fit)
+            }
+            globalBodyRow.add(shImg).size(28f, 28f).padRight(6f)
+        }
+
+        val challengeCol = VisTable(false)
+        val chTopRow = VisTable(false)
+        val chLbl = VisLabel("Daily Challenge").apply {
+            color = Color(0.85f, 0.9f, 0.96f, 1f)
+            setFontScale(0.58f)
+        }
+        val chScore = VisLabel("230").apply {
+            color = Color(0.35f, 0.95f, 0.65f, 1f)
+            setFontScale(0.60f)
+        }
+        chTopRow.add(chLbl).expandX().left().padRight(8f)
+        chTopRow.add(chScore).right()
+        val chBar = Image(createProgressBarDrawable(104, 8, 0.68f))
+        challengeCol.add(chTopRow).growX().padBottom(3f).row()
+        challengeCol.add(chBar).width(104f).height(8f).left()
+
+        globalBodyRow.add(challengeCol).expandX().left()
+        globalCard.add(globalBodyRow).growX()
+        stage.addActor(globalCard)
+
+        // --- F. BOTTOM-RIGHT "PLAY / QUICK MATCH" HEXAGONAL SCI-FI BUTTON (x=538..754, y=62..126) ---
+        val playQuickBtn = Table()
+        playQuickBtn.setBounds(538f, 62f, 214f, 62f)
+        playQuickBtn.background = createPlayQuickMatchDrawable(214, 62)
+
+        val playLbl = VisLabel("PLAY / QUICK MATCH").apply {
+            setAlignment(Align.center)
+            color = Color.WHITE
+            setFontScale(0.84f)
+        }
+        playQuickBtn.add(playLbl).expand().center()
+        playQuickBtn.addListener(object : ClickListener() {
             override fun clicked(event: InputEvent?, x: Float, y: Float) {
-                audioService.play(SoundType.CLICK, volumeModifier = 0.5f)
-                selectedMode = mode
-                rebuildUi()
+                audioService.play(SoundType.CLICK)
+                val typedCode = joinRoomCodeField?.text?.trim()?.uppercase()?.filter { it.isLetterOrDigit() } ?: ""
+                if (typedCode.length >= 4 && selectedMode != GameMode.OFFLINE) {
+                    launchMatch(roomCode = typedCode, createRoom = false)
+                } else {
+                    launchMatch(roomCode = "", createRoom = false)
+                }
             }
         })
+        stage.addActor(playQuickBtn)
 
-        return card
+        refreshModeSlots()
     }
 
-    // =========================================================================
-    // STEP 3: SIMPLE "WAITING FOR PLAYERS" ROOM LOBBY MENU
-    // =========================================================================
-    private fun tryEnterWaitingRoom(roomCode: String, createRoom: Boolean) {
-        verifyMultiplayerThen {
-            startWaitingRoomSession(roomCode, createRoom)
-        }
-    }
-
-    private fun startWaitingRoomSession(roomCode: String, createRoom: Boolean) {
-        stopWaitingRoomClient()
-
-        val cleanCode = roomCode.trim().uppercase().ifEmpty { GameConfig.generateRoomCode() }
-        waitingRoomCode = cleanCode
-        waitingCreateRoom = createRoom
-        waitingConnectElapsed = 0f
-        waitingHeartbeatTimer = 0f
-        waitingCountdown = -1f
-        savedLoginResponse = null
-        waitingMembers.clear()
-
-        val username = activeSession?.username ?: "PLAYER"
-        waitingMembers[0] = WaitingRoomMember(
-            id = 0,
-            name = username,
-            isLocal = true
-        )
-
-        val host = System.getProperty("shootgame.host", NetworkConfig.serverHost)
-        val client = GameClient(host, NetworkConfig.TCP_PORT, NetworkConfig.UDP_PORT)
-        lobbyClient = client
-        client.connect(
-            name = username,
-            roomCode = cleanCode,
-            gameMode = selectedMode.name,
-            createRoom = createRoom,
-            initialSessionToken = activeSession?.sessionToken ?: "",
-            timeoutMs = 4000
-        )
-
-        currentStep = MenuStep.WAITING_ROOM
-        rebuildUi()
-    }
-
-    private fun stopWaitingRoomClient() {
-        try {
-            lobbyClient?.close()
-        } catch (_: Exception) {
-        }
-        lobbyClient = null
-        savedLoginResponse = null
-        waitingMembers.clear()
-        waitingCountdown = -1f
-    }
-
-    private fun buildWaitingRoomMenu(parent: Table) {
-        val root = Table()
-        root.setFillParent(true)
-        root.pad(14f, 20f, 14f, 20f)
-
-        // 1. Top Bar: Mode Title | ROOM CODE + COPY | LEAVE
-        val topBar = Table()
-        topBar.background = createSciFiPanelDrawable(
-            w = 984,
-            h = 60,
-            bgColor = colDarkChamber,
-            borderColor = colCyberYellow,
-            borderWidth = 3,
-            chamfer = 12,
-            withTechTab = false
-        )
-        topBar.pad(8f, 18f, 8f, 18f)
-
-        val modeTitle = Label("${selectedMode.name} ROOM", Label.LabelStyle(fontLarge, colCyberYellow))
-        topBar.add(modeTitle).left().expandX()
-
-        val cLbl = Label("CODE: $waitingRoomCode", Label.LabelStyle(fontLarge, Color.WHITE))
-        waitingCodeValueLabel = cLbl
-        topBar.add(cLbl).padRight(14f)
-
-        val copyBtn = createCyberButton(
-            text = "COPY",
-            width = 96f,
-            height = 40f,
-            fillColor = colButtonPressed,
-            borderColor = colCyberYellow,
-            textColor = colCyberYellow,
-            fontOverride = fontSmall
-        ) {
-            Gdx.app.clipboard.contents = waitingRoomCode
-            waitingStatusBannerLabel?.setText("COPIED CODE [$waitingRoomCode]!")
-            waitingStatusBannerLabel?.color = colCyberGreen
-        }
-        topBar.add(copyBtn).width(96f).height(40f).padRight(10f)
-
-        val leaveBtn = createCyberButton(
-            text = "LEAVE",
-            width = 96f,
-            height = 40f,
-            fillColor = Color(0.26f, 0.10f, 0.12f, 0.95f),
-            borderColor = colCyberDanger,
-            textColor = Color.WHITE,
-            fontOverride = fontSmall
-        ) {
-            stopWaitingRoomClient()
-            currentStep = MenuStep.LOBBY
-            rebuildUi()
-        }
-        topBar.add(leaveBtn).width(96f).height(40f)
-
-        root.add(topBar).fillX().height(60f).padBottom(14f).row()
-
-        // 2. Center: Player Slots
-        val bodyCard = Table()
-        bodyCard.background = createSciFiPanelDrawable(
-            w = 984,
-            h = 270,
-            bgColor = colDarkChamber,
-            borderColor = colCyberOrange,
-            borderWidth = 3,
-            chamfer = 14,
-            withTechTab = true
-        )
-        bodyCard.pad(14f, 18f, 14f, 18f)
-
-        val statusHeader = Table()
-        val countLbl = Label(
-            "PLAYERS: ${waitingMembers.size} / ${selectedMode.maxPlayers}",
-            Label.LabelStyle(fontMedium, Color.WHITE)
-        )
-        waitingCountLabel = countLbl
-
-        val statusBanner = Label(
-            "WAITING FOR PLAYERS...",
-            Label.LabelStyle(fontMedium, colCyberYellow)
-        )
-        waitingStatusBannerLabel = statusBanner
-
-        statusHeader.add(countLbl).left().expandX()
-        statusHeader.add(statusBanner).right()
-        bodyCard.add(statusHeader).fillX().padBottom(14f).row()
-
-        val slotsGrid = Table()
-        waitingSlotsContainer = slotsGrid
-        refreshWaitingSlotsGrid()
-        bodyCard.add(slotsGrid).expand().fill().row()
-
-        root.add(bodyCard).fillX().height(270f).padBottom(14f).row()
-
-        // 3. Bottom Bar: Auto-Start Toggle + Start Match Button
-        val bottomBar = Table()
-        bottomBar.background = createSciFiPanelDrawable(
-            w = 984,
-            h = 68,
-            bgColor = colDarkChamber,
-            borderColor = colCyberOrange,
-            borderWidth = 2,
-            chamfer = 10,
-            withTechTab = false
-        )
-        bottomBar.pad(8f, 18f, 8f, 18f)
-
-        val autoStartBtn = createCyberButton(
-            text = if (waitingAutoStart) "AUTO-START: ON" else "AUTO-START: OFF",
-            width = 210f,
-            height = 46f,
-            fillColor = colButtonBg,
-            borderColor = if (waitingAutoStart) colCyberGreen else colCyberGrey,
-            textColor = if (waitingAutoStart) colCyberGreen else colTextDim,
-            fontOverride = fontSmall,
-            labelHook = { waitingAutoStartBtnLabel = it }
-        ) {
-            waitingAutoStart = !waitingAutoStart
-            waitingAutoStartBtnLabel?.setText(
-                if (waitingAutoStart) "AUTO-START: ON" else "AUTO-START: OFF"
-            )
-            waitingAutoStartBtnLabel?.color = if (waitingAutoStart) colCyberGreen else colTextDim
-        }
-        bottomBar.add(autoStartBtn).width(210f).height(46f).left().expandX()
-
-        val startNowBtn = createCyberButton(
-            text = "START MATCH",
-            width = 260f,
-            height = 48f,
-            fillColor = colButtonPressed,
-            borderColor = colCyberYellow,
-            textColor = colCyberYellow,
-            fontOverride = fontLarge
-        ) {
-            deployFromWaitingRoom()
-        }
-        bottomBar.add(startNowBtn).width(260f).height(48f).right()
-
-        root.add(bottomBar).fillX().height(68f)
-        parent.add(root).expand().fill()
-    }
-
-    private fun refreshWaitingSlotsGrid() {
-        val grid = waitingSlotsContainer ?: return
-        grid.clearChildren()
-
-        val maxSlots = selectedMode.maxPlayers.coerceAtLeast(2)
-        val memberList = waitingMembers.values.toList()
-        val slotW = if (maxSlots <= 2) 456f else 224f
-        val slotH = 185f
-
-        for (slotIdx in 0 until maxSlots) {
-            val member = memberList.getOrNull(slotIdx)
-            val slotCard = Table()
-            if (member != null) {
-                val borderCol = if (member.isLocal) colCyberYellow else colCyberGreen
-                val fillCol = if (member.isLocal) Color(0.22f, 0.16f, 0.04f, 0.96f) else Color(0.08f, 0.20f, 0.12f, 0.95f)
-                slotCard.background = createSciFiPanelDrawable(
-                    w = slotW.toInt(),
-                    h = slotH.toInt(),
-                    bgColor = fillCol,
-                    borderColor = borderCol,
-                    borderWidth = 3,
-                    chamfer = 10,
-                    withTechTab = false
-                )
-                slotCard.pad(12f)
-
-                if (avatarTexture != null) {
-                    val img = Image(TextureRegionDrawable(avatarTexture!!)).apply {
-                        setScaling(Scaling.fit)
-                    }
-                    slotCard.add(img).size(58f, 58f).padBottom(8f).row()
-                }
-
-                val youSuffix = if (member.isLocal) " (YOU)" else ""
-                val pName = Label("${member.name.uppercase()}$youSuffix", Label.LabelStyle(fontMedium, Color.WHITE))
-                slotCard.add(pName).center().padBottom(6f).row()
-
-                val readyBadge = Label("READY", Label.LabelStyle(fontSmall, colCyberGreen))
-                slotCard.add(readyBadge).center()
-            } else {
-                val dots = ".".repeat(waitingDotCount)
-                slotCard.background = createSciFiPanelDrawable(
-                    w = slotW.toInt(),
-                    h = slotH.toInt(),
-                    bgColor = Color(0.09f, 0.10f, 0.14f, 0.88f),
-                    borderColor = colCyberGrey,
-                    borderWidth = 2,
-                    chamfer = 10,
-                    withTechTab = false
-                )
-                slotCard.pad(12f)
-
-                val waitLbl = Label("WAITING$dots", Label.LabelStyle(fontMedium, colCyberYellow))
-                slotCard.add(waitLbl).center().padBottom(6f).row()
-
-                val codeHint = Label("CODE: $waitingRoomCode", Label.LabelStyle(fontTiny, colTextDim))
-                slotCard.add(codeHint).center()
-            }
-
-            grid.add(slotCard).width(slotW).height(slotH)
-            if (slotIdx < maxSlots - 1) {
-                grid.add().width(12f)
-            }
-        }
-    }
-
-    private fun updateWaitingRoomTick(delta: Float) {
-        val client = lobbyClient ?: return
-
-        waitingDotTimer += delta
-        if (waitingDotTimer >= 0.45f) {
-            waitingDotTimer = 0f
-            waitingDotCount = (waitingDotCount % 3) + 1
-            refreshWaitingSlotsGrid()
-        }
-
-        waitingConnectElapsed += delta
-        if (client.connectionFailed || (!client.isConnected && waitingConnectElapsed > 4.5f)) {
-            stopWaitingRoomClient()
-            currentStep = MenuStep.LOBBY
-            rebuildUi()
-            showNetworkUnavailablePopup {
-                tryEnterWaitingRoom(waitingRoomCode, waitingCreateRoom)
-            }
-            return
-        }
-
-        if (client.isConnected && client.playerId >= 0) {
-            waitingHeartbeatTimer += delta
-            if (waitingHeartbeatTimer >= 0.8f) {
-                waitingHeartbeatTimer = 0f
-                client.sendUdpRegister(client.playerId)
-                client.sendState(
-                    x = 12.47f,
-                    y = 5.34f,
-                    cos = 0f,
-                    sin = 101f,
-                    health = 100f
-                )
-            }
-        }
-
-        var slotsChanged = false
-        while (client.packetQueue.isNotEmpty()) {
-            when (val pkt = client.packetQueue.poll()) {
-                is LoginResponsePacket -> {
-                    savedLoginResponse = pkt
-                    if (pkt.roomCode.isNotBlank()) {
-                        waitingRoomCode = pkt.roomCode.trim().uppercase()
-                        waitingCodeValueLabel?.setText("CODE: $waitingRoomCode")
-                    }
-                    val localEntry = waitingMembers.remove(0) ?: WaitingRoomMember(
-                        id = pkt.assignedId,
-                        name = activeSession?.username ?: "PLAYER",
-                        isLocal = true,
-                        x = pkt.spawnX,
-                        y = pkt.spawnY
-                    )
-                    waitingMembers[pkt.assignedId] = localEntry.copy(
-                        id = pkt.assignedId,
-                        x = pkt.spawnX,
-                        y = pkt.spawnY
-                    )
-                    slotsChanged = true
-                }
-
-                is PlayerConnectedPacket -> {
-                    if (pkt.roomCode.isNotBlank() && waitingRoomCode.isNotBlank() &&
-                        !pkt.roomCode.equals(waitingRoomCode, ignoreCase = true)
-                    ) {
-                        continue
-                    }
-                    if (pkt.id != client.playerId && pkt.id > 0) {
-                        val existing = waitingMembers[pkt.id]
-                        val pName = pkt.playerName.ifBlank { existing?.name ?: "PLAYER #${pkt.id}" }
-                        waitingMembers[pkt.id] = WaitingRoomMember(
-                            id = pkt.id,
-                            name = pName,
-                            isLocal = false,
-                            x = pkt.x,
-                            y = pkt.y
-                        )
-                        audioService.play(SoundType.CLICK, volumeModifier = 0.7f)
-                        slotsChanged = true
-                    }
-                }
-
-                is PlayerDisconnectedPacket -> {
-                    if (waitingMembers.remove(pkt.id) != null) {
-                        slotsChanged = true
-                    }
-                }
-
-                is PlayerStatePacket -> {
-                    if (pkt.roomCode.isNotBlank() && waitingRoomCode.isNotBlank() &&
-                        !pkt.roomCode.equals(waitingRoomCode, ignoreCase = true)
-                    ) {
-                        continue
-                    }
-                    if (pkt.id != client.playerId && pkt.id > 0) {
-                        val existing = waitingMembers[pkt.id]
-                        val updatedName = pkt.playerName.ifBlank { existing?.name ?: "PLAYER #${pkt.id}" }
-                        if (existing == null || existing.name != updatedName) {
-                            waitingMembers[pkt.id] = WaitingRoomMember(
-                                id = pkt.id,
-                                name = updatedName,
-                                isLocal = false,
-                                x = pkt.x,
-                                y = pkt.y
-                            )
-                            slotsChanged = true
-                        }
-                    }
-                }
-            }
-        }
-
-        val currentCount = waitingMembers.size
-        val maxPlayers = selectedMode.maxPlayers
-        waitingCountLabel?.setText("PLAYERS: $currentCount / $maxPlayers")
-
-        if (currentCount >= maxPlayers) {
-            if (waitingAutoStart) {
-                if (waitingCountdown < 0f) {
-                    waitingCountdown = 3.0f
-                    audioService.play(SoundType.RELOAD, volumeModifier = 0.7f)
-                }
-                waitingCountdown -= delta
-                val secLeft = max(1, waitingCountdown.toInt() + 1)
-                waitingStatusBannerLabel?.setText("STARTING IN ${secLeft}s...")
-                waitingStatusBannerLabel?.color = colCyberGreen
-                if (waitingCountdown <= 0f) {
-                    deployFromWaitingRoom()
-                    return
-                }
-            } else {
-                waitingStatusBannerLabel?.setText("ROOM FULL! CLICK START MATCH")
-                waitingStatusBannerLabel?.color = colCyberGreen
-            }
-        } else {
-            waitingCountdown = -1f
-            val dots = ".".repeat(waitingDotCount)
-            waitingStatusBannerLabel?.setText("WAITING FOR PLAYERS$dots")
-            waitingStatusBannerLabel?.color = colCyberYellow
-        }
-
-        if (slotsChanged) {
-            refreshWaitingSlotsGrid()
-        }
-    }
-
-    private fun deployFromWaitingRoom() {
-        val client = lobbyClient
-        if (client != null && client.isConnected) {
-            savedLoginResponse?.let { client.packetQueue.add(it) }
-            waitingMembers.values.filter { !it.isLocal && it.id > 0 }.forEach { member ->
-                val connPkt = PlayerConnectedPacket.newBuilder()
-                    .setId(member.id)
-                    .setX(member.x)
-                    .setY(member.y)
-                    .setRoomCode(waitingRoomCode)
-                    .setPlayerName(member.name)
-                    .build()
-                client.packetQueue.add(connPkt)
-            }
-        }
-
-        lobbyClient = null
-        val host = System.getProperty("shootgame.host", NetworkConfig.serverHost)
-        val session = activeSession
-        val config = GameConfig(
-            mode = selectedMode,
-            playerName = session?.username ?: "PLAYER",
-            serverHost = host,
-            roomCode = waitingRoomCode,
-            createRoom = waitingCreateRoom,
-            jwtToken = session?.jwtToken ?: "",
-            sessionToken = session?.sessionToken ?: "",
-            preConnectedClient = client
-        )
-        game.startGame(config)
-    }
-
-    // =========================================================================
-    // CYBER-YELLOW BUTTON BUILDER & NETWORK VERIFICATION
-    // =========================================================================
-    private fun createCyberButton(
+    private fun createSciFiActionButton(
         text: String,
-        width: Float,
-        height: Float,
-        fillColor: Color,
-        borderColor: Color,
-        textColor: Color,
-        fontOverride: BitmapFont = fontSmall,
-        labelHook: ((Label) -> Unit)? = null,
+        w: Int,
+        h: Int,
+        bgR: Float,
+        bgG: Float,
+        bgB: Float,
+        borderR: Float,
+        borderG: Float,
+        borderB: Float,
+        fontScale: Float = 0.72f,
         onClick: () -> Unit
-    ): Stack {
-        val stack = Stack()
-        val normalBg = createSciFiPanelDrawable(
-            w = width.toInt(),
-            h = height.toInt(),
-            bgColor = fillColor,
-            borderColor = borderColor,
-            borderWidth = 2,
-            chamfer = 8,
-            withTechTab = false
+    ): Table {
+        val t = Table()
+        t.background = createSciFiPanelDrawable(
+            w, h,
+            bgR, bgG, bgB, 0.96f,
+            borderR, borderG, borderB, 0.95f,
+            chamfer = 5
         )
-        val pressedBg = createSciFiPanelDrawable(
-            w = width.toInt(),
-            h = height.toInt(),
-            bgColor = Color(0.38f, 0.26f, 0.04f, 0.98f),
-            borderColor = colCyberYellow,
-            borderWidth = 3,
-            chamfer = 8,
-            withTechTab = false
-        )
-
-        val bgImage = Image(normalBg)
-        val lbl = Label(text, Label.LabelStyle(fontOverride, textColor)).apply {
+        val lbl = VisLabel(text).apply {
             setAlignment(Align.center)
+            color = Color.WHITE
+            setFontScale(fontScale)
         }
-        labelHook?.invoke(lbl)
-
-        stack.add(bgImage)
-        stack.add(lbl)
-
-        stack.addListener(object : ClickListener() {
-            override fun touchDown(event: InputEvent?, x: Float, y: Float, pointer: Int, button: Int): Boolean {
-                audioService.play(SoundType.CLICK, volumeModifier = 0.55f)
-                bgImage.drawable = pressedBg
-                return true
-            }
-
-            override fun touchUp(event: InputEvent?, x: Float, y: Float, pointer: Int, button: Int) {
-                bgImage.drawable = normalBg
+        t.add(lbl).expand().center()
+        t.addListener(object : ClickListener() {
+            override fun clicked(event: InputEvent?, x: Float, y: Float) {
                 onClick()
             }
-
-            override fun enter(event: InputEvent?, x: Float, y: Float, pointer: Int, fromActor: Actor?) {
-                if (pointer == -1) {
-                    bgImage.drawable = pressedBg
-                }
-            }
-
-            override fun exit(event: InputEvent?, x: Float, y: Float, pointer: Int, toActor: Actor?) {
-                if (pointer == -1) {
-                    bgImage.drawable = normalBg
-                }
-            }
         })
-
-        return stack
+        return t
     }
 
-    private fun verifyMultiplayerThen(onVerified: () -> Unit) {
-        if (selectedMode == GameMode.OFFLINE) {
-            onVerified()
-            return
-        }
+    private fun refreshModeSlots() {
+        val activeDrawable = createSciFiPanelDrawable(
+            140, 32,
+            0.12f, 0.25f, 0.34f, 0.98f,
+            0.22f, 0.92f, 1f, 1f,
+            chamfer = 5
+        )
+        val inactiveDrawable = createSciFiPanelDrawable(
+            140, 32,
+            0.08f, 0.11f, 0.16f, 0.95f,
+            0.26f, 0.34f, 0.44f, 0.85f,
+            chamfer = 5
+        )
 
+        modeSlotTables.forEach { (mode, table) ->
+            table.background = if (mode == selectedMode) activeDrawable else inactiveDrawable
+        }
+        modeSlotLabels.forEach { (mode, lbl) ->
+            lbl.color = if (mode == selectedMode) {
+                Color(0.85f, 0.98f, 1f, 1f)
+            } else {
+                Color(0.75f, 0.80f, 0.88f, 1f)
+            }
+        }
+    }
+
+    private fun pingServer() {
+        val host = System.getProperty("shootgame.host", NetworkConfig.serverHost)
         Thread {
             val host = System.getProperty("shootgame.host", NetworkConfig.serverHost)
             val serverOk = try {
@@ -1469,82 +906,19 @@ class MenuScreen(private val game: Main) : KtxScreen {
             }
 
             Gdx.app.postRunnable {
-                internetAvailable = netOk
-                serverOnline = serverOk
-                updateNetworkHeaderLabels()
-
-                if (serverOk) {
-                    onVerified()
-                } else {
-                    showNetworkUnavailablePopup(
-                        onRetry = { verifyMultiplayerThen(onVerified) }
-                    )
-                }
-            }
-        }.apply {
-            isDaemon = true
-            start()
-        }
-    }
-
-    private fun probeServerAsync(forceCallback: (() -> Unit)? = null) {
-        if (checkingNetwork) return
-        checkingNetwork = true
-        updateNetworkHeaderLabels()
-
-        Thread {
-            val host = System.getProperty("shootgame.host", NetworkConfig.serverHost)
-            val serverOk = try {
-                Socket().use { s ->
-                    s.connect(InetSocketAddress(host, NetworkConfig.TCP_PORT), 1500)
-                }
-                true
-            } catch (_: Exception) {
-                false
-            }
-
-            val netOk = if (serverOk) {
-                true
-            } else {
-                try {
-                    Socket().use { s ->
-                        s.connect(InetSocketAddress("8.8.8.8", 53), 1200)
+                serverOnline = reachable
+                serverPingMs = ping
+                sessionSubLabel?.setText(
+                    if (reachable) {
+                        "SQLite Session Active  •  Region: Global West - ${ping}ms"
+                    } else {
+                        "SQLite Session Active  •  Region: Global West (Offline Ready)"
                     }
-                    true
-                } catch (_: Exception) {
-                    false
-                }
-            }
-
-            Gdx.app.postRunnable {
-                checkingNetwork = false
-                internetAvailable = netOk
-                serverOnline = serverOk
-                updateNetworkHeaderLabels()
-                forceCallback?.invoke()
+                )
             }
         }.apply {
             isDaemon = true
             start()
-        }
-    }
-
-    private fun updateNetworkHeaderLabels() {
-        networkBadgeLabel?.let { lbl ->
-            when {
-                checkingNetwork -> {
-                    lbl.setText("CHECKING...")
-                    lbl.color = colCyberYellow
-                }
-                serverOnline -> {
-                    lbl.setText("ONLINE")
-                    lbl.color = colCyberGreen
-                }
-                else -> {
-                    lbl.setText("OFFLINE")
-                    lbl.color = colCyberDanger
-                }
-            }
         }
     }
 
@@ -1553,7 +927,7 @@ class MenuScreen(private val game: Main) : KtxScreen {
         val session = activeSession
         val config = GameConfig(
             mode = selectedMode,
-            playerName = session?.username ?: "PLAYER",
+            playerName = session?.username ?: "Player",
             serverHost = host,
             roomCode = roomCode.trim().uppercase(),
             createRoom = createRoom,
@@ -1564,10 +938,7 @@ class MenuScreen(private val game: Main) : KtxScreen {
     }
 
     override fun render(delta: Float) {
-        if (currentStep == MenuStep.WAITING_ROOM) {
-            updateWaitingRoomTick(delta)
-        }
-        ScreenUtils.clear(0.04f, 0.05f, 0.08f, 1f)
+        ScreenUtils.clear(0.04f, 0.06f, 0.09f, 1f)
         stage.act(delta)
         stage.draw()
     }
@@ -1582,6 +953,8 @@ class MenuScreen(private val game: Main) : KtxScreen {
         audioService.dispose()
         bgFrameTexture?.disposeSafely()
         avatarTexture?.disposeSafely()
+        rankChevronTexture?.disposeSafely()
+        rankShieldTexture?.disposeSafely()
         generatedTextures.forEach { it.disposeSafely() }
         generatedTextures.clear()
         generatedFonts.forEach { it.disposeSafely() }

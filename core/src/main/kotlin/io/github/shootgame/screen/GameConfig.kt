@@ -107,7 +107,6 @@ data class GameConfig(
     var createRoom: Boolean = false,
     var jwtToken: String = "",
     var sessionToken: String = "",
-    var preConnectedClient: GameClient? = null,
     var onExitToMenu: () -> Unit = {}
 ) {
     companion object {
@@ -120,3 +119,4 @@ data class GameConfig(
         }
     }
 }
+
