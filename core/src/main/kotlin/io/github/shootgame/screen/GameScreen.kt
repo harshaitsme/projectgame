@@ -36,6 +36,7 @@ import io.github.shootgame.system.PhysicSystem
 import io.github.shootgame.system.PickupSystem
 import io.github.shootgame.system.PlayerInputSystem
 import io.github.shootgame.system.RenderSystem
+import io.github.shootgame.system.StatusEffectSystem
 import io.github.shootgame.system.UiSystem
 import io.github.shootgame.system.NetworkSystem
 import ktx.app.KtxScreen
@@ -75,6 +76,7 @@ class GameScreen : KtxScreen {
         system<CombatSystem>()
         system<CollisionSystem>()
         system<FragSystem>()
+        system<StatusEffectSystem>()
         system<MoveSystem>()
         system<PhysicSystem>()
         system<ExplosionSystem>()

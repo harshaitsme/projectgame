@@ -23,7 +23,8 @@ class HealthSystem(
     private val moveCmps: ComponentMapper<MoveComponent>,
     private val physicCmps: ComponentMapper<PhysicComponent>,
     private val enemyCmps: ComponentMapper<EnemyComponent>,
-    private val playerCmps: ComponentMapper<PlayerComponent>
+    private val playerCmps: ComponentMapper<PlayerComponent>,
+    private val statusEffectCmps: ComponentMapper<io.github.shootgame.component.StatusEffectComponent>
 ) : IteratingSystem() {
 
     override fun onTickEntity(entity: Entity) {
@@ -43,7 +44,24 @@ class HealthSystem(
         val health = healthCmps.getOrNull(entity) ?: return false
         if (health.isDead || health.invulnerableTime > 0f || amount <= 0f) return false
 
-        health.currentHealth = (health.currentHealth - amount).coerceAtLeast(0f)
+        var remainingDamage = amount
+        val status = statusEffectCmps.getOrNull(entity)
+        val shield = status?.getEffect(io.github.shootgame.component.StatusEffectType.SHIELD)
+        if (shield != null) {
+            if (shield.magnitude >= remainingDamage) {
+                shield.magnitude -= remainingDamage
+                if (shield.magnitude <= 0f) {
+                    status.removeEffect(io.github.shootgame.component.StatusEffectType.SHIELD)
+                }
+                health.invulnerableTime = INVULNERABILITY_DURATION
+                return true
+            } else {
+                remainingDamage -= shield.magnitude
+                status.removeEffect(io.github.shootgame.component.StatusEffectType.SHIELD)
+            }
+        }
+
+        health.currentHealth = (health.currentHealth - remainingDamage).coerceAtLeast(0f)
         health.invulnerableTime = INVULNERABILITY_DURATION
 
         if (health.currentHealth <= 0f) {

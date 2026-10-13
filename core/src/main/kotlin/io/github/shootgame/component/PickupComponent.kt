@@ -8,7 +8,9 @@ enum class PickupType(
     HEALTH("Health Pack", "Restores 35 HP", 35f),
     AMMO("Ammo Crate", "Restores weapon ammo", 30f),
     GRENADE("Frag Grenade", "+2 Grenades", 2f),
-    COIN("Gold Coin", "+50 Points", 50f)
+    COIN("Gold Coin", "+50 Points", 50f),
+    SPEED_BOOST("Speed Boost", "+50% Speed (10s)", 1.5f),
+    SHIELD("Energy Shield", "+50 Shield Barrier", 50f)
 }
 
 class PickupComponent {
