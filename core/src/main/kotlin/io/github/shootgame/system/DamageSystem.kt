@@ -12,13 +12,15 @@ import io.github.shootgame.component.BulletComponent
 import io.github.shootgame.component.DamageComponent
 import io.github.shootgame.component.HealthComponent
 import io.github.shootgame.component.OwnerComponent
+import io.github.shootgame.component.PhysicComponent
 
 class DamageSystem(
     private val phWorld: PhWorld,
     private val damageCmps: ComponentMapper<DamageComponent>,
     private val healthCmps: ComponentMapper<HealthComponent>,
     private val ownerCmps: ComponentMapper<OwnerComponent>,
-    private val bulletCmps: ComponentMapper<BulletComponent>
+    private val bulletCmps: ComponentMapper<BulletComponent>,
+    private val physicCmps: ComponentMapper<PhysicComponent>
 ) : IntervalSystem(), ContactListener {
 
     private data class PendingDamage(val source: Entity, val target: Entity, val amount: Float)
@@ -41,6 +43,10 @@ class DamageSystem(
 
             healthSystem.damage(request.target, request.amount)
             if (request.source in bulletCmps) {
+                val pos = physicCmps.getOrNull(request.source)?.body?.position
+                if (pos != null) {
+                    world.system<ParticleSystem>().spawnSparks(pos.x, pos.y, count = 7)
+                }
                 world.remove(request.source)
             }
         }

@@ -47,6 +47,7 @@ class MoveSystem(
                 moveCmp.cos * moveCmp.speed,
                 moveCmp.sin * moveCmp.speed
             )
+            world.system<ParticleSystem>().spawnBulletTrail(body.position.x, body.position.y)
         } else if (isFrag) {
             // For grenades, we only set the horizontal speed, let gravity handle vertical
             body.setLinearVelocity(
@@ -59,6 +60,11 @@ class MoveSystem(
                 moveCmp.cos * moveCmp.speed,
                 currentVelocity.y
             )
+            if (moveCmp.cos != 0f && abs(currentVelocity.y) < 0.15f) {
+                if (com.badlogic.gdx.math.MathUtils.randomBoolean(0.25f)) {
+                    world.system<ParticleSystem>().spawnFootstepDust(body.position.x, body.position.y - 0.35f)
+                }
+            }
         }
 
         // Jump logic (only for non-bullets)
@@ -67,6 +73,7 @@ class MoveSystem(
             if (abs(currentVelocity.y) < 0.1f) {
                 body.applyLinearImpulse(0f, moveCmp.jumpImpulse, body.worldCenter.x, body.worldCenter.y, true)
                 audioService.play(SoundType.JUMP, pitchVariation = 0.06f)
+                world.system<ParticleSystem>().spawnFootstepDust(body.position.x, body.position.y - 0.35f)
             }
             moveCmp.doJump = false
         }
