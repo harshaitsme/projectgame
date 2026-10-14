@@ -18,7 +18,7 @@ import io.github.shootgame.component.*
 import kotlin.math.abs
 
 @AllOf([MoveComponent::class, PhysicComponent::class])
-@NoneOf([DeadComponent::class])
+@NoneOf([DeadComponent::class, RemotePlayerComponent::class])
 class MoveSystem(
     private val moveCmps: ComponentMapper<MoveComponent>,
     private val physicCmps: ComponentMapper<PhysicComponent>,
@@ -28,7 +28,7 @@ class MoveSystem(
     private val bulletCmps: ComponentMapper<BulletComponent>,
     private val playerCmps: ComponentMapper<PlayerComponent>,
     private val fragCmps: ComponentMapper<FragComponent>,
-    private val perkCmps: ComponentMapper<PerkComponent>,
+    private val remotePlayerCmps: ComponentMapper<RemotePlayerComponent>,
     private val audioService: AudioService
 ) : IteratingSystem() {
 
@@ -37,7 +37,6 @@ class MoveSystem(
         val physicCmp = physicCmps[entity]
         val isBullet = entity in bulletCmps
         val isFrag = entity in fragCmps
-
         val body = physicCmp.body
         val currentVelocity = body.linearVelocity
 
@@ -50,30 +49,28 @@ class MoveSystem(
             )
             world.system<ParticleSystem>().spawnBulletTrail(body.position.x, body.position.y)
         } else if (isFrag) {
-            // For grenades, we only set the horizontal speed, let gravity handle vertical
-            body.setLinearVelocity(
-                moveCmp.cos * moveCmp.speed,
-                currentVelocity.y
-            )
-        } else {
-            // Non-projectiles (Player) move horizontally via input
-            body.setLinearVelocity(
-                moveCmp.cos * moveCmp.speed,
-                currentVelocity.y
-            )
-            if (moveCmp.cos != 0f && abs(currentVelocity.y) < 0.15f) {
-                if (com.badlogic.gdx.math.MathUtils.randomBoolean(0.25f)) {
-                    world.system<ParticleSystem>().spawnFootstepDust(body.position.x, body.position.y - 0.35f)
-                }
+            // Let Box2D handle grenade arc & wall bounces; apply gentle friction when rolling on floor
+            if (abs(currentVelocity.y) < 0.25f) {
+                body.setLinearVelocity(currentVelocity.x * 0.94f, currentVelocity.y)
+            }
+        } else if (entity !in remotePlayerCmps) {
+            // Keep local player & enemies inside the indoor map arena (prevent roof/void trapping)
+            if (body.position.y > 9.5f || body.position.y < 1.0f) {
+                body.setTransform(12.47f, 5.2f, 0f)
+                body.setLinearVelocity(0f, 0f)
+            } else {
+                // Non-projectiles (Local Player & Enemies) move horizontally via input
+                body.setLinearVelocity(
+                    moveCmp.cos * moveCmp.speed,
+                    currentVelocity.y
+                )
             }
         }
 
-        // Jump logic (only for non-bullets)
-        if (!isBullet && moveCmp.doJump) {
-            val isGrounded = abs(currentVelocity.y) < 0.1f
-            val hasDoubleJump = perkCmps.getOrNull(entity)?.hasPerk(PerkType.DOUBLE_JUMP) == true
-
-            if (isGrounded) {
+        // Jump logic (only for local player / enemies)
+        if (!isBullet && !isFrag && entity !in remotePlayerCmps && moveCmp.doJump) {
+            // Simple grounded check: check if vertical velocity is near 0
+            if (abs(currentVelocity.y) < 0.1f) {
                 body.applyLinearImpulse(0f, moveCmp.jumpImpulse, body.worldCenter.x, body.worldCenter.y, true)
                 audioService.play(SoundType.JUMP, pitchVariation = 0.06f)
                 world.system<ParticleSystem>().spawnFootstepDust(body.position.x, body.position.y - 0.35f)

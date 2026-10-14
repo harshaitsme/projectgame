@@ -16,7 +16,8 @@ import io.github.shootgame.component.PerkComponent
 import io.github.shootgame.component.PerkType
 import io.github.shootgame.component.PhysicComponent
 import io.github.shootgame.component.PlayerComponent
-import io.github.shootgame.component.ShieldComponent
+import io.github.shootgame.component.RemotePlayerComponent
+import io.github.shootgame.component.StatusEffectComponent
 
 @AllOf([HealthComponent::class])
 class HealthSystem(
@@ -27,9 +28,8 @@ class HealthSystem(
     private val physicCmps: ComponentMapper<PhysicComponent>,
     private val enemyCmps: ComponentMapper<EnemyComponent>,
     private val playerCmps: ComponentMapper<PlayerComponent>,
-    private val statusEffectCmps: ComponentMapper<io.github.shootgame.component.StatusEffectComponent>,
-    private val shieldCmps: ComponentMapper<ShieldComponent>,
-    private val perkCmps: ComponentMapper<PerkComponent>
+    private val remotePlayerCmps: ComponentMapper<RemotePlayerComponent>,
+    private val statusEffectCmps: ComponentMapper<StatusEffectComponent>
 ) : IteratingSystem() {
 
     override fun onTickEntity(entity: Entity) {
@@ -45,9 +45,10 @@ class HealthSystem(
         return damage(entity, health.maxHealth * fraction.coerceAtMost(1f))
     }
 
-    fun damage(entity: Entity, amount: Float): Boolean {
+    fun damage(entity: Entity, amount: Float, fromNetwork: Boolean = false): Boolean {
         val health = healthCmps.getOrNull(entity) ?: return false
-        if (health.isDead || health.invulnerableTime > 0f || amount <= 0f) return false
+        if (health.isDead || entity in deadCmps || amount <= 0f) return false
+        if (health.invulnerableTime > 0f) return false
 
         var remainingDamage = amount
 
@@ -86,36 +87,90 @@ class HealthSystem(
         if (health.currentHealth <= 0f) {
             health.isDead = true
             kill(entity)
+        } else {
+            // Brief hurt animation if not currently attacking
+            val anim = animationCmps.getOrNull(entity)
+            if (anim != null && anim.type == AnimationType.IDLE) {
+                anim.nextAnimation(AnimationModel.PLAYER, AnimationType.HURT)
+            }
         }
 
         return true
+    }
+
+    fun setAuthoritativeHealth(entity: Entity, targetHealth: Float) {
+        val health = healthCmps.getOrNull(entity) ?: return
+        val clamped = targetHealth.coerceIn(0f, health.maxHealth)
+        if (clamped <= 0f) {
+            if (!health.isDead || entity !in deadCmps) {
+                health.currentHealth = 0f
+                health.isDead = true
+                kill(entity)
+            } else {
+                health.currentHealth = 0f
+            }
+        } else {
+            health.currentHealth = clamped
+            if (health.isDead || entity in deadCmps) {
+                health.isDead = false
+                if (entity in deadCmps) {
+                    world.configureEntity(entity) {
+                        deadCmps.remove(entity)
+                    }
+                }
+                val anim = animationCmps.getOrNull(entity)
+                if (anim != null) {
+                    anim.playMode = Animation.PlayMode.LOOP
+                    anim.nextAnimation(AnimationModel.PLAYER, AnimationType.IDLE)
+                }
+            }
+        }
+    }
+
+    fun forceKill(entity: Entity) {
+        val health = healthCmps.getOrNull(entity) ?: return
+        health.currentHealth = 0f
+        if (!health.isDead || entity !in deadCmps) {
+            health.isDead = true
+            kill(entity)
+        }
     }
 
     private fun kill(entity: Entity) {
         val enemy = enemyCmps.getOrNull(entity)
         if (enemy != null) {
             world.family(allOf = arrayOf(PlayerComponent::class)).forEach { player ->
-                playerCmps[player].score += enemy.scoreValue
-
-                val perkCmp = perkCmps.getOrNull(player)
-                if (perkCmp != null && perkCmp.hasPerk(PerkType.VAMPIRISM)) {
-                    val hp = healthCmps.getOrNull(player)
-                    if (hp != null) {
-                        hp.currentHealth = (hp.currentHealth + 15f).coerceAtMost(hp.maxHealth)
-                    }
+                if (player !in remotePlayerCmps) {
+                    playerCmps[player].score += enemy.scoreValue
+                    playerCmps[player].kills += 1
                 }
             }
-        }
-
-        world.configureEntity(entity) {
-            deadCmps.add(entity) {
-                time = 0f
+            world.configureEntity(entity) {
+                deadCmps.add(entity) {
+                    time = 0f
+                }
+                if (entity in moveCmps) {
+                    moveCmps.remove(entity)
+                }
+                if (entity in physicCmps) {
+                    physicCmps.remove(entity)
+                }
             }
-            if (entity in moveCmps) {
-                moveCmps.remove(entity)
+        } else {
+            // Player or RemotePlayer: keep MoveComponent & PhysicComponent intact so they can respawn!
+            val physic = physicCmps.getOrNull(entity)
+            physic?.body?.setLinearVelocity(0f, 0f)
+            val move = moveCmps.getOrNull(entity)
+            if (move != null) {
+                move.cos = 0f
+                move.sin = 0f
             }
-            if (entity in physicCmps) {
-                physicCmps.remove(entity)
+            if (entity !in deadCmps) {
+                world.configureEntity(entity) {
+                    deadCmps.add(entity) {
+                        time = 0f
+                    }
+                }
             }
         }
 
@@ -125,6 +180,6 @@ class HealthSystem(
     }
 
     companion object {
-        const val INVULNERABILITY_DURATION = 0.5f
+        const val INVULNERABILITY_DURATION = 0.16f
     }
 }

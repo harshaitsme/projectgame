@@ -19,12 +19,21 @@ class AiSystem(
     private val playerCmps: ComponentMapper<PlayerComponent>
 ) : IteratingSystem() {
 
+    private val uiSystem: UiSystem by lazy { world.system<UiSystem>() }
+
     override fun onTickEntity(entity: Entity) {
         val ai = aiCmps[entity]
         val move = moveCmps[entity]
         val attack = attackCmps[entity]
         val image = imageCmps[entity].image
         val physic = physicCmps[entity]
+
+        if (uiSystem.isPaused) {
+            move.cos = 0f
+            move.doJump = false
+            attack.isAttacking = false
+            return
+        }
 
         // Find the active Player entity
         var targetPlayer: Entity? = null

@@ -1,0 +1,45 @@
+[Unit]
+Description=ShootGame Rust Dedicated Server
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=shootgame
+Group=shootgame
+
+WorkingDirectory=/opt/shootgame
+ExecStart=/opt/shootgame/shootgame-server
+
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=10
+KillSignal=SIGTERM
+
+# Load environment from a file for easier management
+EnvironmentFile=-/etc/shootgame/server.env
+Environment=SHOOTGAME_TCP_PORT=54555
+Environment=SHOOTGAME_UDP_PORT=54777
+
+# Performance Tuning
+Nice=-10
+CPUSchedulingPolicy=rr
+CPUSchedulingPriority=50
+LimitNOFILE=65535
+LimitMEMLOCK=64M
+
+# Security Hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+MemoryDenyWriteExecute=true
+ReadWritePaths=/opt/shootgame
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+[Install]
+WantedBy=multi-user.target
