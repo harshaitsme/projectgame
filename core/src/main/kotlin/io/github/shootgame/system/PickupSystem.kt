@@ -25,6 +25,8 @@ import io.github.shootgame.component.PickupComponent
 import io.github.shootgame.component.PickupType
 import io.github.shootgame.component.PlayerComponent
 import io.github.shootgame.component.RemotePlayerComponent
+import io.github.shootgame.component.StatusEffectComponent
+import io.github.shootgame.component.StatusEffectType
 import io.github.shootgame.component.WeaponComponent
 import ktx.box2d.circle
 import kotlin.math.sin

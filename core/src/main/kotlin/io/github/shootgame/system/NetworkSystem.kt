@@ -186,9 +186,18 @@ class NetworkSystem(
         gameMode: String = "DUO",
         createRoom: Boolean = false,
         sessionToken: String = "",
+        preConnectedClient: GameClient? = null,
         timeoutMs: Int = 4000
     ) {
         val fallbackCode = roomCode.trim().uppercase().ifEmpty { GameConfig.generateRoomCode() }
+        if (preConnectedClient != null && preConnectedClient.isConnected) {
+            client = preConnectedClient
+            activeRoomCode = preConnectedClient.activeRoomCode.ifEmpty { fallbackCode }
+            if (preConnectedClient.playerId >= 0) {
+                myNetworkId = preConnectedClient.playerId
+            }
+            return
+        }
         activeRoomCode = fallbackCode
         val gameClient = GameClient(host, NetworkConfig.TCP_PORT, NetworkConfig.UDP_PORT)
         client = gameClient
@@ -301,7 +310,8 @@ class NetworkSystem(
                     val id = packet.id
                     if (id != myNetworkId && !remoteEntities.containsKey(id) && !pendingSpawnNetIds.contains(id)) {
                         spawnRemotePlayer(id, packet.x, packet.y)
-                        postFeed("Operative #$id joined Room $activeRoomCode")
+                        val joinedName = packet.playerName.ifBlank { "Operative #$id" }
+                        postFeed("$joinedName joined Room $activeRoomCode")
                     }
                 }
 

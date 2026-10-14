@@ -40,6 +40,12 @@ class GameClient(
     @Volatile var activeGameMode: String = "DUO"
         private set
 
+    @Volatile var connectionFailed: Boolean = false
+        private set
+
+    @Volatile var lastError: String = ""
+        private set
+
     val packetQueue = ConcurrentLinkedQueue<Any>()
 
     fun connect(
@@ -53,6 +59,8 @@ class GameClient(
         localPlayerName = name
         activeRoomCode = roomCode.trim().uppercase()
         activeGameMode = gameMode.trim().uppercase()
+        connectionFailed = false
+        lastError = ""
         if (initialSessionToken.isNotBlank()) {
             sessionToken = initialSessionToken
         }
