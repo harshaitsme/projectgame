@@ -29,6 +29,7 @@ class MoveSystem(
     private val playerCmps: ComponentMapper<PlayerComponent>,
     private val fragCmps: ComponentMapper<FragComponent>,
     private val remotePlayerCmps: ComponentMapper<RemotePlayerComponent>,
+    private val perkCmps: ComponentMapper<PerkComponent>,
     private val audioService: AudioService
 ) : IteratingSystem() {
 
@@ -69,8 +70,10 @@ class MoveSystem(
 
         // Jump logic (only for local player / enemies)
         if (!isBullet && !isFrag && entity !in remotePlayerCmps && moveCmp.doJump) {
-            // Simple grounded check: check if vertical velocity is near 0
-            if (abs(currentVelocity.y) < 0.1f) {
+            val isGrounded = abs(currentVelocity.y) < 0.1f
+            val hasDoubleJump = perkCmps.getOrNull(entity)?.hasPerk(PerkType.DOUBLE_JUMP) == true
+
+            if (isGrounded) {
                 body.applyLinearImpulse(0f, moveCmp.jumpImpulse, body.worldCenter.x, body.worldCenter.y, true)
                 audioService.play(SoundType.JUMP, pitchVariation = 0.06f)
                 world.system<ParticleSystem>().spawnFootstepDust(body.position.x, body.position.y - 0.35f)

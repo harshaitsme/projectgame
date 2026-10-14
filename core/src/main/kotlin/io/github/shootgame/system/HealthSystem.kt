@@ -10,6 +10,7 @@ import io.github.shootgame.component.AnimationModel
 import io.github.shootgame.component.AnimationType
 import io.github.shootgame.component.DeadComponent
 import io.github.shootgame.component.EnemyComponent
+import io.github.shootgame.component.HazardComponent
 import io.github.shootgame.component.HealthComponent
 import io.github.shootgame.component.MoveComponent
 import io.github.shootgame.component.PerkComponent
@@ -17,6 +18,7 @@ import io.github.shootgame.component.PerkType
 import io.github.shootgame.component.PhysicComponent
 import io.github.shootgame.component.PlayerComponent
 import io.github.shootgame.component.RemotePlayerComponent
+import io.github.shootgame.component.ShieldComponent
 import io.github.shootgame.component.StatusEffectComponent
 
 @AllOf([HealthComponent::class])
@@ -29,7 +31,10 @@ class HealthSystem(
     private val enemyCmps: ComponentMapper<EnemyComponent>,
     private val playerCmps: ComponentMapper<PlayerComponent>,
     private val remotePlayerCmps: ComponentMapper<RemotePlayerComponent>,
-    private val statusEffectCmps: ComponentMapper<StatusEffectComponent>
+    private val statusEffectCmps: ComponentMapper<StatusEffectComponent>,
+    private val shieldCmps: ComponentMapper<ShieldComponent>,
+    private val perkCmps: ComponentMapper<PerkComponent>,
+    private val hazardCmps: ComponentMapper<HazardComponent>
 ) : IteratingSystem() {
 
     override fun onTickEntity(entity: Entity) {
@@ -143,6 +148,14 @@ class HealthSystem(
                 if (player !in remotePlayerCmps) {
                     playerCmps[player].score += enemy.scoreValue
                     playerCmps[player].kills += 1
+
+                    val perkCmp = perkCmps.getOrNull(player)
+                    if (perkCmp != null && perkCmp.hasPerk(PerkType.VAMPIRISM)) {
+                        val hp = healthCmps.getOrNull(player)
+                        if (hp != null) {
+                            hp.currentHealth = (hp.currentHealth + 15f).coerceAtMost(hp.maxHealth)
+                        }
+                    }
                 }
             }
             world.configureEntity(entity) {
@@ -156,6 +169,13 @@ class HealthSystem(
                     physicCmps.remove(entity)
                 }
             }
+        } else if (entity in hazardCmps) {
+            world.configureEntity(entity) {
+                if (entity in physicCmps) {
+                    physicCmps.remove(entity)
+                }
+            }
+            return
         } else {
             // Player or RemotePlayer: keep MoveComponent & PhysicComponent intact so they can respawn!
             val physic = physicCmps.getOrNull(entity)

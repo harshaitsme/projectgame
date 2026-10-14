@@ -6,6 +6,7 @@ import com.github.quillraven.fleks.Entity
 import com.github.quillraven.fleks.IteratingSystem
 import io.github.shootgame.component.EnemyComponent
 import io.github.shootgame.component.ExplosionComponent
+import io.github.shootgame.component.HazardComponent
 import io.github.shootgame.component.HealthComponent
 import io.github.shootgame.component.ImageComponent
 import io.github.shootgame.component.OwnerComponent
@@ -23,7 +24,8 @@ class ExplosionSystem(
     private val playerCmps: ComponentMapper<PlayerComponent>,
     private val enemyCmps: ComponentMapper<EnemyComponent>,
     private val remotePlayerCmps: ComponentMapper<RemotePlayerComponent>,
-    private val healthCmps: ComponentMapper<HealthComponent>
+    private val healthCmps: ComponentMapper<HealthComponent>,
+    private val hazardCmps: ComponentMapper<HazardComponent>
 ) : IteratingSystem() {
 
     private val networkSystem: NetworkSystem by lazy { world.system<NetworkSystem>() }
@@ -63,7 +65,7 @@ class ExplosionSystem(
         var minLocalPlayerDist = Float.MAX_VALUE
 
         world.forEach { target ->
-            if ((target in playerCmps || target in enemyCmps) && target in healthCmps) {
+            if ((target in playerCmps || target in enemyCmps || target in hazardCmps) && target in healthCmps) {
                 val targetPos = physicCmps.getOrNull(target)?.body?.position
                 val targetImage = imageCmps.getOrNull(target)?.image
 
@@ -103,7 +105,7 @@ class ExplosionSystem(
                             }
                         }
 
-                        target in enemyCmps -> {
+                        target in enemyCmps || target in hazardCmps -> {
                             healthSystem.damagePercent(target, damageFraction)
                         }
                     }

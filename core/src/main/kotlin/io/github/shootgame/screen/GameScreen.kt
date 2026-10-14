@@ -32,6 +32,7 @@ import io.github.shootgame.system.DamageSystem
 import io.github.shootgame.system.DeathSystem
 import io.github.shootgame.system.ExplosionSystem
 import io.github.shootgame.system.FragSystem
+import io.github.shootgame.system.HazardSystem
 import io.github.shootgame.system.HealthSystem
 import io.github.shootgame.system.MoveSystem
 import io.github.shootgame.system.ParticleSystem
@@ -84,6 +85,7 @@ class GameScreen(private val config: GameConfig = GameConfig()) : KtxScreen {
         system<PlayerInputSystem>()
         system<AiSystem>()
         system<BossSystem>()
+        system<HazardSystem>()
         system<CombatSystem>()
         system<CollisionSystem>()
         system<FragSystem>()

@@ -27,12 +27,16 @@ import com.github.quillraven.fleks.Qualifier
 import io.github.shootgame.audio.AudioService
 import io.github.shootgame.audio.SoundType
 import io.github.shootgame.component.AttackComponent
+import io.github.shootgame.component.BossComponent
 import io.github.shootgame.component.DeadComponent
 import io.github.shootgame.component.HealthComponent
 import io.github.shootgame.component.PerkComponent
 import io.github.shootgame.component.PerkType
 import io.github.shootgame.component.PlayerComponent
 import io.github.shootgame.component.RemotePlayerComponent
+import io.github.shootgame.component.ShieldComponent
+import io.github.shootgame.component.WaveDirectorComponent
+import io.github.shootgame.component.WaveState
 import io.github.shootgame.component.WeaponComponent
 import io.github.shootgame.component.WeaponType
 import io.github.shootgame.screen.GameConfig
@@ -51,6 +55,8 @@ class UiSystem(
     private val playerCmps: ComponentMapper<PlayerComponent>,
     private val remotePlayerCmps: ComponentMapper<RemotePlayerComponent>,
     private val deadCmps: ComponentMapper<DeadComponent>,
+    private val waveCmps: ComponentMapper<WaveDirectorComponent>,
+    private val bossCmps: ComponentMapper<BossComponent>,
     private val audioService: AudioService,
     private val config: GameConfig
 ) : IntervalSystem() {
@@ -541,6 +547,14 @@ class UiSystem(
         middleCol.padLeft(26f)
 
         val middlePills = Table()
+
+        val wavePill = Table()
+        wavePill.background = createSciFiBadgeBackground(210, 64, colCyberYellow)
+        waveTagLabel = Label("WAVE", Label.LabelStyle(fontSmall, colCyberOrange))
+        waveValueLabel = Label("PREP", Label.LabelStyle(fontLarge, Color.WHITE))
+        wavePill.add(waveTagLabel).padRight(12f)
+        wavePill.add(waveValueLabel)
+
         val scorePill = Table()
         scorePill.background = createSciFiBadgeBackground(200, 64, colCyberOrange)
         val scoreTag = Label("SCORE", Label.LabelStyle(fontSmall, colCyberYellow))
@@ -1317,6 +1331,48 @@ class UiSystem(
                 row.add(kdLbl).width(64f).right()
                 scoreboardRowsTable.add(row).left().padBottom(2f).row()
             }
+        }
+
+        var directorEntity: Entity? = null
+        world.family(allOf = arrayOf(WaveDirectorComponent::class)).forEach {
+            directorEntity = it
+        }
+        val waveDirector = directorEntity
+        if (waveDirector != null) {
+            val waveCmp = waveCmps[waveDirector]
+            when (waveCmp.state) {
+                WaveState.COUNTDOWN -> {
+                    waveTagLabel.setText("NEXT WAVE")
+                    val secs = (waveCmp.stateTimer + 0.99f).toInt()
+                    waveValueLabel.setText("${secs}S")
+                }
+                WaveState.SPAWNING, WaveState.IN_PROGRESS -> {
+                    waveTagLabel.setText("WAVE")
+                    waveValueLabel.setText("${waveCmp.wave}")
+                }
+                WaveState.WAVE_CLEARED -> {
+                    waveTagLabel.setText("STATUS")
+                    waveValueLabel.setText("CLEARED")
+                }
+            }
+        }
+
+        var activeBossEntity: Entity? = null
+        world.family(allOf = arrayOf(BossComponent::class, HealthComponent::class), noneOf = arrayOf(DeadComponent::class)).forEach {
+            activeBossEntity = it
+        }
+
+        if (activeBossEntity != null) {
+            bossContainer.isVisible = true
+            val bCmp = bossCmps[activeBossEntity!!]
+            val bHealth = healthCmps[activeBossEntity!!]
+            val ratio = (bHealth.currentHealth / bHealth.maxHealth).coerceIn(0f, 1f)
+            bossBarFillCell.width(max(2f, (540f - 28f) * ratio))
+            healthFrameTableInvalidate(bossBarFill)
+            bossNameLabel.setText(if (bCmp.isEnraged) "!!! ${bCmp.name} [ENRAGED] !!!" else bCmp.name)
+            bossNameLabel.color = if (bCmp.isEnraged) colCyberDanger else colCyberOrange
+        } else {
+            bossContainer.isVisible = false
         }
     }
 
