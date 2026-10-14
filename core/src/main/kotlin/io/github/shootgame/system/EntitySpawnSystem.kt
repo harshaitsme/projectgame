@@ -325,30 +325,14 @@ else if (spawnCmp.type == "Explosion") {
                     }
 
                     if (type == "Enemy") {
-                        enemyCount++
+                        // Enemy spawning is managed dynamically by WaveDirectorSystem
+                        return@forEach
                     }
 
                     world.entity {
                         add <SpawnComponent>{
                             this.type = type
                             this.location.set(mapObject.x* Main.UNIT_SCALE,mapObject.y* Main.UNIT_SCALE)
-                        }
-                    }
-                }
-
-                if (enemyCount == 0) {
-                    println("Spawning default test enemies on map platforms...")
-                    val defaultEnemyPositions = listOf(
-                        Vector2(16f, 14.6f),
-                        Vector2(22f, 8.5f),
-                        Vector2(6f, 9.5f)
-                    )
-                    defaultEnemyPositions.forEach { pos ->
-                        world.entity {
-                            add<SpawnComponent> {
-                                this.type = "Enemy"
-                                this.location.set(pos.x, pos.y)
-                            }
                         }
                     }
                 }

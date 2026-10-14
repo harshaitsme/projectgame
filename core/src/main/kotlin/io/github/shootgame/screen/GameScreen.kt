@@ -39,6 +39,7 @@ import io.github.shootgame.system.PlayerInputSystem
 import io.github.shootgame.system.RenderSystem
 import io.github.shootgame.system.StatusEffectSystem
 import io.github.shootgame.system.UiSystem
+import io.github.shootgame.system.WaveDirectorSystem
 import io.github.shootgame.system.NetworkSystem
 import ktx.app.KtxScreen
 import ktx.assets.disposeSafely
@@ -91,6 +92,7 @@ class GameScreen : KtxScreen {
         system<CameraShakeSystem>()
         system<ParticleSystem>()
         system<RenderSystem>()
+        system<WaveDirectorSystem>()
         system<EntitySpawnSystem>()
         system<NetworkSystem>()
     }

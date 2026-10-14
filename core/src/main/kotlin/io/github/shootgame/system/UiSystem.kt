@@ -15,6 +15,7 @@ import com.badlogic.gdx.scenes.scene2d.utils.ClickListener
 import com.badlogic.gdx.scenes.scene2d.utils.TextureRegionDrawable
 import com.badlogic.gdx.utils.Align
 import com.github.quillraven.fleks.ComponentMapper
+import com.github.quillraven.fleks.Entity
 import com.github.quillraven.fleks.IntervalSystem
 import com.github.quillraven.fleks.Qualifier
 import io.github.shootgame.audio.AudioService
@@ -22,6 +23,8 @@ import io.github.shootgame.audio.SoundType
 import io.github.shootgame.component.AttackComponent
 import io.github.shootgame.component.HealthComponent
 import io.github.shootgame.component.PlayerComponent
+import io.github.shootgame.component.WaveDirectorComponent
+import io.github.shootgame.component.WaveState
 import io.github.shootgame.component.WeaponComponent
 import kotlin.math.max
 
@@ -31,6 +34,7 @@ class UiSystem(
     private val healthCmps: ComponentMapper<HealthComponent>,
     private val weaponCmps: ComponentMapper<WeaponComponent>,
     private val playerCmps: ComponentMapper<PlayerComponent>,
+    private val waveCmps: ComponentMapper<WaveDirectorComponent>,
     private val audioService: AudioService
 ) : IntervalSystem() {
 
@@ -84,6 +88,8 @@ class UiSystem(
     private lateinit var ammoCountLabel: Label
     private lateinit var fragCountLabel: Label
     private lateinit var scoreValueLabel: Label
+    private lateinit var waveTagLabel: Label
+    private lateinit var waveValueLabel: Label
     private var sfxButtonLabel: Label? = null
     private var bgmButtonLabel: Label? = null
 
@@ -419,9 +425,16 @@ class UiSystem(
 
         rootTable.add(statusContainer).left().top()
 
-        // 2. Middle Sci-Fi Badges: Score & Frag (Larger: 200 x 64)
+        // 2. Middle Sci-Fi Badges: Wave, Score & Frag
         val middlePills = Table()
         middlePills.padLeft(26f)
+
+        val wavePill = Table()
+        wavePill.background = createSciFiBadgeBackground(210, 64, colCyberYellow)
+        waveTagLabel = Label("WAVE", Label.LabelStyle(fontSmall, colCyberOrange))
+        waveValueLabel = Label("PREP", Label.LabelStyle(fontLarge, Color.WHITE))
+        wavePill.add(waveTagLabel).padRight(12f)
+        wavePill.add(waveValueLabel)
 
         val scorePill = Table()
         scorePill.background = createSciFiBadgeBackground(200, 64, colCyberOrange)
@@ -437,6 +450,7 @@ class UiSystem(
         fragPill.add(fragTag).padRight(12f)
         fragPill.add(fragCountLabel)
 
+        middlePills.add(wavePill).padRight(14f)
         middlePills.add(scorePill).padRight(14f)
         middlePills.add(fragPill)
         rootTable.add(middlePills).expandX().left().top()
@@ -618,6 +632,30 @@ class UiSystem(
             fragCountLabel.setText("${attackCmp.fragAmmo}")
             val playerCmp = playerCmps.getOrNull(player)
             scoreValueLabel.setText("${playerCmp?.score ?: 0}")
+        }
+
+        var directorEntity: Entity? = null
+        world.family(allOf = arrayOf(WaveDirectorComponent::class)).forEach {
+            directorEntity = it
+        }
+        val waveDirector = directorEntity
+        if (waveDirector != null) {
+            val waveCmp = waveCmps[waveDirector]
+            when (waveCmp.state) {
+                WaveState.COUNTDOWN -> {
+                    waveTagLabel.setText("NEXT WAVE")
+                    val secs = (waveCmp.stateTimer + 0.99f).toInt()
+                    waveValueLabel.setText("${secs}S")
+                }
+                WaveState.SPAWNING, WaveState.IN_PROGRESS -> {
+                    waveTagLabel.setText("WAVE")
+                    waveValueLabel.setText("${waveCmp.wave}")
+                }
+                WaveState.WAVE_CLEARED -> {
+                    waveTagLabel.setText("STATUS")
+                    waveValueLabel.setText("CLEARED")
+                }
+            }
         }
     }
 
