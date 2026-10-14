@@ -146,6 +146,7 @@ class EntitySpawnSystem(
                 add<AttackComponent>()
                 add<WeaponComponent>()
                 add<HealthComponent>()
+                add<ShieldComponent>()
                 add<StatusEffectComponent>()
                 add<OwnerComponent> {
                     owner = spawnedEntity
@@ -161,6 +162,7 @@ class EntitySpawnSystem(
                 add<AttackComponent>()
                 add<WeaponComponent>()
                 add<HealthComponent>()
+                add<ShieldComponent>()
                 add<StatusEffectComponent>()
                 add<OwnerComponent> {
                     owner = spawnedEntity

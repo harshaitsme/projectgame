@@ -23,6 +23,7 @@ import io.github.shootgame.audio.SoundType
 import io.github.shootgame.component.AttackComponent
 import io.github.shootgame.component.HealthComponent
 import io.github.shootgame.component.PlayerComponent
+import io.github.shootgame.component.ShieldComponent
 import io.github.shootgame.component.WaveDirectorComponent
 import io.github.shootgame.component.WaveState
 import io.github.shootgame.component.WeaponComponent
@@ -32,6 +33,7 @@ class UiSystem(
     @Qualifier("uiStage") private val uiStage: Stage,
     private val attackCmps: ComponentMapper<AttackComponent>,
     private val healthCmps: ComponentMapper<HealthComponent>,
+    private val shieldCmps: ComponentMapper<ShieldComponent>,
     private val weaponCmps: ComponentMapper<WeaponComponent>,
     private val playerCmps: ComponentMapper<PlayerComponent>,
     private val waveCmps: ComponentMapper<WaveDirectorComponent>,
@@ -62,6 +64,7 @@ class UiSystem(
 
     // Futuristic Sci-Fi Cyberpunk Palette (Matched to Reference Image)
     private val colCyberOrange = Color(1.0f, 0.58f, 0.02f, 1f)      // Neon cyber-orange border
+    private val colCyberCyan = Color(0.18f, 0.85f, 1.0f, 1f)        // Cyber energy cyan
     private val colCyberOrangeDark = Color(0.85f, 0.42f, 0.0f, 1f)  // Tech bevel shadow
     private val colCyberYellow = Color(1.0f, 0.90f, 0.04f, 1f)      // Cyber neon yellow fill
     private val colCyberDanger = Color(0.96f, 0.22f, 0.26f, 1f)      // Alert red fill
@@ -84,6 +87,7 @@ class UiSystem(
     private lateinit var ammoBarFill: Image
     private lateinit var ammoBarFillCell: Cell<Image>
     private lateinit var healthTextLabel: Label
+    private lateinit var shieldStatusLabel: Label
     private lateinit var weaponNameLabel: Label
     private lateinit var ammoCountLabel: Label
     private lateinit var fragCountLabel: Label
@@ -376,7 +380,9 @@ class UiSystem(
         // --- HEALTH SECTION ---
         val hpHeaderRow = Table()
         val hpTitle = Label("VITAL SIGNS", Label.LabelStyle(fontSmall, colCyberOrange))
+        shieldStatusLabel = Label("SHIELD: 50/50", Label.LabelStyle(fontSmall, colCyberCyan))
         hpHeaderRow.add(hpTitle).left().expandX()
+        hpHeaderRow.add(shieldStatusLabel).right()
         statusContainer.add(hpHeaderRow).fillX().padBottom(5f).row()
 
         val healthFrameTable = Table()
@@ -596,6 +602,22 @@ class UiSystem(
             } else {
                 healthBarFill.drawable = fillYellowDrawable
                 healthTextLabel.color = Color.WHITE
+            }
+
+            val shield = shieldCmps.getOrNull(player)
+            if (shield != null) {
+                val shieldRatio = (shield.currentShield / shield.maxShield).coerceIn(0f, 1f)
+                val shieldPct = (shieldRatio * 100).toInt()
+                if (shield.currentShield <= 0f) {
+                    shieldStatusLabel.setText("SHIELD DEPLETED")
+                    shieldStatusLabel.color = colCyberDanger
+                } else if (shield.currentShield < shield.maxShield) {
+                    shieldStatusLabel.setText("SHIELD ${shield.currentShield.toInt()}/${shield.maxShield.toInt()} ($shieldPct%)")
+                    shieldStatusLabel.color = colCyberCyan
+                } else {
+                    shieldStatusLabel.setText("SHIELD 100%")
+                    shieldStatusLabel.color = colCyberCyan
+                }
             }
 
             val attackCmp = attackCmps.getOrNull(player) ?: return@forEach

@@ -14,6 +14,7 @@ import io.github.shootgame.component.HealthComponent
 import io.github.shootgame.component.MoveComponent
 import io.github.shootgame.component.PhysicComponent
 import io.github.shootgame.component.PlayerComponent
+import io.github.shootgame.component.ShieldComponent
 
 @AllOf([HealthComponent::class])
 class HealthSystem(
@@ -24,7 +25,8 @@ class HealthSystem(
     private val physicCmps: ComponentMapper<PhysicComponent>,
     private val enemyCmps: ComponentMapper<EnemyComponent>,
     private val playerCmps: ComponentMapper<PlayerComponent>,
-    private val statusEffectCmps: ComponentMapper<io.github.shootgame.component.StatusEffectComponent>
+    private val statusEffectCmps: ComponentMapper<io.github.shootgame.component.StatusEffectComponent>,
+    private val shieldCmps: ComponentMapper<ShieldComponent>
 ) : IteratingSystem() {
 
     override fun onTickEntity(entity: Entity) {
@@ -45,6 +47,20 @@ class HealthSystem(
         if (health.isDead || health.invulnerableTime > 0f || amount <= 0f) return false
 
         var remainingDamage = amount
+
+        val shieldCmp = shieldCmps.getOrNull(entity)
+        if (shieldCmp != null && shieldCmp.currentShield > 0f) {
+            shieldCmp.timeSinceDamage = 0f
+            if (shieldCmp.currentShield >= remainingDamage) {
+                shieldCmp.currentShield -= remainingDamage
+                health.invulnerableTime = INVULNERABILITY_DURATION
+                return true
+            } else {
+                remainingDamage -= shieldCmp.currentShield
+                shieldCmp.currentShield = 0f
+            }
+        }
+
         val status = statusEffectCmps.getOrNull(entity)
         val shield = status?.getEffect(io.github.shootgame.component.StatusEffectType.SHIELD)
         if (shield != null) {
