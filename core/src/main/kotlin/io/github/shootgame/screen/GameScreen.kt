@@ -32,6 +32,7 @@ import io.github.shootgame.system.ExplosionSystem
 import io.github.shootgame.system.FragSystem
 import io.github.shootgame.system.HealthSystem
 import io.github.shootgame.system.MoveSystem
+import io.github.shootgame.system.ParticleSystem
 import io.github.shootgame.system.PhysicSystem
 import io.github.shootgame.system.PickupSystem
 import io.github.shootgame.system.PlayerInputSystem

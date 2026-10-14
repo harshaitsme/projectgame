@@ -75,6 +75,10 @@ class DamageSystem(
             }
 
             if (request.source in bulletCmps) {
+                val pos = physicCmps.getOrNull(request.source)?.body?.position
+                if (pos != null) {
+                    world.system<ParticleSystem>().spawnSparks(pos.x, pos.y, count = 7)
+                }
                 world.remove(request.source)
             }
         }

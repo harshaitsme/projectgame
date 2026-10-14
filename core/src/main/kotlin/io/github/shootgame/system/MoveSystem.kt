@@ -47,6 +47,7 @@ class MoveSystem(
                 moveCmp.cos * moveCmp.speed,
                 moveCmp.sin * moveCmp.speed
             )
+            world.system<ParticleSystem>().spawnBulletTrail(body.position.x, body.position.y)
         } else if (isFrag) {
             // Let Box2D handle grenade arc & wall bounces; apply gentle friction when rolling on floor
             if (abs(currentVelocity.y) < 0.25f) {
@@ -72,6 +73,7 @@ class MoveSystem(
             if (abs(currentVelocity.y) < 0.1f) {
                 body.applyLinearImpulse(0f, moveCmp.jumpImpulse, body.worldCenter.x, body.worldCenter.y, true)
                 audioService.play(SoundType.JUMP, pitchVariation = 0.06f)
+                world.system<ParticleSystem>().spawnFootstepDust(body.position.x, body.position.y - 0.35f)
             }
             moveCmp.doJump = false
         }
