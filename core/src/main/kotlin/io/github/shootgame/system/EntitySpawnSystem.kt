@@ -195,6 +195,33 @@ class EntitySpawnSystem(
                 }
             }
 
+            if (spawnCmp.type == "Boss") {
+                println("SPAWNING BOSS at: ${spawnCmp.location}")
+                imageCmp.image.color = Color(0.9f, 0.2f, 0.8f, 1f) // Menacing violet-crimson cyber tint
+                imageCmp.image.setScale(1.5f)
+                add<EnemyComponent> {
+                    scoreValue = 2500
+                }
+                add<BossComponent>()
+                add<MoveComponent> {
+                    speed = 2.0f
+                    baseSpeed = 2.0f
+                }
+                add<AttackComponent> {
+                    ammo = 999
+                    maxAmmo = 999
+                    fireRate = 1.0f
+                }
+                add<HealthComponent> {
+                    maxHealth = 400f
+                    currentHealth = 400f
+                }
+                add<StatusEffectComponent>()
+                add<OwnerComponent> {
+                    owner = spawnedEntity
+                }
+            }
+
             if (spawnCmp.type == "Bullet") {
                 add<BulletComponent> {
                     if (originalBulletCmp != null) {
@@ -272,7 +299,7 @@ class EntitySpawnSystem(
             }
 else if (spawnCmp.type == "Explosion") {
                 // No physics for explosion, just visuals
-            } else if (spawnCmp.type == "Player" || spawnCmp.type == "RemotePlayer" || spawnCmp.type == "Enemy") {
+            } else if (spawnCmp.type == "Player" || spawnCmp.type == "RemotePlayer" || spawnCmp.type == "Enemy" || spawnCmp.type == "Boss") {
                 physicCmpFromImage(phWorld, imageCmp.image, BodyDef.BodyType.DynamicBody) { _, width, height ->
                     // Narrower box (25% width) to fit the character and not the whitespace
                     box(width = width * 0.25f, height = height * 0.85f) {
@@ -294,7 +321,7 @@ else if (spawnCmp.type == "Explosion") {
     private fun spawnCfg(type: String): SpawnCfg = cachedCfgs.getOrPut(type) {
         when (type) {
             "Player", "RemotePlayer" -> SpawnCfg(AnimationModel.PLAYER, AnimationType.IDLE)
-            "Enemy" -> SpawnCfg(AnimationModel.PLAYER, AnimationType.IDLE)
+            "Enemy", "Boss" -> SpawnCfg(AnimationModel.PLAYER, AnimationType.IDLE)
             "Bullet" -> SpawnCfg(AnimationModel.BULLET, AnimationType.UNDEFINED)
             "Frag" -> SpawnCfg(AnimationModel.BULLET, AnimationType.UNDEFINED)
             "Explosion" -> SpawnCfg(AnimationModel.PLAYER, AnimationType.EXPLOSION)

@@ -23,6 +23,7 @@ import io.github.shootgame.event.fire
 import io.github.shootgame.system.AiSystem
 import io.github.shootgame.system.AnimationSystem
 import io.github.shootgame.system.AudioSystem
+import io.github.shootgame.system.BossSystem
 import io.github.shootgame.system.BulletSystem
 import io.github.shootgame.system.CameraShakeSystem
 import io.github.shootgame.system.CollisionSystem
@@ -78,6 +79,7 @@ class GameScreen : KtxScreen {
 
         system<PlayerInputSystem>()
         system<AiSystem>()
+        system<BossSystem>()
         system<CombatSystem>()
         system<CollisionSystem>()
         system<FragSystem>()

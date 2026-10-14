@@ -21,6 +21,8 @@ import com.github.quillraven.fleks.Qualifier
 import io.github.shootgame.audio.AudioService
 import io.github.shootgame.audio.SoundType
 import io.github.shootgame.component.AttackComponent
+import io.github.shootgame.component.BossComponent
+import io.github.shootgame.component.DeadComponent
 import io.github.shootgame.component.HealthComponent
 import io.github.shootgame.component.PerkComponent
 import io.github.shootgame.component.PerkType
@@ -40,6 +42,7 @@ class UiSystem(
     private val weaponCmps: ComponentMapper<WeaponComponent>,
     private val playerCmps: ComponentMapper<PlayerComponent>,
     private val waveCmps: ComponentMapper<WaveDirectorComponent>,
+    private val bossCmps: ComponentMapper<BossComponent>,
     private val audioService: AudioService
 ) : IntervalSystem() {
 
@@ -98,6 +101,10 @@ class UiSystem(
     private lateinit var scoreValueLabel: Label
     private lateinit var waveTagLabel: Label
     private lateinit var waveValueLabel: Label
+    private lateinit var bossContainer: Table
+    private lateinit var bossNameLabel: Label
+    private lateinit var bossBarFill: Image
+    private lateinit var bossBarFillCell: Cell<Image>
     private var sfxButtonLabel: Label? = null
     private var bgmButtonLabel: Label? = null
 
@@ -482,6 +489,27 @@ class UiSystem(
         rootTable.add(audioTable).right().top()
 
         uiStage.addActor(rootTable)
+
+        // Boss Encounter Banner & Health Bar (Centered top)
+        bossContainer = Table()
+        bossContainer.setFillParent(true)
+        bossContainer.top().padTop(90f)
+
+        bossNameLabel = Label("CYBERNETIC BEHEMOTH", Label.LabelStyle(fontMedium, colCyberDanger))
+        bossContainer.add(bossNameLabel).padBottom(4f).row()
+
+        val bossFrameTable = Table()
+        val bossBarWidth = 540f
+        val bossBarHeight = 30f
+        bossFrameTable.background = createSciFiBarBackground(bossBarWidth.toInt(), bossBarHeight.toInt(), tabOnTop = true)
+        bossFrameTable.left().padLeft(14f).padRight(14f).padTop(6f).padBottom(6f)
+
+        bossBarFill = Image(fillDangerDrawable)
+        bossBarFillCell = bossFrameTable.add(bossBarFill).size(bossBarWidth - 28f, 18f).left()
+
+        bossContainer.add(bossFrameTable).size(bossBarWidth, bossBarHeight)
+        bossContainer.isVisible = false
+        uiStage.addActor(bossContainer)
     }
 
     private fun setupTouchControls() {
@@ -694,6 +722,23 @@ class UiSystem(
                     waveValueLabel.setText("CLEARED")
                 }
             }
+        }
+
+        var activeBossEntity: Entity? = null
+        world.family(allOf = arrayOf(BossComponent::class, HealthComponent::class), noneOf = arrayOf(DeadComponent::class)).forEach {
+            activeBossEntity = it
+        }
+
+        if (activeBossEntity != null) {
+            bossContainer.isVisible = true
+            val bCmp = bossCmps[activeBossEntity!!]
+            val bHealth = healthCmps[activeBossEntity!!]
+            val ratio = (bHealth.currentHealth / bHealth.maxHealth).coerceIn(0f, 1f)
+            bossBarFillCell.width(max(2f, (540f - 28f) * ratio))
+            bossNameLabel.setText(if (bCmp.isEnraged) "!!! ${bCmp.name} [ENRAGED] !!!" else bCmp.name)
+            bossNameLabel.color = if (bCmp.isEnraged) colCyberDanger else colCyberOrange
+        } else {
+            bossContainer.isVisible = false
         }
     }
 

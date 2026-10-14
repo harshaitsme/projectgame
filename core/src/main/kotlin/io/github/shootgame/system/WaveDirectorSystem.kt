@@ -88,7 +88,7 @@ class WaveDirectorSystem(
     }
 
     private fun calculateEnemiesForWave(wave: Int): Int {
-        return 3 + (wave - 1) * 2
+        return if (wave % 3 == 0) 1 else 3 + (wave - 1) * 2
     }
 
     private fun spawnNextEnemy(waveCmp: WaveDirectorComponent) {
@@ -99,9 +99,11 @@ class WaveDirectorSystem(
         val spawnX = pos.x + MathUtils.random(-0.5f, 0.5f)
         val spawnY = pos.y
 
+        val spawnType = if (waveCmp.wave % 3 == 0) "Boss" else "Enemy"
+
         world.entity {
             add<SpawnComponent> {
-                this.type = "Enemy"
+                this.type = spawnType
                 this.location.set(spawnX, spawnY)
             }
         }
