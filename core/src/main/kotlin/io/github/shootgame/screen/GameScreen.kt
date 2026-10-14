@@ -22,6 +22,7 @@ import io.github.shootgame.event.MapChangeEvent
 import io.github.shootgame.event.fire
 import io.github.shootgame.system.AiSystem
 import io.github.shootgame.system.AnimationSystem
+import io.github.shootgame.system.AudioSystem
 import io.github.shootgame.system.BulletSystem
 import io.github.shootgame.system.CameraShakeSystem
 import io.github.shootgame.system.CollisionSystem
@@ -93,6 +94,7 @@ class GameScreen : KtxScreen {
         system<AnimationSystem>()
         system<CameraShakeSystem>()
         system<ParticleSystem>()
+        system<AudioSystem>()
         system<RenderSystem>()
         system<WaveDirectorSystem>()
         system<EntitySpawnSystem>()
