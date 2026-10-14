@@ -40,7 +40,8 @@ class PickupSystem(
     private val playerCmps: ComponentMapper<PlayerComponent>,
     private val healthCmps: ComponentMapper<HealthComponent>,
     private val attackCmps: ComponentMapper<AttackComponent>,
-    private val weaponCmps: ComponentMapper<WeaponComponent>
+    private val weaponCmps: ComponentMapper<WeaponComponent>,
+    private val statusEffectCmps: ComponentMapper<StatusEffectComponent>
 ) : IteratingSystem() {
 
     private val healthRegion: TextureRegion by lazy {
@@ -101,11 +102,39 @@ class PickupSystem(
         TextureRegion(texture)
     }
 
+    private val speedRegion: TextureRegion by lazy {
+        val pixmap = Pixmap(24, 24, Pixmap.Format.RGBA8888)
+        pixmap.setColor(0.05f, 0.2f, 0.3f, 1f)
+        pixmap.fillRectangle(0, 0, 24, 24)
+        pixmap.setColor(0.1f, 0.85f, 0.95f, 1f) // Cyan lightning speed wings
+        pixmap.fillTriangle(6, 4, 18, 12, 6, 20)
+        pixmap.setColor(1f, 1f, 1f, 1f)
+        pixmap.fillTriangle(8, 7, 15, 12, 8, 17)
+        val texture = Texture(pixmap)
+        pixmap.dispose()
+        TextureRegion(texture)
+    }
+
+    private val shieldRegion: TextureRegion by lazy {
+        val pixmap = Pixmap(24, 24, Pixmap.Format.RGBA8888)
+        pixmap.setColor(0.05f, 0.1f, 0.25f, 1f)
+        pixmap.fillRectangle(0, 0, 24, 24)
+        pixmap.setColor(0.2f, 0.5f, 1f, 1f) // Blue shield
+        pixmap.fillCircle(12, 12, 9)
+        pixmap.setColor(0.6f, 0.9f, 1f, 1f)
+        pixmap.drawCircle(12, 12, 6)
+        val texture = Texture(pixmap)
+        pixmap.dispose()
+        TextureRegion(texture)
+    }
+
     fun getRegionFor(type: PickupType): TextureRegion = when (type) {
         PickupType.HEALTH -> healthRegion
         PickupType.AMMO -> ammoRegion
         PickupType.GRENADE -> grenadeRegion
         PickupType.COIN -> coinRegion
+        PickupType.SPEED_BOOST -> speedRegion
+        PickupType.SHIELD -> shieldRegion
     }
 
     override fun onTickEntity(entity: Entity) {
@@ -197,6 +226,14 @@ class PickupSystem(
                     playerCmp.score += pickup.amount.toInt()
                 }
             }
+            PickupType.SPEED_BOOST -> {
+                val status = statusEffectCmps.getOrNull(player)
+                status?.addEffect(StatusEffectType.SPEED_BOOST, duration = 10f, magnitude = pickup.amount)
+            }
+            PickupType.SHIELD -> {
+                val status = statusEffectCmps.getOrNull(player)
+                status?.addEffect(StatusEffectType.SHIELD, duration = 30f, magnitude = pickup.amount)
+            }
         }
 
         // Play feedback sound
@@ -208,6 +245,8 @@ class PickupSystem(
         if (ammoRegion.texture != null) ammoRegion.texture.dispose()
         if (grenadeRegion.texture != null) grenadeRegion.texture.dispose()
         if (coinRegion.texture != null) coinRegion.texture.dispose()
+        if (speedRegion.texture != null) speedRegion.texture.dispose()
+        if (shieldRegion.texture != null) shieldRegion.texture.dispose()
     }
 
     companion object {

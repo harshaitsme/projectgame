@@ -157,6 +157,7 @@ class EntitySpawnSystem(
                 add<AttackComponent>()
                 add<WeaponComponent>()
                 add<HealthComponent>()
+                add<StatusEffectComponent>()
                 add<OwnerComponent> {
                     owner = spawnedEntity
                 }
@@ -195,6 +196,7 @@ class EntitySpawnSystem(
                 add<AiComponent>()
                 add<MoveComponent> {
                     speed = 3.5f
+                    baseSpeed = 3.5f
                 }
                 add<AttackComponent> {
                     ammo = 999
@@ -205,6 +207,7 @@ class EntitySpawnSystem(
                     maxHealth = 60f
                     currentHealth = 60f
                 }
+                add<StatusEffectComponent>()
                 add<OwnerComponent> {
                     owner = spawnedEntity
                 }
