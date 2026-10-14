@@ -12,6 +12,7 @@ import io.github.shootgame.component.BulletComponent
 import io.github.shootgame.component.DamageComponent
 import io.github.shootgame.component.HealthComponent
 import io.github.shootgame.component.OwnerComponent
+import io.github.shootgame.component.PhysicComponent
 import io.github.shootgame.component.PlayerComponent
 import io.github.shootgame.component.RemotePlayerComponent
 
@@ -22,7 +23,8 @@ class DamageSystem(
     private val ownerCmps: ComponentMapper<OwnerComponent>,
     private val bulletCmps: ComponentMapper<BulletComponent>,
     private val playerCmps: ComponentMapper<PlayerComponent>,
-    private val remotePlayerCmps: ComponentMapper<RemotePlayerComponent>
+    private val remotePlayerCmps: ComponentMapper<RemotePlayerComponent>,
+    private val physicCmps: ComponentMapper<PhysicComponent>
 ) : IntervalSystem(), ContactListener {
 
     private data class PendingDamage(val source: Entity, val target: Entity, val amount: Float)

@@ -15,6 +15,7 @@ import io.github.shootgame.component.MoveComponent
 import io.github.shootgame.component.PhysicComponent
 import io.github.shootgame.component.PlayerComponent
 import io.github.shootgame.component.RemotePlayerComponent
+import io.github.shootgame.component.StatusEffectComponent
 
 @AllOf([HealthComponent::class])
 class HealthSystem(
@@ -25,7 +26,8 @@ class HealthSystem(
     private val physicCmps: ComponentMapper<PhysicComponent>,
     private val enemyCmps: ComponentMapper<EnemyComponent>,
     private val playerCmps: ComponentMapper<PlayerComponent>,
-    private val remotePlayerCmps: ComponentMapper<RemotePlayerComponent>
+    private val remotePlayerCmps: ComponentMapper<RemotePlayerComponent>,
+    private val statusEffectCmps: ComponentMapper<StatusEffectComponent>
 ) : IteratingSystem() {
 
     override fun onTickEntity(entity: Entity) {
