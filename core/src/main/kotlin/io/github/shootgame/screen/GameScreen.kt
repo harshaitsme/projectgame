@@ -48,13 +48,14 @@ import ktx.math.vec2
 
 
 //game screen shown and dispose things |
-class GameScreen : KtxScreen {
+class GameScreen(private val config: GameConfig = GameConfig()) : KtxScreen {
 
     private val audioService = AudioService()
     private val spriteBatch : Batch = SpriteBatch()
     private val stage: Stage = Stage(ExtendViewport(16f, 9f), spriteBatch)
     private val uiStage: Stage = Stage(ScreenViewport(), spriteBatch)
     private val textureAtlas = TextureAtlas("graphics/PlayerObject.atlas")
+    private val mapLoader = TmxMapLoader()
 
     private var currentMap: TiledMap? = null
     private val phWorld = createWorld(gravity = vec2(0f, -20f)).apply {
@@ -67,11 +68,14 @@ class GameScreen : KtxScreen {
         inject(textureAtlas)
         inject(phWorld)
         inject(audioService)
+        inject(config)
 
         componentListener<ImageComponent.Companion.ImageComponentListener>()
         componentListener<PhysicComponent.Companion.PhysicComponentListener>()
         componentListener<PlayerComponent.Companion.PlayerComponentListener>()
 
+        system<EntitySpawnSystem>()
+        system<NetworkSystem>()
         system<PlayerInputSystem>()
         system<AiSystem>()
         system<CombatSystem>()
@@ -85,14 +89,11 @@ class GameScreen : KtxScreen {
         system<HealthSystem>()
         system<DeathSystem>()
         system<PickupSystem>()
-        system<UiSystem>()
         system<BulletSystem>()
         system<AnimationSystem>()
         system<CameraShakeSystem>()
-        system<ParticleSystem>()
+        system<UiSystem>()
         system<RenderSystem>()
-        system<EntitySpawnSystem>()
-        system<NetworkSystem>()
     }
 
   // ==================================================================================
@@ -110,12 +111,22 @@ class GameScreen : KtxScreen {
                 stage.addListener(system)
             }
         }
-        currentMap = TmxMapLoader().load("map/map1.tmx")
+        currentMap = mapLoader.load("map/map1.tmx")
         stage.fire(MapChangeEvent(currentMap!!))
         audioService.playMusic()
 
-        // Connect to multiplayer server if available
-        eWorld.system<NetworkSystem>().connect()
+        // Connect to multiplayer server if multiplayer mode selected
+        if (config.mode != GameMode.OFFLINE) {
+            val host = System.getProperty("shootgame.host", config.serverHost)
+            eWorld.system<NetworkSystem>().connect(
+                host = host,
+                playerName = config.playerName,
+                roomCode = config.roomCode,
+                gameMode = config.mode.name,
+                createRoom = config.createRoom,
+                sessionToken = config.sessionToken
+            )
+        }
     }
 
     override fun pause() {

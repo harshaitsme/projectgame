@@ -35,6 +35,15 @@ class PlayerInputSystem(
         val moveCmp = moveCmps[entity]
         val attackCmp = attackCmps[entity]
 
+        if (uiSystem.isPaused) {
+            moveCmp.cos = 0f
+            moveCmp.sin = 0f
+            moveCmp.doJump = false
+            attackCmp.isAttacking = false
+            attackCmp.isThrowing = false
+            return
+        }
+
         var x = 0f
 
         if (!attackCmp.isReloading && !attackCmp.isAttacking && !attackCmp.isThrowing) {
@@ -52,7 +61,7 @@ class PlayerInputSystem(
             moveCmp.sin = 0f
         }
 
-        // Weapon switching (1-4 keys, Q/E cycle, or touch button)
+        // Weapon switching (1-3 keys, Q/E cycle, or touch button)
         val weaponCmp = weaponCmps.getOrNull(entity)
         if (weaponCmp != null) {
             val previousWeapon = weaponCmp.currentWeapon
@@ -60,7 +69,6 @@ class PlayerInputSystem(
                 Gdx.input.isKeyJustPressed(Input.Keys.NUM_1) -> weaponCmp.selectWeapon(WeaponType.PISTOL)
                 Gdx.input.isKeyJustPressed(Input.Keys.NUM_2) -> weaponCmp.selectWeapon(WeaponType.SHOTGUN)
                 Gdx.input.isKeyJustPressed(Input.Keys.NUM_3) -> weaponCmp.selectWeapon(WeaponType.MACHINE_GUN)
-                Gdx.input.isKeyJustPressed(Input.Keys.NUM_4) -> weaponCmp.selectWeapon(WeaponType.SNIPER)
                 Gdx.input.isKeyJustPressed(Input.Keys.Q) -> weaponCmp.switchPrevious()
                 Gdx.input.isKeyJustPressed(Input.Keys.E) || uiSystem.consumeWeaponSwitch() -> weaponCmp.switchNext()
             }
@@ -71,10 +79,40 @@ class PlayerInputSystem(
             }
         }
 
-        attackCmp.isAttacking = Gdx.input.isKeyPressed(Input.Keys.SPACE) || uiSystem.touchShoot
+        val currentWeapon = weaponCmp?.currentWeapon
+        val maxAmmo = currentWeapon?.maxAmmo ?: attackCmp.maxAmmo
+        val currentAmmo = if (weaponCmp != null && currentWeapon != null) {
+            weaponCmp.ammoMap.getOrPut(currentWeapon) { maxAmmo }
+        } else {
+            attackCmp.ammo
+        }
+        val reserveAmmo = if (weaponCmp != null && currentWeapon != null) {
+            weaponCmp.reserveAmmoMap.getOrPut(currentWeapon) { currentWeapon.maxReserveAmmo }
+        } else {
+            0
+        }
 
-        if (Gdx.input.isKeyJustPressed(Input.Keys.R) || uiSystem.touchReload) {
-            attackCmp.isReloading = true
+        val wantsShoot = Gdx.input.isKeyPressed(Input.Keys.SPACE) || uiSystem.touchShoot
+        if (wantsShoot && !attackCmp.isReloading) {
+            if (currentAmmo > 0) {
+                attackCmp.isAttacking = true
+            } else if (reserveAmmo > 0) {
+                attackCmp.isAttacking = false
+                attackCmp.isReloading = true
+                attackCmp.stateTime = 0f
+            } else {
+                attackCmp.isAttacking = false
+            }
+        } else {
+            attackCmp.isAttacking = false
+        }
+
+        if ((Gdx.input.isKeyJustPressed(Input.Keys.R) || uiSystem.touchReload) && !attackCmp.isReloading) {
+            if (currentAmmo < maxAmmo && reserveAmmo > 0) {
+                attackCmp.isAttacking = false
+                attackCmp.isReloading = true
+                attackCmp.stateTime = 0f
+            }
         }
 
         attackCmp.isThrowing = Gdx.input.isKeyJustPressed(Input.Keys.G) || uiSystem.touchGrenade

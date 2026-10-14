@@ -1,0 +1,21 @@
+[package]
+name = "shootgame-server"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+tokio = { version = "1", features = ["full"] }
+prost = "0.13"
+specs = "0.10"
+rand = "0.8"
+
+[build-dependencies]
+prost-build = "0.13"
+protoc-bin-vendored = "3"
+
+# Tuned release profile: small, fast binaries for the dedicated server.
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true

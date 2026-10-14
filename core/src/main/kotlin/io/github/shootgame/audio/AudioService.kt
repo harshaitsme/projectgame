@@ -4,6 +4,7 @@ import com.badlogic.gdx.Gdx
 import com.badlogic.gdx.audio.Music
 import com.badlogic.gdx.audio.Sound
 import com.badlogic.gdx.math.MathUtils
+import io.github.shootgame.screen.GameSettings
 import ktx.assets.disposeSafely
 import ktx.log.logger
 
@@ -20,6 +21,7 @@ enum class SoundType(val fileName: String) {
 class AudioService {
     private val soundCache = mutableMapOf<SoundType, Sound>()
     private var music: Music? = null
+    private var isDisposed = false
 
     var isSoundEnabled: Boolean = true
     var isMusicEnabled: Boolean = true
@@ -32,6 +34,11 @@ class AudioService {
         }
 
     init {
+        GameSettings.ensureLoaded()
+        isSoundEnabled = GameSettings.sfxEnabled
+        soundVolume = GameSettings.sfxVolume
+        isMusicEnabled = GameSettings.bgmEnabled
+        musicVolume = GameSettings.bgmVolume
         loadSounds()
         loadMusic()
     }
@@ -75,7 +82,11 @@ class AudioService {
         pitchVariation: Float = 0f,
         basePitch: Float = 1f
     ) {
-        if (!isSoundEnabled) return
+        if (isDisposed) {
+            log.debug { "Attempted to play sound after AudioService was disposed" }
+            return
+        }
+        if (!isSoundEnabled || soundVolume <= 0.001f) return
         val sound = soundCache[type] ?: return
 
         val finalVolume = (soundVolume * volumeModifier).coerceIn(0f, 1f)
@@ -89,35 +100,76 @@ class AudioService {
     }
 
     fun playMusic() {
-        if (music != null) {
-            music?.volume = if (isMusicEnabled) musicVolume else 0f
-            if (!music!!.isPlaying) {
-                music?.play()
-            }
+        if (isDisposed) {
+            log.debug { "Attempted to play music after AudioService was disposed" }
+            return
+        }
+        val currentMusic = music ?: return
+        currentMusic.volume = if (isMusicEnabled) musicVolume else 0f
+        if (isMusicEnabled && !currentMusic.isPlaying) {
+            currentMusic.play()
         }
     }
 
     fun pauseMusic() {
+        if (isDisposed) return
         music?.pause()
     }
 
     fun resumeMusic() {
+        if (isDisposed) return
         if (isMusicEnabled && music != null && !music!!.isPlaying) {
             music?.play()
         }
     }
 
     fun stopMusic() {
+        if (isDisposed) return
         music?.stop()
     }
 
     fun toggleSound(): Boolean {
+        if (isDisposed) return false
         isSoundEnabled = !isSoundEnabled
+        if (isSoundEnabled && soundVolume <= 0.05f) {
+            soundVolume = 0.8f
+        }
+        GameSettings.updateSfx(isSoundEnabled, soundVolume)
         return isSoundEnabled
     }
 
+    fun setSoundVolumeLevel(newVolume: Float) {
+        if (isDisposed) return
+        soundVolume = newVolume.coerceIn(0f, 1f)
+        isSoundEnabled = soundVolume > 0.005f
+        GameSettings.updateSfx(isSoundEnabled, soundVolume)
+    }
+
     fun toggleMusic(): Boolean {
+        if (isDisposed) return false
         isMusicEnabled = !isMusicEnabled
+        if (isMusicEnabled && musicVolume <= 0.05f) {
+            musicVolume = 0.5f
+        }
+        if (music != null) {
+            if (isMusicEnabled) {
+                music?.volume = musicVolume
+                if (music != null && !music!!.isPlaying) {
+                    music?.play()
+                }
+            } else {
+                music?.pause()
+            }
+        }
+        GameSettings.updateBgm(isMusicEnabled, musicVolume)
+        return isMusicEnabled
+    }
+
+    fun setMusicVolumeLevel(newVolume: Float) {
+        if (isDisposed) return
+        val clamped = newVolume.coerceIn(0f, 1f)
+        isMusicEnabled = clamped > 0.005f
+        musicVolume = clamped
         if (music != null) {
             if (isMusicEnabled) {
                 music?.volume = musicVolume
@@ -128,14 +180,16 @@ class AudioService {
                 music?.pause()
             }
         }
-        return isMusicEnabled
+        GameSettings.updateBgm(isMusicEnabled, musicVolume)
     }
 
     fun dispose() {
+        if (isDisposed) return
         soundCache.values.forEach { it.disposeSafely() }
         soundCache.clear()
         music?.disposeSafely()
         music = null
+        isDisposed = true
     }
 
     companion object {
