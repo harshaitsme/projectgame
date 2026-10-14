@@ -21,7 +21,8 @@ class WaveDirectorSystem(
     private val waveCmps: ComponentMapper<WaveDirectorComponent>,
     private val enemyCmps: ComponentMapper<EnemyComponent>,
     private val deadCmps: ComponentMapper<DeadComponent>,
-    private val playerCmps: ComponentMapper<PlayerComponent>
+    private val playerCmps: ComponentMapper<PlayerComponent>,
+    private val perkCmps: ComponentMapper<PerkComponent>
 ) : EventListener, IteratingSystem() {
 
     override fun onTickEntity(entity: Entity) {
@@ -61,9 +62,16 @@ class WaveDirectorSystem(
                 }
 
                 if (aliveEnemies == 0 && waveCmp.enemiesSpawned >= waveCmp.enemiesToSpawn) {
-                    // Award wave completion bonus to player
+                    // Award wave completion bonus & unlock next perk
                     world.family(allOf = arrayOf(PlayerComponent::class)).forEach { player ->
                         playerCmps[player].score += waveCmp.wave * 300
+                        val perkCmp = perkCmps.getOrNull(player)
+                        if (perkCmp != null) {
+                            val available = PerkType.values().firstOrNull { !perkCmp.hasPerk(it) }
+                            if (available != null) {
+                                perkCmp.addPerk(available)
+                            }
+                        }
                     }
                     waveCmp.state = WaveState.WAVE_CLEARED
                     waveCmp.stateTimer = 2.0f

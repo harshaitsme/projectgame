@@ -28,6 +28,7 @@ class MoveSystem(
     private val bulletCmps: ComponentMapper<BulletComponent>,
     private val playerCmps: ComponentMapper<PlayerComponent>,
     private val fragCmps: ComponentMapper<FragComponent>,
+    private val perkCmps: ComponentMapper<PerkComponent>,
     private val audioService: AudioService
 ) : IteratingSystem() {
 
@@ -69,11 +70,20 @@ class MoveSystem(
 
         // Jump logic (only for non-bullets)
         if (!isBullet && moveCmp.doJump) {
-            // Simple grounded check: check if vertical velocity is near 0
-            if (abs(currentVelocity.y) < 0.1f) {
+            val isGrounded = abs(currentVelocity.y) < 0.1f
+            val hasDoubleJump = perkCmps.getOrNull(entity)?.hasPerk(PerkType.DOUBLE_JUMP) == true
+
+            if (isGrounded) {
                 body.applyLinearImpulse(0f, moveCmp.jumpImpulse, body.worldCenter.x, body.worldCenter.y, true)
                 audioService.play(SoundType.JUMP, pitchVariation = 0.06f)
                 world.system<ParticleSystem>().spawnFootstepDust(body.position.x, body.position.y - 0.35f)
+                moveCmp.extraJumps = if (hasDoubleJump) 1 else 0
+            } else if (moveCmp.extraJumps > 0) {
+                body.setLinearVelocity(currentVelocity.x, 0f)
+                body.applyLinearImpulse(0f, moveCmp.jumpImpulse * 0.95f, body.worldCenter.x, body.worldCenter.y, true)
+                audioService.play(SoundType.JUMP, pitchVariation = 0.15f)
+                world.system<ParticleSystem>().spawnSparks(body.position.x, body.position.y - 0.2f, count = 8)
+                moveCmp.extraJumps--
             }
             moveCmp.doJump = false
         }

@@ -12,6 +12,8 @@ import io.github.shootgame.component.DeadComponent
 import io.github.shootgame.component.EnemyComponent
 import io.github.shootgame.component.HealthComponent
 import io.github.shootgame.component.MoveComponent
+import io.github.shootgame.component.PerkComponent
+import io.github.shootgame.component.PerkType
 import io.github.shootgame.component.PhysicComponent
 import io.github.shootgame.component.PlayerComponent
 import io.github.shootgame.component.ShieldComponent
@@ -26,7 +28,8 @@ class HealthSystem(
     private val enemyCmps: ComponentMapper<EnemyComponent>,
     private val playerCmps: ComponentMapper<PlayerComponent>,
     private val statusEffectCmps: ComponentMapper<io.github.shootgame.component.StatusEffectComponent>,
-    private val shieldCmps: ComponentMapper<ShieldComponent>
+    private val shieldCmps: ComponentMapper<ShieldComponent>,
+    private val perkCmps: ComponentMapper<PerkComponent>
 ) : IteratingSystem() {
 
     override fun onTickEntity(entity: Entity) {
@@ -93,6 +96,14 @@ class HealthSystem(
         if (enemy != null) {
             world.family(allOf = arrayOf(PlayerComponent::class)).forEach { player ->
                 playerCmps[player].score += enemy.scoreValue
+
+                val perkCmp = perkCmps.getOrNull(player)
+                if (perkCmp != null && perkCmp.hasPerk(PerkType.VAMPIRISM)) {
+                    val hp = healthCmps.getOrNull(player)
+                    if (hp != null) {
+                        hp.currentHealth = (hp.currentHealth + 15f).coerceAtMost(hp.maxHealth)
+                    }
+                }
             }
         }
 

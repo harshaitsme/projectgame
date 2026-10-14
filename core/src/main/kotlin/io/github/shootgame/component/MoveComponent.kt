@@ -9,4 +9,5 @@ class MoveComponent {
     var lastSin: Float = 0f
     var doJump: Boolean = false
     var jumpImpulse: Float = 10f
+    var extraJumps: Int = 0
 }

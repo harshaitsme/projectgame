@@ -22,6 +22,8 @@ import io.github.shootgame.audio.AudioService
 import io.github.shootgame.audio.SoundType
 import io.github.shootgame.component.AttackComponent
 import io.github.shootgame.component.HealthComponent
+import io.github.shootgame.component.PerkComponent
+import io.github.shootgame.component.PerkType
 import io.github.shootgame.component.PlayerComponent
 import io.github.shootgame.component.ShieldComponent
 import io.github.shootgame.component.WaveDirectorComponent
@@ -34,6 +36,7 @@ class UiSystem(
     private val attackCmps: ComponentMapper<AttackComponent>,
     private val healthCmps: ComponentMapper<HealthComponent>,
     private val shieldCmps: ComponentMapper<ShieldComponent>,
+    private val perkCmps: ComponentMapper<PerkComponent>,
     private val weaponCmps: ComponentMapper<WeaponComponent>,
     private val playerCmps: ComponentMapper<PlayerComponent>,
     private val waveCmps: ComponentMapper<WaveDirectorComponent>,
@@ -89,6 +92,7 @@ class UiSystem(
     private lateinit var healthTextLabel: Label
     private lateinit var shieldStatusLabel: Label
     private lateinit var weaponNameLabel: Label
+    private lateinit var perksLabel: Label
     private lateinit var ammoCountLabel: Label
     private lateinit var fragCountLabel: Label
     private lateinit var scoreValueLabel: Label
@@ -407,7 +411,9 @@ class UiSystem(
         // --- WEAPON & RELOAD PROGRESS SECTION ---
         val weaponHeaderRow = Table()
         weaponNameLabel = Label("PISTOL", Label.LabelStyle(fontSmall, colCyberOrange))
+        perksLabel = Label("PERKS: NONE", Label.LabelStyle(fontSmall, colCyberYellow))
         weaponHeaderRow.add(weaponNameLabel).left().expandX()
+        weaponHeaderRow.add(perksLabel).right()
         statusContainer.add(weaponHeaderRow).fillX().padBottom(5f).row()
 
         val ammoFrameTable = Table()
@@ -633,6 +639,16 @@ class UiSystem(
 
             val weaponName = currentWeapon?.displayName ?: "STANDARD"
             weaponNameLabel.setText(weaponName.uppercase())
+
+            val perkCmp = perkCmps.getOrNull(player)
+            if (perkCmp != null && perkCmp.activePerks.isNotEmpty()) {
+                val tags = perkCmp.activePerks.joinToString(" ") { "[${it.tag}]" }
+                perksLabel.setText("PERKS: $tags")
+                perksLabel.color = colCyberYellow
+            } else {
+                perksLabel.setText("PERKS: NONE")
+                perksLabel.color = colCyberGrey
+            }
 
             if (attackCmp.isReloading) {
                 val reloadDuration = currentWeapon?.reloadTime ?: attackCmp.reloadTime
