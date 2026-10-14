@@ -74,6 +74,13 @@ class MoveSystem(
                 body.applyLinearImpulse(0f, moveCmp.jumpImpulse, body.worldCenter.x, body.worldCenter.y, true)
                 audioService.play(SoundType.JUMP, pitchVariation = 0.06f)
                 world.system<ParticleSystem>().spawnFootstepDust(body.position.x, body.position.y - 0.35f)
+                moveCmp.extraJumps = if (hasDoubleJump) 1 else 0
+            } else if (moveCmp.extraJumps > 0) {
+                body.setLinearVelocity(currentVelocity.x, 0f)
+                body.applyLinearImpulse(0f, moveCmp.jumpImpulse * 0.95f, body.worldCenter.x, body.worldCenter.y, true)
+                audioService.play(SoundType.JUMP, pitchVariation = 0.15f)
+                world.system<ParticleSystem>().spawnSparks(body.position.x, body.position.y - 0.2f, count = 8)
+                moveCmp.extraJumps--
             }
             moveCmp.doJump = false
         }

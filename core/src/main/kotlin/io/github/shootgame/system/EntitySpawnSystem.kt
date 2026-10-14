@@ -157,6 +157,8 @@ class EntitySpawnSystem(
                 add<AttackComponent>()
                 add<WeaponComponent>()
                 add<HealthComponent>()
+                add<ShieldComponent>()
+                add<PerkComponent>()
                 add<StatusEffectComponent>()
                 add<OwnerComponent> {
                     owner = spawnedEntity
@@ -206,6 +208,33 @@ class EntitySpawnSystem(
                 add<HealthComponent> {
                     maxHealth = 60f
                     currentHealth = 60f
+                }
+                add<StatusEffectComponent>()
+                add<OwnerComponent> {
+                    owner = spawnedEntity
+                }
+            }
+
+            if (spawnCmp.type == "Boss") {
+                println("SPAWNING BOSS at: ${spawnCmp.location}")
+                imageCmp.image.color = Color(0.9f, 0.2f, 0.8f, 1f) // Menacing violet-crimson cyber tint
+                imageCmp.image.setScale(1.5f)
+                add<EnemyComponent> {
+                    scoreValue = 2500
+                }
+                add<BossComponent>()
+                add<MoveComponent> {
+                    speed = 2.0f
+                    baseSpeed = 2.0f
+                }
+                add<AttackComponent> {
+                    ammo = 999
+                    maxAmmo = 999
+                    fireRate = 1.0f
+                }
+                add<HealthComponent> {
+                    maxHealth = 400f
+                    currentHealth = 400f
                 }
                 add<StatusEffectComponent>()
                 add<OwnerComponent> {
@@ -333,7 +362,7 @@ else if (spawnCmp.type == "Explosion") {
     private fun spawnCfg(type: String): SpawnCfg = cachedCfgs.getOrPut(type) {
         when (type) {
             "Player", "RemotePlayer" -> SpawnCfg(AnimationModel.PLAYER, AnimationType.IDLE)
-            "Enemy" -> SpawnCfg(AnimationModel.PLAYER, AnimationType.IDLE)
+            "Enemy", "Boss" -> SpawnCfg(AnimationModel.PLAYER, AnimationType.IDLE)
             "Bullet" -> SpawnCfg(AnimationModel.BULLET, AnimationType.UNDEFINED)
             "Frag" -> SpawnCfg(AnimationModel.BULLET, AnimationType.UNDEFINED)
             "Explosion" -> SpawnCfg(AnimationModel.PLAYER, AnimationType.EXPLOSION)

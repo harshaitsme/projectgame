@@ -99,6 +99,38 @@ class AudioService {
         sound.play(finalVolume, finalPitch, 0f)
     }
 
+    fun playSpatial(
+        type: SoundType,
+        sourceX: Float,
+        sourceY: Float,
+        listenerX: Float,
+        listenerY: Float,
+        maxDistance: Float = 25f,
+        volumeModifier: Float = 1f,
+        pitchVariation: Float = 0f
+    ) {
+        if (!isSoundEnabled) return
+        val sound = soundCache[type] ?: return
+
+        val dx = sourceX - listenerX
+        val dy = sourceY - listenerY
+        val distance = kotlin.math.sqrt(dx * dx + dy * dy)
+
+        if (distance > maxDistance) return
+
+        val distanceFactor = (1f - (distance / maxDistance)).coerceIn(0f, 1f)
+        val finalVolume = (soundVolume * volumeModifier * distanceFactor).coerceIn(0f, 1f)
+        val pan = (dx / (maxDistance * 0.5f)).coerceIn(-1.0f, 1.0f)
+
+        val finalPitch = if (pitchVariation > 0f) {
+            (1f + MathUtils.random(-pitchVariation, pitchVariation)).coerceIn(0.5f, 2.0f)
+        } else {
+            1f
+        }
+
+        sound.play(finalVolume, finalPitch, pan)
+    }
+
     fun playMusic() {
         if (isDisposed) {
             log.debug { "Attempted to play music after AudioService was disposed" }

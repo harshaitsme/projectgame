@@ -21,6 +21,7 @@ import com.badlogic.gdx.scenes.scene2d.utils.ClickListener
 import com.badlogic.gdx.scenes.scene2d.utils.TextureRegionDrawable
 import com.badlogic.gdx.utils.Align
 import com.github.quillraven.fleks.ComponentMapper
+import com.github.quillraven.fleks.Entity
 import com.github.quillraven.fleks.IntervalSystem
 import com.github.quillraven.fleks.Qualifier
 import io.github.shootgame.audio.AudioService
@@ -28,6 +29,8 @@ import io.github.shootgame.audio.SoundType
 import io.github.shootgame.component.AttackComponent
 import io.github.shootgame.component.DeadComponent
 import io.github.shootgame.component.HealthComponent
+import io.github.shootgame.component.PerkComponent
+import io.github.shootgame.component.PerkType
 import io.github.shootgame.component.PlayerComponent
 import io.github.shootgame.component.RemotePlayerComponent
 import io.github.shootgame.component.WeaponComponent
@@ -42,6 +45,8 @@ class UiSystem(
     @Qualifier("uiStage") private val uiStage: Stage,
     private val attackCmps: ComponentMapper<AttackComponent>,
     private val healthCmps: ComponentMapper<HealthComponent>,
+    private val shieldCmps: ComponentMapper<ShieldComponent>,
+    private val perkCmps: ComponentMapper<PerkComponent>,
     private val weaponCmps: ComponentMapper<WeaponComponent>,
     private val playerCmps: ComponentMapper<PlayerComponent>,
     private val remotePlayerCmps: ComponentMapper<RemotePlayerComponent>,
@@ -110,10 +115,18 @@ class UiSystem(
     private lateinit var ammoBarFill: Image
     private lateinit var ammoBarFillCell: Cell<Image>
     private lateinit var healthTextLabel: Label
+    private lateinit var shieldStatusLabel: Label
     private lateinit var weaponNameLabel: Label
+    private lateinit var perksLabel: Label
     private lateinit var ammoCountLabel: Label
     private lateinit var fragCountLabel: Label
     private lateinit var scoreValueLabel: Label
+    private lateinit var waveTagLabel: Label
+    private lateinit var waveValueLabel: Label
+    private lateinit var bossContainer: Table
+    private lateinit var bossNameLabel: Label
+    private lateinit var bossBarFill: Image
+    private lateinit var bossBarFillCell: Cell<Image>
     private var sfxButtonLabel: Label? = null
     private var bgmButtonLabel: Label? = null
 
@@ -461,6 +474,7 @@ class UiSystem(
         // --- WEAPON & RELOAD PROGRESS SECTION ---
         val weaponHeaderRow = Table()
         weaponNameLabel = Label("PISTOL", Label.LabelStyle(fontSmall, colCyberOrange))
+        perksLabel = Label("PERKS: NONE", Label.LabelStyle(fontSmall, colCyberYellow))
         weaponHeaderRow.add(weaponNameLabel).left().expandX()
 
         // Quick-select weapon buttons [1-3]
@@ -541,6 +555,7 @@ class UiSystem(
         fragPill.add(fragTag).padRight(12f)
         fragPill.add(fragCountLabel)
 
+        middlePills.add(wavePill).padRight(14f)
         middlePills.add(scorePill).padRight(14f)
         middlePills.add(fragPill)
         middleCol.add(middlePills).left().top().row()
@@ -592,6 +607,27 @@ class UiSystem(
         rootTable.add(topRightCol).right().top()
 
         uiStage.addActor(rootTable)
+
+        // Boss Encounter Banner & Health Bar (Centered top)
+        bossContainer = Table()
+        bossContainer.setFillParent(true)
+        bossContainer.top().padTop(90f)
+
+        bossNameLabel = Label("CYBERNETIC BEHEMOTH", Label.LabelStyle(fontMedium, colCyberDanger))
+        bossContainer.add(bossNameLabel).padBottom(4f).row()
+
+        val bossFrameTable = Table()
+        val bossBarWidth = 540f
+        val bossBarHeight = 30f
+        bossFrameTable.background = createSciFiBarBackground(bossBarWidth.toInt(), bossBarHeight.toInt(), tabOnTop = true)
+        bossFrameTable.left().padLeft(14f).padRight(14f).padTop(6f).padBottom(6f)
+
+        bossBarFill = Image(fillDangerDrawable)
+        bossBarFillCell = bossFrameTable.add(bossBarFill).size(bossBarWidth - 28f, 18f).left()
+
+        bossContainer.add(bossFrameTable).size(bossBarWidth, bossBarHeight)
+        bossContainer.isVisible = false
+        uiStage.addActor(bossContainer)
     }
 
     private fun setupTouchControls() {
@@ -1156,6 +1192,22 @@ class UiSystem(
                 healthTextLabel.color = Color.WHITE
             }
 
+            val shield = shieldCmps.getOrNull(player)
+            if (shield != null) {
+                val shieldRatio = (shield.currentShield / shield.maxShield).coerceIn(0f, 1f)
+                val shieldPct = (shieldRatio * 100).toInt()
+                if (shield.currentShield <= 0f) {
+                    shieldStatusLabel.setText("SHIELD DEPLETED")
+                    shieldStatusLabel.color = colCyberDanger
+                } else if (shield.currentShield < shield.maxShield) {
+                    shieldStatusLabel.setText("SHIELD ${shield.currentShield.toInt()}/${shield.maxShield.toInt()} ($shieldPct%)")
+                    shieldStatusLabel.color = colCyberCyan
+                } else {
+                    shieldStatusLabel.setText("SHIELD 100%")
+                    shieldStatusLabel.color = colCyberCyan
+                }
+            }
+
             val attackCmp = attackCmps.getOrNull(player) ?: return@forEach
             val weaponCmp = weaponCmps.getOrNull(player)
 
@@ -1181,6 +1233,16 @@ class UiSystem(
 
             val weaponName = currentWeapon?.displayName ?: "STANDARD"
             weaponNameLabel.setText("${weaponName.uppercase()} [∞ INF]")
+
+            val perkCmp = perkCmps.getOrNull(player)
+            if (perkCmp != null && perkCmp.activePerks.isNotEmpty()) {
+                val tags = perkCmp.activePerks.joinToString(" ") { "[${it.tag}]" }
+                perksLabel.setText("PERKS: $tags")
+                perksLabel.color = colCyberYellow
+            } else {
+                perksLabel.setText("PERKS: NONE")
+                perksLabel.color = colCyberGrey
+            }
 
             if (attackCmp.isReloading) {
                 val reloadDuration = currentWeapon?.reloadTime ?: attackCmp.reloadTime

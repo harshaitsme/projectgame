@@ -48,7 +48,16 @@ class FragSystem(
                     }
                 }
             }
-            audioService.play(SoundType.EXPLOSION, pitchVariation = 0.05f)
+            world.entity {
+                add<AudioEmitterComponent> {
+                    sound = SoundType.EXPLOSION
+                    pitchVariation = 0.08f
+                    volume = 1.0f
+                }
+                add<ImageComponent> {
+                    image.setPosition(posX, posY)
+                }
+            }
             world.remove(entity)
         }
     }

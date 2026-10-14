@@ -12,6 +12,8 @@ import io.github.shootgame.component.DeadComponent
 import io.github.shootgame.component.EnemyComponent
 import io.github.shootgame.component.HealthComponent
 import io.github.shootgame.component.MoveComponent
+import io.github.shootgame.component.PerkComponent
+import io.github.shootgame.component.PerkType
 import io.github.shootgame.component.PhysicComponent
 import io.github.shootgame.component.PlayerComponent
 import io.github.shootgame.component.RemotePlayerComponent
@@ -49,6 +51,20 @@ class HealthSystem(
         if (health.invulnerableTime > 0f) return false
 
         var remainingDamage = amount
+
+        val shieldCmp = shieldCmps.getOrNull(entity)
+        if (shieldCmp != null && shieldCmp.currentShield > 0f) {
+            shieldCmp.timeSinceDamage = 0f
+            if (shieldCmp.currentShield >= remainingDamage) {
+                shieldCmp.currentShield -= remainingDamage
+                health.invulnerableTime = INVULNERABILITY_DURATION
+                return true
+            } else {
+                remainingDamage -= shieldCmp.currentShield
+                shieldCmp.currentShield = 0f
+            }
+        }
+
         val status = statusEffectCmps.getOrNull(entity)
         val shield = status?.getEffect(io.github.shootgame.component.StatusEffectType.SHIELD)
         if (shield != null) {
