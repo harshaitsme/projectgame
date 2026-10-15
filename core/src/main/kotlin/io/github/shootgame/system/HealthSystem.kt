@@ -17,6 +17,7 @@ import io.github.shootgame.component.PerkType
 import io.github.shootgame.component.PhysicComponent
 import io.github.shootgame.component.PlayerComponent
 import io.github.shootgame.component.RemotePlayerComponent
+import io.github.shootgame.component.ShieldComponent
 import io.github.shootgame.component.StatusEffectComponent
 
 @AllOf([HealthComponent::class])
@@ -29,7 +30,8 @@ class HealthSystem(
     private val enemyCmps: ComponentMapper<EnemyComponent>,
     private val playerCmps: ComponentMapper<PlayerComponent>,
     private val remotePlayerCmps: ComponentMapper<RemotePlayerComponent>,
-    private val statusEffectCmps: ComponentMapper<StatusEffectComponent>
+    private val statusEffectCmps: ComponentMapper<StatusEffectComponent>,
+    private val shieldCmps: ComponentMapper<ShieldComponent>
 ) : IteratingSystem() {
 
     override fun onTickEntity(entity: Entity) {
