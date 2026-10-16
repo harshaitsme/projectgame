@@ -43,6 +43,7 @@ import io.github.shootgame.component.WeaponType
 import io.github.shootgame.screen.GameConfig
 import io.github.shootgame.screen.GameMode
 import io.github.shootgame.screen.GameSettings
+import io.github.shootgame.component.ShieldComponent
 import kotlin.math.max
 import kotlin.math.roundToInt
 
@@ -480,7 +481,11 @@ class UiSystem(
         healthOverlay.add(healthTextLabel).expand().center().padTop(6f)
         healthStack.add(healthOverlay)
 
-        statusContainer.add(healthStack).size(barWidth, barHeight).padBottom(12f).row()
+        statusContainer.add(healthStack).size(barWidth, barHeight).padBottom(4f).row()
+
+        shieldStatusLabel = Label("SHIELD 100%", Label.LabelStyle(fontSmall, colCyberCyan))
+        shieldStatusLabel.setAlignment(Align.left)
+        statusContainer.add(shieldStatusLabel).left().padBottom(12f).row()
 
         // --- WEAPON & RELOAD PROGRESS SECTION ---
         val weaponHeaderRow = Table()
@@ -573,6 +578,13 @@ class UiSystem(
         fragCountLabel = Label("0", Label.LabelStyle(fontLarge, Color.WHITE))
         fragPill.add(fragTag).padRight(12f)
         fragPill.add(fragCountLabel)
+
+        val wavePill = Table()
+        wavePill.background = createSciFiBadgeBackground(180, 64, colCyberCyan)
+        waveTagLabel = Label("WAVE", Label.LabelStyle(fontSmall, colCyberCyan))
+        waveValueLabel = Label("1", Label.LabelStyle(fontLarge, Color.WHITE))
+        wavePill.add(waveTagLabel).padRight(12f)
+        wavePill.add(waveValueLabel)
 
         middlePills.add(wavePill).padRight(14f)
         middlePills.add(scorePill).padRight(14f)

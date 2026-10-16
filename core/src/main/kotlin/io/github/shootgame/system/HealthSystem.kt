@@ -33,10 +33,7 @@ class HealthSystem(
     private val playerCmps: ComponentMapper<PlayerComponent>,
     private val remotePlayerCmps: ComponentMapper<RemotePlayerComponent>,
     private val statusEffectCmps: ComponentMapper<StatusEffectComponent>,
-    private val shieldCmps: ComponentMapper<ShieldComponent>,
-    private val perkCmps: ComponentMapper<PerkComponent>,
-    private val hazardCmps: ComponentMapper<HazardComponent>,
-    private val bossCmps: ComponentMapper<BossComponent>
+    private val shieldCmps: ComponentMapper<ShieldComponent>
 ) : IteratingSystem() {
 
     override fun onTickEntity(entity: Entity) {

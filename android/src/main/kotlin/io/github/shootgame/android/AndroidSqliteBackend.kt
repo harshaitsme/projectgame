@@ -9,15 +9,21 @@ import io.github.shootgame.auth.SqliteBackend
 import io.github.shootgame.auth.SqliteSessionStore
 
 class AndroidSqliteBackend(context: Context) :
-    SQLiteOpenHelper(context, "shootgame_session.db", null, 1),
+    SQLiteOpenHelper(context, DATABASE_NAME, null, DATABASE_VERSION),
     SqliteBackend {
+
+    companion object {
+        private const val DATABASE_NAME = "shootgame_session.db"
+        private const val DATABASE_VERSION = 1
+        private const val TABLE_NAME = "user_sessions"
+    }
 
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL(SqliteSessionStore.SQL_CREATE_TABLE)
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        db.execSQL("DROP TABLE IF EXISTS user_sessions;")
+        db.execSQL("DROP TABLE IF EXISTS $TABLE_NAME;")
         onCreate(db)
     }
 
@@ -26,29 +32,21 @@ class AndroidSqliteBackend(context: Context) :
     }
 
     override fun saveSession(record: AuthSessionRecord) {
-        val db = writableDatabase
-        // Using a single immediate transaction
-        db.beginTransaction()
-        try {
-            val values = ContentValues().apply {
-                put("username", record.username)
-                put("jwt_token", record.jwtToken)
-                put("session_token", record.sessionToken)
-                put("created_at", record.createdAt)
-                put("expires_at", record.expiresAt)
-            }
-            // Relies on PRIMARY KEY constraint to replace old sessions
-            db.insertWithOnConflict("user_sessions", null, values, SQLiteDatabase.CONFLICT_REPLACE)
-            db.setTransactionSuccessful()
-        } finally {
-            db.endTransaction()
+        val values = ContentValues().apply {
+            put("username", record.username)
+            put("jwt_token", record.jwtToken)
+            put("session_token", record.sessionToken)
+            put("created_at", record.createdAt)
+            put("expires_at", record.expiresAt)
         }
+        
+        // insertWithOnConflict is already atomic, so explicit transaction is redundant
+        writableDatabase.insertWithOnConflict(TABLE_NAME, null, values, SQLiteDatabase.CONFLICT_REPLACE)
     }
 
     override fun loadActiveSession(): AuthSessionRecord? {
-        val db = readableDatabase
-        val cursor = db.query(
-            "user_sessions",
+        val cursor = readableDatabase.query(
+            TABLE_NAME,
             arrayOf("username", "jwt_token", "session_token", "created_at", "expires_at"),
             null, null, null, null,
             "created_at DESC",
@@ -71,6 +69,6 @@ class AndroidSqliteBackend(context: Context) :
     }
 
     override fun clearSessions() {
-        writableDatabase.delete("user_sessions", null, null)
+        writableDatabase.delete(TABLE_NAME, null, null)
     }
 }

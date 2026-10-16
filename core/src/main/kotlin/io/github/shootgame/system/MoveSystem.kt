@@ -70,10 +70,9 @@ class MoveSystem(
 
         // Jump logic (only for local player / enemies)
         if (!isBullet && !isFrag && entity !in remotePlayerCmps && moveCmp.doJump) {
-            val isGrounded = abs(currentVelocity.y) < 0.1f
-            val hasDoubleJump = perkCmps.getOrNull(entity)?.hasPerk(PerkType.DOUBLE_JUMP) == true
-
-            if (isGrounded) {
+            val hasDoubleJump = entity in perkCmps && perkCmps[entity].hasPerk(PerkType.DOUBLE_JUMP)
+            // Simple grounded check: check if vertical velocity is near 0
+            if (abs(currentVelocity.y) < 0.1f) {
                 body.applyLinearImpulse(0f, moveCmp.jumpImpulse, body.worldCenter.x, body.worldCenter.y, true)
                 audioService.play(SoundType.JUMP, pitchVariation = 0.06f)
                 world.system<ParticleSystem>().spawnFootstepDust(body.position.x, body.position.y - 0.35f)
