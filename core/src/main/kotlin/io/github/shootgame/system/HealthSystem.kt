@@ -8,6 +8,7 @@ import com.github.quillraven.fleks.IteratingSystem
 import io.github.shootgame.component.AnimationComponent
 import io.github.shootgame.component.AnimationModel
 import io.github.shootgame.component.AnimationType
+import io.github.shootgame.component.BossComponent
 import io.github.shootgame.component.DeadComponent
 import io.github.shootgame.component.EnemyComponent
 import io.github.shootgame.component.HazardComponent
@@ -34,7 +35,8 @@ class HealthSystem(
     private val statusEffectCmps: ComponentMapper<StatusEffectComponent>,
     private val shieldCmps: ComponentMapper<ShieldComponent>,
     private val perkCmps: ComponentMapper<PerkComponent>,
-    private val hazardCmps: ComponentMapper<HazardComponent>
+    private val hazardCmps: ComponentMapper<HazardComponent>,
+    private val bossCmps: ComponentMapper<BossComponent>
 ) : IteratingSystem() {
 
     override fun onTickEntity(entity: Entity) {
@@ -155,6 +157,10 @@ class HealthSystem(
                         if (hp != null) {
                             hp.currentHealth = (hp.currentHealth + 15f).coerceAtMost(hp.maxHealth)
                         }
+                    }
+
+                    if (entity in bossCmps) {
+                        world.system<AchievementSystem>().triggerBossKill(player)
                     }
                 }
             }

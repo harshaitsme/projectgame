@@ -159,6 +159,7 @@ class EntitySpawnSystem(
                 add<HealthComponent>()
                 add<ShieldComponent>()
                 add<PerkComponent>()
+                add<AchievementComponent>()
                 add<StatusEffectComponent>()
                 add<OwnerComponent> {
                     owner = spawnedEntity
