@@ -55,6 +55,7 @@ class FragSystem(
                     volume = 1.0f
                 }
                 add<ImageComponent> {
+                    image = com.badlogic.gdx.scenes.scene2d.ui.Image()
                     image.setPosition(posX, posY)
                 }
             }
