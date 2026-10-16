@@ -159,6 +159,7 @@ class EntitySpawnSystem(
                 add<HealthComponent>()
                 add<ShieldComponent>()
                 add<PerkComponent>()
+                add<AchievementComponent>()
                 add<StatusEffectComponent>()
                 add<OwnerComponent> {
                     owner = spawnedEntity
@@ -239,6 +240,31 @@ class EntitySpawnSystem(
                 add<StatusEffectComponent>()
                 add<OwnerComponent> {
                     owner = spawnedEntity
+                }
+            }
+
+            if (spawnCmp.type == "HazardBarrel") {
+                imageCmp.image.color = Color(1.0f, 0.42f, 0.05f, 1f) // Tactical neon hazard orange
+                imageCmp.image.setScale(0.72f)
+                add<HazardComponent> {
+                    type = HazardType.EXPLOSIVE_BARREL
+                    blastRadius = 4.2f
+                    blastDamage = 110f
+                }
+                add<HealthComponent> {
+                    maxHealth = 25f
+                    currentHealth = 25f
+                }
+            }
+
+            if (spawnCmp.type == "ElectricGate") {
+                imageCmp.image.color = Color(0.2f, 0.85f, 1f, 0.95f) // Glowing cyan electric trap
+                imageCmp.image.setScale(0.85f)
+                add<HazardComponent> {
+                    type = HazardType.ELECTRIC_GATE
+                    cyclePeriod = 2.5f
+                    tickDamage = 18f
+                    tickInterval = 0.45f
                 }
             }
 
@@ -348,6 +374,19 @@ else if (spawnCmp.type == "Explosion") {
                         friction = 0f // Prevent sticking to walls
                     }
                 }
+            } else if (spawnCmp.type == "HazardBarrel") {
+                physicCmpFromImage(phWorld, imageCmp.image, BodyDef.BodyType.StaticBody) { _, width, height ->
+                    box(width = width * 0.4f, height = height * 0.65f) {
+                        isSensor = false
+                        friction = 0.8f
+                    }
+                }
+            } else if (spawnCmp.type == "ElectricGate") {
+                physicCmpFromImage(phWorld, imageCmp.image, BodyDef.BodyType.StaticBody) { _, width, height ->
+                    box(width = width * 0.5f, height = height * 0.85f) {
+                        isSensor = true
+                    }
+                }
             } else {
                 physicCmpFromImage(phWorld, imageCmp.image, BodyDef.BodyType.DynamicBody) { _, width, height ->
                     box(width, height) {
@@ -363,6 +402,7 @@ else if (spawnCmp.type == "Explosion") {
         when (type) {
             "Player", "RemotePlayer" -> SpawnCfg(AnimationModel.PLAYER, AnimationType.IDLE)
             "Enemy", "Boss" -> SpawnCfg(AnimationModel.PLAYER, AnimationType.IDLE)
+            "HazardBarrel", "ElectricGate" -> SpawnCfg(AnimationModel.PLAYER, AnimationType.IDLE)
             "Bullet" -> SpawnCfg(AnimationModel.BULLET, AnimationType.UNDEFINED)
             "Frag" -> SpawnCfg(AnimationModel.BULLET, AnimationType.UNDEFINED)
             "Explosion" -> SpawnCfg(AnimationModel.PLAYER, AnimationType.EXPLOSION)
@@ -424,6 +464,22 @@ else if (spawnCmp.type == "Explosion") {
                             add<SpawnComponent> {
                                 this.type = "Enemy"
                                 this.location.set(pos.x, pos.y)
+                            }
+                        }
+                    }
+
+                    println("Spawning default arena interactive hazards...")
+                    val defaultHazards = listOf(
+                        "HazardBarrel" to Vector2(10.5f, 3.34f),
+                        "HazardBarrel" to Vector2(11.3f, 3.34f), // Chain reaction pair
+                        "HazardBarrel" to Vector2(18.5f, 3.34f),
+                        "ElectricGate" to Vector2(14.0f, 5.2f)
+                    )
+                    defaultHazards.forEach { (hType, hPos) ->
+                        world.entity {
+                            add<SpawnComponent> {
+                                this.type = hType
+                                this.location.set(hPos.x, hPos.y)
                             }
                         }
                     }

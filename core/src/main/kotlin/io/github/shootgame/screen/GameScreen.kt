@@ -20,6 +20,7 @@ import io.github.shootgame.component.PhysicComponent
 import io.github.shootgame.component.PlayerComponent
 import io.github.shootgame.event.MapChangeEvent
 import io.github.shootgame.event.fire
+import io.github.shootgame.system.AchievementSystem
 import io.github.shootgame.system.AiSystem
 import io.github.shootgame.system.AnimationSystem
 import io.github.shootgame.system.AudioSystem
@@ -32,6 +33,7 @@ import io.github.shootgame.system.DamageSystem
 import io.github.shootgame.system.DeathSystem
 import io.github.shootgame.system.ExplosionSystem
 import io.github.shootgame.system.FragSystem
+import io.github.shootgame.system.HazardSystem
 import io.github.shootgame.system.HealthSystem
 import io.github.shootgame.system.MoveSystem
 import io.github.shootgame.system.ParticleSystem
@@ -84,12 +86,14 @@ class GameScreen(private val config: GameConfig = GameConfig()) : KtxScreen {
         system<PlayerInputSystem>()
         system<AiSystem>()
         system<BossSystem>()
+        system<HazardSystem>()
         system<CombatSystem>()
         system<CollisionSystem>()
         system<FragSystem>()
         system<StatusEffectSystem>()
         system<ShieldRegenSystem>()
         system<PerkSystem>()
+        system<AchievementSystem>()
         system<MoveSystem>()
         system<PhysicSystem>()
         system<ExplosionSystem>()

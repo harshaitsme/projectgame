@@ -27,12 +27,17 @@ import com.github.quillraven.fleks.Qualifier
 import io.github.shootgame.audio.AudioService
 import io.github.shootgame.audio.SoundType
 import io.github.shootgame.component.AttackComponent
+import io.github.shootgame.component.AchievementComponent
+import io.github.shootgame.component.BossComponent
 import io.github.shootgame.component.DeadComponent
 import io.github.shootgame.component.HealthComponent
 import io.github.shootgame.component.PerkComponent
 import io.github.shootgame.component.PerkType
 import io.github.shootgame.component.PlayerComponent
 import io.github.shootgame.component.RemotePlayerComponent
+import io.github.shootgame.component.ShieldComponent
+import io.github.shootgame.component.WaveDirectorComponent
+import io.github.shootgame.component.WaveState
 import io.github.shootgame.component.WeaponComponent
 import io.github.shootgame.component.WeaponType
 import io.github.shootgame.screen.GameConfig
@@ -52,6 +57,9 @@ class UiSystem(
     private val playerCmps: ComponentMapper<PlayerComponent>,
     private val remotePlayerCmps: ComponentMapper<RemotePlayerComponent>,
     private val deadCmps: ComponentMapper<DeadComponent>,
+    private val waveCmps: ComponentMapper<WaveDirectorComponent>,
+    private val bossCmps: ComponentMapper<BossComponent>,
+    private val achievementCmps: ComponentMapper<AchievementComponent>,
     private val audioService: AudioService,
     private val config: GameConfig
 ) : IntervalSystem() {
@@ -128,6 +136,9 @@ class UiSystem(
     private lateinit var bossNameLabel: Label
     private lateinit var bossBarFill: Image
     private lateinit var bossBarFillCell: Cell<Image>
+    private lateinit var achievementContainer: Table
+    private lateinit var achievementBannerLabel: Label
+    private var achievementDisplayTimer: Float = 0f
     private var sfxButtonLabel: Label? = null
     private var bgmButtonLabel: Label? = null
 
@@ -546,6 +557,14 @@ class UiSystem(
         middleCol.padLeft(26f)
 
         val middlePills = Table()
+
+        val wavePill = Table()
+        wavePill.background = createSciFiBadgeBackground(210, 64, colCyberYellow)
+        waveTagLabel = Label("WAVE", Label.LabelStyle(fontSmall, colCyberOrange))
+        waveValueLabel = Label("PREP", Label.LabelStyle(fontLarge, Color.WHITE))
+        wavePill.add(waveTagLabel).padRight(12f)
+        wavePill.add(waveValueLabel)
+
         val scorePill = Table()
         scorePill.background = createSciFiBadgeBackground(200, 64, colCyberOrange)
         val scoreTag = Label("SCORE", Label.LabelStyle(fontSmall, colCyberYellow))
@@ -640,6 +659,23 @@ class UiSystem(
         bossContainer.add(bossFrameTable).size(bossBarWidth, bossBarHeight)
         bossContainer.isVisible = false
         uiStage.addActor(bossContainer)
+
+        // Achievement Unlock Banner (Centered near top)
+        achievementContainer = Table()
+        achievementContainer.setFillParent(true)
+        achievementContainer.top().padTop(110f)
+
+        val bannerCard = Table()
+        bannerCard.background = createRoundedDrawable(500, 64, 10, colDarkChamber, colCyberYellow, 2)
+        bannerCard.pad(8f, 16f, 8f, 16f)
+
+        achievementBannerLabel = Label("", Label.LabelStyle(fontSmall, colCyberYellow))
+        achievementBannerLabel.setAlignment(Align.center)
+        bannerCard.add(achievementBannerLabel).center()
+
+        achievementContainer.add(bannerCard)
+        achievementContainer.isVisible = false
+        uiStage.addActor(achievementContainer)
     }
 
     private fun setupTouchControls() {
@@ -1328,6 +1364,67 @@ class UiSystem(
                 row.add(hpLbl).width(64f).left()
                 row.add(kdLbl).width(64f).right()
                 scoreboardRowsTable.add(row).left().padBottom(2f).row()
+            }
+        }
+
+        var directorEntity: Entity? = null
+        world.family(allOf = arrayOf(WaveDirectorComponent::class)).forEach {
+            directorEntity = it
+        }
+        val waveDirector = directorEntity
+        if (waveDirector != null) {
+            val waveCmp = waveCmps[waveDirector]
+            when (waveCmp.state) {
+                WaveState.COUNTDOWN -> {
+                    waveTagLabel.setText("NEXT WAVE")
+                    val secs = (waveCmp.stateTimer + 0.99f).toInt()
+                    waveValueLabel.setText("${secs}S")
+                }
+                WaveState.SPAWNING, WaveState.IN_PROGRESS -> {
+                    waveTagLabel.setText("WAVE")
+                    waveValueLabel.setText("${waveCmp.wave}")
+                }
+                WaveState.WAVE_CLEARED -> {
+                    waveTagLabel.setText("STATUS")
+                    waveValueLabel.setText("CLEARED")
+                }
+            }
+        }
+
+        var activeBossEntity: Entity? = null
+        world.family(allOf = arrayOf(BossComponent::class, HealthComponent::class), noneOf = arrayOf(DeadComponent::class)).forEach {
+            activeBossEntity = it
+        }
+
+        if (activeBossEntity != null) {
+            bossContainer.isVisible = true
+            val bCmp = bossCmps[activeBossEntity!!]
+            val bHealth = healthCmps[activeBossEntity!!]
+            val ratio = (bHealth.currentHealth / bHealth.maxHealth).coerceIn(0f, 1f)
+            bossBarFillCell.width(max(2f, (540f - 28f) * ratio))
+            healthFrameTableInvalidate(bossBarFill)
+            bossNameLabel.setText(if (bCmp.isEnraged) "!!! ${bCmp.name} [ENRAGED] !!!" else bCmp.name)
+            bossNameLabel.color = if (bCmp.isEnraged) colCyberDanger else colCyberOrange
+        } else {
+            bossContainer.isVisible = false
+        }
+
+        // Process Achievement Unlock Notifications
+        world.family(allOf = arrayOf(PlayerComponent::class, AchievementComponent::class)).forEach { player ->
+            if (player in remotePlayerCmps) return@forEach
+            val achCmp = achievementCmps.getOrNull(player) ?: return@forEach
+            if (achCmp.pendingNotifications.isNotEmpty() && achievementDisplayTimer <= 0f) {
+                val nextAch = achCmp.pendingNotifications.removeAt(0)
+                achievementBannerLabel.setText("★ ACHIEVEMENT UNLOCKED: ${nextAch.title.uppercase()} (+${nextAch.scoreReward} PTS) ★\n${nextAch.description}")
+                achievementContainer.isVisible = true
+                achievementDisplayTimer = 4.0f
+            }
+        }
+
+        if (achievementDisplayTimer > 0f) {
+            achievementDisplayTimer -= deltaTime
+            if (achievementDisplayTimer <= 0f) {
+                achievementContainer.isVisible = false
             }
         }
     }
