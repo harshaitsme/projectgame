@@ -1,110 +1,77 @@
-# ShootGame Server — Deployment Guide (Ubuntu)
-
+ShootGame Server — Deployment Guide (Ubuntu)
 Rust authoritative dedicated server for the 2D shooting game.
-
-- Transport: TCP (`54555`) for login/packets + session control; UDP (`54777`) for low-latency state broadcasts.
-- Simulation: fixed 60 Hz tick, specs ECS, server-authoritative combat.
-- Persistence: in-memory + session tokens (no database yet).
-
-## Quick start (native binary)
-
-```bash
+Transport: TCP (54555) for login/packets + session control; UDP (54777) for low-latency state broadcasts.
+Simulation: Fixed 60 Hz tick, specs ECS, server-authoritative combat.
+Persistence: In-memory + session tokens (no database yet).
+Prerequisites
+Rust 1.70+ (for native builds)
+Docker & Docker Compose (for containerized deployment)
+sudo privileges (for systemd installation)
+Quick Start (Native Binary)
+To build and run the server locally:
 cargo build --release
 ./target/release/shootgame-server
-```
-
-Configure ports with env vars:
-
-```bash
+To configure custom ports using environment variables:
 SHOOTGAME_TCP_PORT=54555 SHOOTGAME_UDP_PORT=54777 ./target/release/shootgame-server
-```
-
----
-
-## Option A — Docker
-
-```bash
-# Build and run with compose:
+Option A — Docker
+Build and run the server using Docker Compose:
+# Start the server in detached mode
 docker compose up -d --build
 
-# Logs:
+# View logs
 docker compose logs -f
 
-# Stop:
+# Stop the server
 docker compose down
-```
-
-Ports are mapped in `docker-compose.yml`:
-- `54555/tcp`
-- `54777/udp`
-
-> Note: UDP port mapping is important for state delivery. If you run on a cloud VM, also open `54777/udp` in the security group / firewall.
-
-Build the image manually:
-
-```bash
+Note: UDP port mapping is critical for state delivery. If you are deploying on a cloud VM, ensure 54777/udp is open in your security group or firewall.
+MANUAL DOCKER BUILD
+If you prefer not to use Compose, you can build and run the image directly:
 docker build -t shootgame-server:latest .
 docker run --rm -p 54555:54555 -p 54777:54777/udp shootgame-server:latest
-```
-
----
-
-## Option B — systemd on bare Ubuntu
-
-1. Install the binary + a service user:
-
-   ```bash
-   sudo useradd --system --home /opt/shootgame --create-home shootgame
-   sudo mkdir -p /opt/shootgame
-   sudo cp target/release/shootgame-server /opt/shootgame/shootgame-server
-   sudo cp deploy/systemd/shootgame-server.service /etc/systemd/system/
-   ```
-
-2. Enable + start:
-
-   ```bash
-   sudo systemctl daemon-reload
-   sudo systemctl enable --now shootgame-server
-   sudo systemctl status shootgame-server
-   journalctl -u shootgame-server -f
-   ```
-
-3. Update workflow (after rebuilding):
-
-   ```bash
-   ./deploy.sh /opt/shootgame   # copies binary + restarts the service
-   ```
-
----
-
-## Firewall (UFW example)
-
-```bash
+Option B — systemd on Bare Ubuntu
+For production environments, running the server as a systemd service is recommended.
+Create a dedicated service user:
+sudo useradd --system --home /opt/shootgame --create-home shootgame
+Deploy the application: Use the provided deployment script to install the binary and configure the service.
+./deploy.sh /opt/shootgame
+Manage the service:
+sudo systemctl status shootgame-server
+journalctl -u shootgame-server -f
+Firewall Configuration (UFW)
+Ensure your firewall allows traffic on the required ports:
 sudo ufw allow 54555/tcp
 sudo ufw allow 54777/udp
-```
+Environment Variables
 
----
+VARIABLE
 
-## Environment variables
 
-| Variable | Default | Purpose |
-|----------|---------|---------|
-| `SHOOTGAME_TCP_PORT` | `54555` | TCP control/login port |
-| `SHOOTGAME_UDP_PORT` | `54777` | UDP state broadcast port |
+DEFAULT
 
----
 
-## Client compatibility
+PURPOSE
 
-The Rust test client lives in `src/bin/test_client.rs`:
 
-```bash
-# start server first, then:
+SHOOTGAME_TCP_PORT
+
+
+54555
+
+
+TCP control/login port
+
+
+SHOOTGAME_UDP_PORT
+
+
+54777
+
+
+UDP state broadcast port
+
+
+Client Compatibility
+The Rust test client is located in src/bin/<unsafe_url>test_client.rs</unsafe_url>.
+To run the test client (ensure the server is running first):
 cargo run --release --bin test_client
-# Passes combat + reconnect tests when id=1 & id=2 are available.
-```
-
-Bringing the Kotlin/libGDX client requires moving the wire protocol to a
-language-neutral format (bincode ↔ Kryo are incompatible). See
-`docs/interop.md` (to come) for the Protobuf/FlatBuffers migration path.
+Note for Kotlin/libGDX Clients: The current wire protocol uses bincode, which is incompatible with Kryo. Moving to a language-neutral format (Protobuf/FlatBuffers) is planned. See docs/interop.md for the migration path.
