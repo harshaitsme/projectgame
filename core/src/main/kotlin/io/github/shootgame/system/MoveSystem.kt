@@ -29,6 +29,7 @@ class MoveSystem(
     private val playerCmps: ComponentMapper<PlayerComponent>,
     private val fragCmps: ComponentMapper<FragComponent>,
     private val remotePlayerCmps: ComponentMapper<RemotePlayerComponent>,
+    private val perkCmps: ComponentMapper<PerkComponent>,
     private val audioService: AudioService
 ) : IteratingSystem() {
 
@@ -69,6 +70,7 @@ class MoveSystem(
 
         // Jump logic (only for local player / enemies)
         if (!isBullet && !isFrag && entity !in remotePlayerCmps && moveCmp.doJump) {
+            val hasDoubleJump = entity in perkCmps && perkCmps[entity].hasPerk(PerkType.DOUBLE_JUMP)
             // Simple grounded check: check if vertical velocity is near 0
             if (abs(currentVelocity.y) < 0.1f) {
                 body.applyLinearImpulse(0f, moveCmp.jumpImpulse, body.worldCenter.x, body.worldCenter.y, true)
