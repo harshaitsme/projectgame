@@ -29,13 +29,14 @@ class PlayerInputSystem(
     private val physicCmps: ComponentMapper<PhysicComponent>
 ) : IteratingSystem() {
     private val uiSystem: UiSystem by lazy { world.system<UiSystem>() }
+    private val matchRoundSystem: MatchRoundSystem by lazy { world.system<MatchRoundSystem>() }
     private var pickupSpawnIndex = 0
 
     override fun onTickEntity(entity: Entity) {
         val moveCmp = moveCmps[entity]
         val attackCmp = attackCmps[entity]
 
-        if (uiSystem.isPaused) {
+        if (uiSystem.isPaused || (matchRoundSystem.isMatchRoundMode && matchRoundSystem.state != MatchRoundState.ACTIVE)) {
             moveCmp.cos = 0f
             moveCmp.sin = 0f
             moveCmp.doJump = false

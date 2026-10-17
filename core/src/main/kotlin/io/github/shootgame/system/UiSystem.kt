@@ -7,6 +7,7 @@ import com.badlogic.gdx.graphics.Color
 import com.badlogic.gdx.graphics.Pixmap
 import com.badlogic.gdx.graphics.Texture
 import com.badlogic.gdx.graphics.g2d.BitmapFont
+import com.badlogic.gdx.graphics.g2d.NinePatch
 import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator
 import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator.FreeTypeFontParameter
 import com.badlogic.gdx.scenes.scene2d.InputEvent
@@ -18,6 +19,8 @@ import com.badlogic.gdx.scenes.scene2d.ui.Label
 import com.badlogic.gdx.scenes.scene2d.ui.Stack
 import com.badlogic.gdx.scenes.scene2d.ui.Table
 import com.badlogic.gdx.scenes.scene2d.utils.ClickListener
+import com.badlogic.gdx.scenes.scene2d.utils.Drawable
+import com.badlogic.gdx.scenes.scene2d.utils.NinePatchDrawable
 import com.badlogic.gdx.scenes.scene2d.utils.TextureRegionDrawable
 import com.badlogic.gdx.utils.Align
 import com.github.quillraven.fleks.ComponentMapper
@@ -43,7 +46,6 @@ import io.github.shootgame.component.WeaponType
 import io.github.shootgame.screen.GameConfig
 import io.github.shootgame.screen.GameMode
 import io.github.shootgame.screen.GameSettings
-import io.github.shootgame.component.ShieldComponent
 import kotlin.math.max
 import kotlin.math.roundToInt
 
@@ -139,8 +141,9 @@ class UiSystem(
     private lateinit var achievementContainer: Table
     private lateinit var achievementBannerLabel: Label
     private var achievementDisplayTimer: Float = 0f
-    private var sfxButtonLabel: Label? = null
-    private var bgmButtonLabel: Label? = null
+    private var cachedPauseIconDrawable: Drawable? = null
+    private val pauseSettingBarTrackW = 330f
+    private val pauseSettingBarTrackH = 32f
 
     // Pause Menu Elements
     private lateinit var pauseOverlayRoot: Table
@@ -161,6 +164,19 @@ class UiSystem(
     private var pauseGammaFillImage: Image? = null
     private var pauseGammaFillCell: Cell<Image>? = null
 
+    // Match Round UI Elements
+    private val matchRoundSystem: MatchRoundSystem by lazy { world.system<MatchRoundSystem>() }
+    private lateinit var roundBannerContainer: Table
+    private lateinit var roundBannerTitleLabel: Label
+    private lateinit var roundBannerSubtitleLabel: Label
+    private lateinit var roundBannerScoreLabel: Label
+
+    // Match Over Ceremony Elements
+    private lateinit var matchOverOverlay: Table
+    private lateinit var matchWinnerTitleLabel: Label
+    private lateinit var matchWinnerSubLabel: Label
+    private lateinit var matchLeaderboardTable: Table
+
     private var maxHealthBarWidth = 432f
     private var maxAmmoBarWidth = 432f
 
@@ -172,6 +188,7 @@ class UiSystem(
             setupTouchControls()
         }
         setupPauseMenu()
+        setupRoundUi()
     }
 
     private fun initFonts() {
@@ -203,11 +220,11 @@ class UiSystem(
                     generator.generateFont(param).also { generatedFonts.add(it) }
                 }
 
-                fontTiny = makeFont(16, 1.4f, 1f)
-                fontSmall = makeFont(22, 1.8f, 2f)
-                fontMedium = makeFont(28, 2.2f, 2f)
-                fontLarge = makeFont(34, 2.6f, 3f)
-                fontXLarge = makeFont(44, 3.2f, 3f)
+                fontTiny = makeFont(18, 1.5f, 1f)
+                fontSmall = makeFont(24, 2.0f, 2f)
+                fontMedium = makeFont(30, 2.4f, 2f)
+                fontLarge = makeFont(38, 2.8f, 3f)
+                fontXLarge = makeFont(48, 3.4f, 3f)
                 return
             } catch (e: Exception) {
                 Gdx.app.error("UiSystem", "Failed to load KnightWarrior font, fallback to default", e)
@@ -434,6 +451,132 @@ class UiSystem(
         pixmap.fillRectangle(offsetX, offsetY + rad, w, h - rad * 2)
     }
 
+    private fun createNinePatchRoundedDrawable(
+        radius: Int,
+        fillColor: Color,
+        borderColor: Color? = null,
+        borderWidth: Int = 1
+    ): NinePatchDrawable {
+        val size = radius * 2 + 10
+        val pixmap = Pixmap(size, size, Pixmap.Format.RGBA8888)
+        pixmap.blending = Pixmap.Blending.None
+
+        if (borderColor != null && borderWidth > 0) {
+            pixmap.setColor(borderColor)
+            fillRounded(pixmap, size, size, radius)
+            pixmap.setColor(fillColor)
+            fillRounded(
+                pixmap,
+                size - borderWidth * 2,
+                size - borderWidth * 2,
+                max(1, radius - borderWidth),
+                borderWidth,
+                borderWidth
+            )
+        } else {
+            pixmap.setColor(fillColor)
+            fillRounded(pixmap, size, size, radius)
+        }
+
+        val texture = Texture(pixmap).apply {
+            setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear)
+        }
+        disposables.add(texture)
+        pixmap.dispose()
+        val split = radius + 2
+        return NinePatchDrawable(NinePatch(texture, split, split, split, split))
+    }
+
+    private fun getPauseIconDrawable(): Drawable? {
+        if (cachedPauseIconDrawable != null) return cachedPauseIconDrawable
+        val candidates = listOf("graphics/pause-icon.png", "assets/graphics/pause-icon.png")
+        for (candidate in candidates) {
+            val file = Gdx.files.internal(candidate)
+            if (file.exists()) {
+                try {
+                    val originalPixmap = Pixmap(file)
+                    val w = originalPixmap.width
+                    val h = originalPixmap.height
+                    val whitePixmap = Pixmap(w, h, Pixmap.Format.RGBA8888)
+                    whitePixmap.blending = Pixmap.Blending.None
+                    val tmpCol = Color()
+                    for (y in 0 until h) {
+                        for (x in 0 until w) {
+                            val pixel = originalPixmap.getPixel(x, y)
+                            Color.rgba8888ToColor(tmpCol, pixel)
+                            val a = (tmpCol.a * 255f).roundToInt().coerceIn(0, 255)
+                            if (a > 0) {
+                                whitePixmap.drawPixel(x, y, (0xffffff00.toInt()) or a)
+                            } else {
+                                whitePixmap.drawPixel(x, y, 0)
+                            }
+                        }
+                    }
+                    originalPixmap.dispose()
+                    val texture = Texture(whitePixmap).apply {
+                        setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear)
+                    }
+                    whitePixmap.dispose()
+                    disposables.add(texture)
+                    val drawable = TextureRegionDrawable(texture)
+                    cachedPauseIconDrawable = drawable
+                    return drawable
+                } catch (e: Exception) {
+                    Gdx.app.error("UiSystem", "Error loading pause icon from $candidate", e)
+                }
+            }
+        }
+        return null
+    }
+
+    private fun createPauseIconButton(
+        width: Float = 68f,
+        height: Float = 62f,
+        iconSize: Float = 40f,
+        onClick: () -> Unit
+    ): Stack {
+        val stack = Stack()
+        val normalDrawable = createNinePatchRoundedDrawable(10, colButtonBg, colCyberOrange, 2)
+        val pressedDrawable = createNinePatchRoundedDrawable(10, colButtonPressed, colCyberYellow, 2)
+
+        val bgImage = Image(normalDrawable)
+        stack.add(bgImage)
+
+        val iconDrawable = getPauseIconDrawable()
+        val iconImage = if (iconDrawable != null) {
+            Image(iconDrawable).apply {
+                setColor(Color.WHITE)
+            }
+        } else null
+
+        if (iconImage != null) {
+            val iconTable = Table()
+            iconTable.setFillParent(true)
+            iconTable.add(iconImage).size(iconSize, iconSize).center()
+            stack.add(iconTable)
+        } else {
+            val fallbackLabel = Label("PAUSE", Label.LabelStyle(fontSmall, Color.WHITE))
+            fallbackLabel.setAlignment(Align.center)
+            stack.add(fallbackLabel)
+        }
+
+        stack.addListener(object : ClickListener() {
+            override fun touchDown(event: InputEvent?, x: Float, y: Float, pointer: Int, button: Int): Boolean {
+                audioService.play(SoundType.CLICK, volumeModifier = 0.5f)
+                bgImage.drawable = pressedDrawable
+                iconImage?.color = colCyberYellow
+                return true
+            }
+
+            override fun touchUp(event: InputEvent?, x: Float, y: Float, pointer: Int, button: Int) {
+                bgImage.drawable = normalDrawable
+                iconImage?.color = Color.WHITE
+                onClick()
+            }
+        })
+        return stack
+    }
+
     private fun setupHud() {
         val rootTable = Table()
         rootTable.setFillParent(true)
@@ -579,13 +722,6 @@ class UiSystem(
         fragPill.add(fragTag).padRight(12f)
         fragPill.add(fragCountLabel)
 
-        val wavePill = Table()
-        wavePill.background = createSciFiBadgeBackground(180, 64, colCyberCyan)
-        waveTagLabel = Label("WAVE", Label.LabelStyle(fontSmall, colCyberCyan))
-        waveValueLabel = Label("1", Label.LabelStyle(fontLarge, Color.WHITE))
-        wavePill.add(waveTagLabel).padRight(12f)
-        wavePill.add(waveValueLabel)
-
         middlePills.add(wavePill).padRight(14f)
         middlePills.add(scorePill).padRight(14f)
         middlePills.add(fragPill)
@@ -598,26 +734,12 @@ class UiSystem(
 
         rootTable.add(middleCol).expandX().left().top()
 
-        // 3. Top-Right Column: Audio Toggles + PAUSE Button + Live Multiplayer Scoreboard
+        // 3. Top-Right Column: PAUSE Icon Button + Live Multiplayer Scoreboard
         val topRightCol = Table()
-        val audioTable = Table()
-        val sfxBtn = createModernButton(if (audioService.isSoundEnabled) "SFX" else "MUTED", 82f, 52f) {
-            val enabled = audioService.toggleSound()
-            sfxButtonLabel?.setText(if (enabled) "SFX" else "MUTED")
-            refreshPauseMenuUi()
-        }
-        val bgmBtn = createModernButton(if (audioService.isMusicEnabled) "BGM" else "MUTED", 82f, 52f) {
-            val enabled = audioService.toggleMusic()
-            bgmButtonLabel?.setText(if (enabled) "BGM" else "MUTED")
-            refreshPauseMenuUi()
-        }
-        val pauseBtn = createModernButton("PAUSE", 96f, 52f) {
+        val pauseBtn = createPauseIconButton(68f, 62f, 40f) {
             togglePauseMenu()
         }
-        audioTable.add(sfxBtn).padRight(8f)
-        audioTable.add(bgmBtn).padRight(8f)
-        audioTable.add(pauseBtn)
-        topRightCol.add(audioTable).right().top().row()
+        topRightCol.add(pauseBtn).right().top().padBottom(8f).row()
 
         // Live Scoreboard Card (shows per-player HP, K/D, Score, Roof Respawn status)
         val sbCard = Table()
@@ -717,74 +839,88 @@ class UiSystem(
         val overlay = Table()
         overlay.setFillParent(true)
         overlay.touchable = Touchable.enabled
-        overlay.background = createFillDrawable(Color(0.02f, 0.03f, 0.05f, 0.82f))
+        overlay.background = createFillDrawable(Color(0.02f, 0.03f, 0.05f, 0.90f))
         overlay.isVisible = false
         pauseOverlayRoot = overlay
 
-        val cardW = 790f
-        val cardH = 406f
         val card = Table()
-        card.background = createRoundedDrawable(cardW.toInt(), cardH.toInt(), 12, colDarkChamber, colCyberYellow, 3)
-        card.pad(16f, 20f, 16f, 20f)
+        card.background = createNinePatchRoundedDrawable(14, colDarkChamber, colCyberYellow, 3)
+        card.pad(16f, 22f, 16f, 22f)
 
         // Top Header Bar
         val headerRow = Table()
-        val titleLbl = Label("// GAME PAUSED //", Label.LabelStyle(fontLarge, colCyberYellow))
-        val badgeLbl = Label("", Label.LabelStyle(fontTiny, colCyberCyan))
+        val headerLeft = Table()
+        val headerPauseIcon = getPauseIconDrawable()
+        if (headerPauseIcon != null) {
+            val iconImg = Image(headerPauseIcon).apply { setColor(colCyberYellow) }
+            headerLeft.add(iconImg).size(36f, 36f).padRight(12f)
+        }
+        val titleLbl = Label("// GAME PAUSED //", Label.LabelStyle(fontXLarge, colCyberYellow))
+        headerLeft.add(titleLbl).left()
+        headerRow.add(headerLeft).left().expandX()
+
+        val badgeLbl = Label("", Label.LabelStyle(fontSmall, colCyberCyan))
         pauseRoomBadgeLabel = badgeLbl
-        headerRow.add(titleLbl).left().expandX()
-        headerRow.add(badgeLbl).right()
-        card.add(headerRow).fillX().padBottom(8f).row()
+        headerRow.add(badgeLbl).right().padRight(16f)
+
+        val closeBtn = createModernButton("RESUME ✕", 140f, 44f, fontSmall) {
+            setPaused(false)
+        }
+        headerRow.add(closeBtn).right()
+        card.add(headerRow).fillX().padBottom(10f).row()
 
         val divider = Image(fillAmberDrawable)
-        card.add(divider).height(2f).fillX().padBottom(12f).row()
+        card.add(divider).height(3f).fillX().padBottom(14f).row()
 
         // Main 2-Column Body: Left = Pause Actions, Right = Settings (FX Sound, Vibration/Camera Shake Boom, Gamma)
         val bodyRow = Table()
 
         // --- LEFT COLUMN: PAUSE MENU ACTIONS ---
         val leftMenu = Table()
-        leftMenu.background = createRoundedDrawable(230, 312, 10, Color(0.06f, 0.07f, 0.10f, 0.95f), colCyberOrange, 2)
-        leftMenu.pad(12f)
+        leftMenu.background = createNinePatchRoundedDrawable(10, Color(0.06f, 0.07f, 0.10f, 0.95f), colCyberOrange, 2)
+        leftMenu.pad(16f)
+        leftMenu.top()
 
-        val menuHeader = Label("COMMANDS", Label.LabelStyle(fontSmall, colCyberOrange))
-        leftMenu.add(menuHeader).left().padBottom(10f).row()
+        val menuHeader = Label("COMMANDS", Label.LabelStyle(fontMedium, colCyberOrange))
+        leftMenu.add(menuHeader).left().padBottom(12f).row()
 
-        val resumeBtn = createStyledPauseButton("RESUME GAME", 202f, 48f, colCyberYellow, isPrimary = true) {
+        val resumeBtn = createStyledPauseButton("RESUME GAME", 260f, 58f, colCyberYellow, isPrimary = true, fontOverride = fontMedium) {
             setPaused(false)
         }
-        leftMenu.add(resumeBtn).padBottom(10f).row()
+        leftMenu.add(resumeBtn).fillX().height(58f).padBottom(10f).row()
 
-        val settingsBtn = createStyledPauseButton("SETTINGS • TEST", 202f, 46f, colCyberCyan) {
+        val settingsBtn = createStyledPauseButton("TEST BOOM FX", 260f, 52f, colCyberCyan, fontOverride = fontMedium) {
             cameraShakeSystem.triggerExplosionBoom(0.85f)
+            audioService.play(SoundType.EXPLOSION, volumeModifier = 0.85f)
             refreshPauseMenuUi()
         }
-        leftMenu.add(settingsBtn).padBottom(10f).row()
+        leftMenu.add(settingsBtn).fillX().height(52f).padBottom(10f).row()
 
         val leaveText = if (config.mode != GameMode.OFFLINE) "LEAVE ROOM" else "LEAVE MATCH"
-        val leaveBtn = createStyledPauseButton(leaveText, 202f, 46f, colCyberOrange) {
+        val leaveBtn = createStyledPauseButton(leaveText, 260f, 52f, colCyberOrange, fontOverride = fontMedium) {
             setPaused(false)
             networkSystem.disconnect()
             config.onExitToMenu()
         }
-        leftMenu.add(leaveBtn).padBottom(10f).row()
+        leftMenu.add(leaveBtn).fillX().height(52f).padBottom(10f).row()
 
-        val exitBtn = createStyledPauseButton("EXIT GAME", 202f, 46f, colCyberDanger) {
+        val exitBtn = createStyledPauseButton("EXIT GAME", 260f, 52f, colCyberDanger, fontOverride = fontMedium) {
             networkSystem.disconnect()
             Gdx.app.exit()
         }
-        leftMenu.add(exitBtn).row()
+        leftMenu.add(exitBtn).fillX().height(52f).row()
 
-        bodyRow.add(leftMenu).width(230f).height(312f).top().padRight(14f)
+        bodyRow.add(leftMenu).width(290f).growY().padRight(16f)
 
         // --- RIGHT COLUMN: SETTINGS (FX SOUND, BGM, VIBRATION / CAMERA SHAKE BOOM, GAMMA) ---
         val settingsCard = Table()
-        settingsCard.background = createRoundedDrawable(504, 312, 10, Color(0.06f, 0.07f, 0.10f, 0.95f), colCyberOrange, 2)
-        settingsCard.pad(12f, 16f, 12f, 16f)
+        settingsCard.background = createNinePatchRoundedDrawable(10, Color(0.06f, 0.07f, 0.10f, 0.95f), colCyberOrange, 2)
+        settingsCard.pad(16f, 20f, 16f, 20f)
+        settingsCard.top()
 
         val settingsHeaderRow = Table()
-        val settingsTitle = Label("SETTINGS", Label.LabelStyle(fontSmall, colCyberYellow))
-        val resetAllBtn = createModernButton("DEFAULTS", 98f, 28f, fontTiny) {
+        val settingsTitle = Label("AUDIO & SYSTEM SETTINGS", Label.LabelStyle(fontMedium, colCyberYellow))
+        val resetAllBtn = createModernButton("DEFAULTS", 130f, 42f, fontSmall) {
             GameSettings.resetDefaults()
             audioService.setSoundVolumeLevel(GameSettings.sfxVolume)
             audioService.setMusicVolumeLevel(GameSettings.bgmVolume)
@@ -795,19 +931,19 @@ class UiSystem(
         settingsHeaderRow.add(resetAllBtn).right()
         settingsCard.add(settingsHeaderRow).fillX().padBottom(10f).row()
 
-        val barTrackW = 186f
-        val barTrackH = 22f
+        val barTrackW = pauseSettingBarTrackW
+        val barTrackH = pauseSettingBarTrackH
 
         // 1. FX SOUND (SFX) ROW
         val sfxHeader = Table()
-        sfxHeader.add(Label("FX SOUND (SFX)", Label.LabelStyle(fontTiny, Color.WHITE))).left().expandX()
-        val sfxValLbl = Label("80%", Label.LabelStyle(fontTiny, colCyberYellow))
+        sfxHeader.add(Label("FX SOUND (SFX)", Label.LabelStyle(fontMedium, Color.WHITE))).left().expandX()
+        val sfxValLbl = Label("80%", Label.LabelStyle(fontMedium, colCyberYellow))
         pauseSfxValueLabel = sfxValLbl
         sfxHeader.add(sfxValLbl).right()
         settingsCard.add(sfxHeader).fillX().padBottom(3f).row()
 
         val sfxControls = Table()
-        val sfxToggleStack = createPauseToggleBtn("ON", 74f, 32f) {
+        val sfxToggleStack = createPauseToggleBtn("ON", 96f, 44f, fontMedium) {
             audioService.toggleSound()
             if (audioService.isSoundEnabled) {
                 audioService.play(SoundType.SHOT, volumeModifier = 0.65f)
@@ -816,7 +952,7 @@ class UiSystem(
         }
         pauseSfxToggleLabel = sfxToggleStack.second
 
-        val sfxMinusBtn = createModernButton("-", 38f, 32f, fontMedium) {
+        val sfxMinusBtn = createModernButton("-", 48f, 44f, fontLarge) {
             val next = (if (audioService.isSoundEnabled) audioService.soundVolume - 0.10f else 0f).coerceIn(0f, 1f)
             audioService.setSoundVolumeLevel(next)
             audioService.play(SoundType.SHOT, volumeModifier = 0.65f)
@@ -825,14 +961,14 @@ class UiSystem(
         val (sfxBarTable, sfxFillImg, sfxCell) = createSettingProgressBar(barTrackW, barTrackH)
         pauseSfxFillImage = sfxFillImg
         pauseSfxFillCell = sfxCell
-        val sfxPlusBtn = createModernButton("+", 38f, 32f, fontMedium) {
+        val sfxPlusBtn = createModernButton("+", 48f, 44f, fontLarge) {
             val base = if (audioService.isSoundEnabled) audioService.soundVolume else 0f
             val next = (base + 0.10f).coerceIn(0.10f, 1f)
             audioService.setSoundVolumeLevel(next)
             audioService.play(SoundType.SHOT, volumeModifier = 0.65f)
             refreshPauseMenuUi()
         }
-        val sfxTestBtn = createModernButton("TEST", 58f, 32f, fontTiny) {
+        val sfxTestBtn = createModernButton("TEST", 90f, 44f, fontSmall) {
             if (!audioService.isSoundEnabled) audioService.toggleSound()
             audioService.play(SoundType.SHOT, volumeModifier = 0.85f)
             refreshPauseMenuUi()
@@ -842,24 +978,24 @@ class UiSystem(
         sfxControls.add(sfxBarTable).width(barTrackW).height(barTrackH).padRight(6f)
         sfxControls.add(sfxPlusBtn).padRight(8f)
         sfxControls.add(sfxTestBtn)
-        settingsCard.add(sfxControls).left().padBottom(9f).row()
+        settingsCard.add(sfxControls).left().padBottom(10f).row()
 
         // 2. MUSIC (BGM) ROW
         val bgmHeader = Table()
-        bgmHeader.add(Label("BACKGROUND MUSIC (BGM)", Label.LabelStyle(fontTiny, Color.WHITE))).left().expandX()
-        val bgmValLbl = Label("50%", Label.LabelStyle(fontTiny, colCyberYellow))
+        bgmHeader.add(Label("BACKGROUND MUSIC (BGM)", Label.LabelStyle(fontMedium, Color.WHITE))).left().expandX()
+        val bgmValLbl = Label("50%", Label.LabelStyle(fontMedium, colCyberYellow))
         pauseBgmValueLabel = bgmValLbl
         bgmHeader.add(bgmValLbl).right()
         settingsCard.add(bgmHeader).fillX().padBottom(3f).row()
 
         val bgmControls = Table()
-        val bgmToggleStack = createPauseToggleBtn("ON", 74f, 32f) {
+        val bgmToggleStack = createPauseToggleBtn("ON", 96f, 44f, fontMedium) {
             audioService.toggleMusic()
             refreshPauseMenuUi()
         }
         pauseBgmToggleLabel = bgmToggleStack.second
 
-        val bgmMinusBtn = createModernButton("-", 38f, 32f, fontMedium) {
+        val bgmMinusBtn = createModernButton("-", 48f, 44f, fontLarge) {
             val next = (if (audioService.isMusicEnabled) audioService.musicVolume - 0.10f else 0f).coerceIn(0f, 1f)
             audioService.setMusicVolumeLevel(next)
             refreshPauseMenuUi()
@@ -867,13 +1003,13 @@ class UiSystem(
         val (bgmBarTable, bgmFillImg, bgmCell) = createSettingProgressBar(barTrackW, barTrackH)
         pauseBgmFillImage = bgmFillImg
         pauseBgmFillCell = bgmCell
-        val bgmPlusBtn = createModernButton("+", 38f, 32f, fontMedium) {
+        val bgmPlusBtn = createModernButton("+", 48f, 44f, fontLarge) {
             val base = if (audioService.isMusicEnabled) audioService.musicVolume else 0f
             val next = (base + 0.10f).coerceIn(0.10f, 1f)
             audioService.setMusicVolumeLevel(next)
             refreshPauseMenuUi()
         }
-        val bgmMuteBtn = createModernButton("50%", 58f, 32f, fontTiny) {
+        val bgmMuteBtn = createModernButton("50%", 90f, 44f, fontSmall) {
             audioService.setMusicVolumeLevel(0.5f)
             refreshPauseMenuUi()
         }
@@ -882,18 +1018,18 @@ class UiSystem(
         bgmControls.add(bgmBarTable).width(barTrackW).height(barTrackH).padRight(6f)
         bgmControls.add(bgmPlusBtn).padRight(8f)
         bgmControls.add(bgmMuteBtn)
-        settingsCard.add(bgmControls).left().padBottom(9f).row()
+        settingsCard.add(bgmControls).left().padBottom(10f).row()
 
         // 3. VIBRATION / CAMERA SHAKE (BOOM) ROW
         val vibHeader = Table()
-        vibHeader.add(Label("VIBRATION & CAMERA SHAKE (BOOM)", Label.LabelStyle(fontTiny, Color.WHITE))).left().expandX()
-        val vibValLbl = Label("100%", Label.LabelStyle(fontTiny, colCyberCyan))
+        vibHeader.add(Label("VIBRATION & CAMERA SHAKE (BOOM)", Label.LabelStyle(fontMedium, Color.WHITE))).left().expandX()
+        val vibValLbl = Label("100%", Label.LabelStyle(fontMedium, colCyberCyan))
         pauseVibValueLabel = vibValLbl
         vibHeader.add(vibValLbl).right()
         settingsCard.add(vibHeader).fillX().padBottom(3f).row()
 
         val vibControls = Table()
-        val vibToggleStack = createPauseToggleBtn("ON", 74f, 32f) {
+        val vibToggleStack = createPauseToggleBtn("ON", 96f, 44f, fontMedium) {
             val newEnabled = !GameSettings.vibrationEnabled
             val newIntensity = if (newEnabled && GameSettings.vibrationIntensity <= 0.05f) 1.0f else GameSettings.vibrationIntensity
             GameSettings.updateVibration(newEnabled, newIntensity)
@@ -904,7 +1040,7 @@ class UiSystem(
         }
         pauseVibToggleLabel = vibToggleStack.second
 
-        val vibMinusBtn = createModernButton("-", 38f, 32f, fontMedium) {
+        val vibMinusBtn = createModernButton("-", 48f, 44f, fontLarge) {
             val next = (GameSettings.vibrationIntensity - 0.20f).coerceIn(0f, 2.0f)
             GameSettings.updateVibration(enabled = next > 0.01f, intensity = next)
             if (next > 0.01f) cameraShakeSystem.triggerExplosionBoom(0.75f)
@@ -913,14 +1049,14 @@ class UiSystem(
         val (vibBarTable, vibFillImg, vibCell) = createSettingProgressBar(barTrackW, barTrackH)
         pauseVibFillImage = vibFillImg
         pauseVibFillCell = vibCell
-        val vibPlusBtn = createModernButton("+", 38f, 32f, fontMedium) {
+        val vibPlusBtn = createModernButton("+", 48f, 44f, fontLarge) {
             val base = if (GameSettings.vibrationEnabled) GameSettings.vibrationIntensity else 0f
             val next = (base + 0.20f).coerceIn(0.20f, 2.0f)
             GameSettings.updateVibration(enabled = true, intensity = next)
             cameraShakeSystem.triggerExplosionBoom(0.85f)
             refreshPauseMenuUi()
         }
-        val vibBoomBtn = createModernButton("BOOM!", 58f, 32f, fontTiny) {
+        val vibBoomBtn = createModernButton("BOOM!", 90f, 44f, fontSmall) {
             if (!GameSettings.vibrationEnabled) {
                 GameSettings.updateVibration(enabled = true, intensity = GameSettings.vibrationIntensity.coerceAtLeast(1.0f))
             }
@@ -933,33 +1069,33 @@ class UiSystem(
         vibControls.add(vibBarTable).width(barTrackW).height(barTrackH).padRight(6f)
         vibControls.add(vibPlusBtn).padRight(8f)
         vibControls.add(vibBoomBtn)
-        settingsCard.add(vibControls).left().padBottom(9f).row()
+        settingsCard.add(vibControls).left().padBottom(10f).row()
 
         // 4. GAMMA (BRIGHTNESS) ROW
         val gammaHeader = Table()
-        gammaHeader.add(Label("GAMMA / BRIGHTNESS", Label.LabelStyle(fontTiny, Color.WHITE))).left().expandX()
-        val gammaValLbl = Label("100%", Label.LabelStyle(fontTiny, colCyberYellow))
+        gammaHeader.add(Label("GAMMA / BRIGHTNESS", Label.LabelStyle(fontMedium, Color.WHITE))).left().expandX()
+        val gammaValLbl = Label("100%", Label.LabelStyle(fontMedium, colCyberYellow))
         pauseGammaValueLabel = gammaValLbl
         gammaHeader.add(gammaValLbl).right()
         settingsCard.add(gammaHeader).fillX().padBottom(3f).row()
 
         val gammaControls = Table()
-        val gammaResetBtn = createModernButton("100%", 74f, 32f, fontTiny) {
+        val gammaResetBtn = createModernButton("100%", 96f, 44f, fontSmall) {
             GameSettings.updateGamma(1.0f)
             refreshPauseMenuUi()
         }
-        val gammaMinusBtn = createModernButton("-", 38f, 32f, fontMedium) {
+        val gammaMinusBtn = createModernButton("-", 48f, 44f, fontLarge) {
             GameSettings.updateGamma((GameSettings.gamma - 0.10f).coerceIn(0.50f, 1.50f))
             refreshPauseMenuUi()
         }
         val (gammaBarTable, gammaFillImg, gammaCell) = createSettingProgressBar(barTrackW, barTrackH)
         pauseGammaFillImage = gammaFillImg
         pauseGammaFillCell = gammaCell
-        val gammaPlusBtn = createModernButton("+", 38f, 32f, fontMedium) {
+        val gammaPlusBtn = createModernButton("+", 48f, 44f, fontLarge) {
             GameSettings.updateGamma((GameSettings.gamma + 0.10f).coerceIn(0.50f, 1.50f))
             refreshPauseMenuUi()
         }
-        val gammaMaxBtn = createModernButton("125%", 58f, 32f, fontTiny) {
+        val gammaMaxBtn = createModernButton("125%", 90f, 44f, fontSmall) {
             GameSettings.updateGamma(1.25f)
             refreshPauseMenuUi()
         }
@@ -970,12 +1106,247 @@ class UiSystem(
         gammaControls.add(gammaMaxBtn)
         settingsCard.add(gammaControls).left().row()
 
-        bodyRow.add(settingsCard).width(504f).height(312f).top()
-        card.add(bodyRow).row()
+        bodyRow.add(settingsCard).grow().top()
 
-        overlay.add(card).size(cardW, cardH).center()
+        card.add(bodyRow).grow().row()
+
+        overlay.add(card).grow().pad(14f, 20f, 14f, 20f)
         uiStage.addActor(overlay)
         refreshPauseMenuUi(includeNetworkState = false)
+    }
+
+    private fun setupRoundUi() {
+        // 1. Center-screen round start & round over banner
+        roundBannerContainer = Table()
+        roundBannerContainer.setFillParent(true)
+        roundBannerContainer.center()
+        roundBannerContainer.touchable = Touchable.disabled
+
+        val bannerCard = Table()
+        bannerCard.background = createNinePatchRoundedDrawable(12, colDarkChamber, colCyberYellow, 3)
+        bannerCard.pad(16f, 26f, 16f, 26f)
+
+        roundBannerTitleLabel = Label("", Label.LabelStyle(fontMedium, colCyberYellow)).apply {
+            setAlignment(Align.center)
+        }
+        roundBannerSubtitleLabel = Label("", Label.LabelStyle(fontXLarge, Color.WHITE)).apply {
+            setAlignment(Align.center)
+        }
+        roundBannerScoreLabel = Label("", Label.LabelStyle(fontSmall, colCyberCyan)).apply {
+            setAlignment(Align.center)
+        }
+
+        bannerCard.add(roundBannerTitleLabel).center().padBottom(6f).row()
+        bannerCard.add(roundBannerSubtitleLabel).center().padBottom(6f).row()
+        bannerCard.add(roundBannerScoreLabel).center().row()
+
+        roundBannerContainer.add(bannerCard).width(620f).height(170f)
+        roundBannerContainer.isVisible = false
+        uiStage.addActor(roundBannerContainer)
+
+        // 2. Full-screen Grand Match Over Victory & Results Ceremony Modal
+        matchOverOverlay = Table()
+        matchOverOverlay.setFillParent(true)
+        matchOverOverlay.touchable = Touchable.enabled
+        matchOverOverlay.background = createFillDrawable(Color(0.02f, 0.03f, 0.05f, 0.94f))
+        matchOverOverlay.isVisible = false
+
+        val dialogCard = Table()
+        dialogCard.background = createNinePatchRoundedDrawable(14, colDarkChamber, colCyberYellow, 3)
+        dialogCard.pad(18f, 26f, 18f, 26f)
+
+        matchWinnerTitleLabel = Label("MATCH FINISHED", Label.LabelStyle(fontXLarge, colCyberYellow)).apply {
+            setAlignment(Align.center)
+        }
+        matchWinnerSubLabel = Label("", Label.LabelStyle(fontMedium, Color.WHITE)).apply {
+            setAlignment(Align.center)
+        }
+
+        dialogCard.add(matchWinnerTitleLabel).center().padBottom(4f).row()
+        dialogCard.add(matchWinnerSubLabel).center().padBottom(14f).row()
+
+        // Leaderboard table
+        matchLeaderboardTable = Table()
+        dialogCard.add(matchLeaderboardTable).expandX().fillX().padBottom(16f).row()
+
+        // Action Buttons Row: [ PLAY AGAIN / REMATCH ]  [ RETURN TO MENU ]
+        val btnRow = Table()
+        val rematchBtn = createStyledPauseButton(
+            text = "PLAY AGAIN / REMATCH",
+            width = 250f,
+            height = 50f,
+            borderColor = colCyberYellow,
+            isPrimary = true,
+            fontOverride = fontMedium
+        ) {
+            matchRoundSystem.restartMatch()
+            matchOverOverlay.isVisible = false
+        }
+
+        val exitMenuBtn = createStyledPauseButton(
+            text = "RETURN TO MENU",
+            width = 220f,
+            height = 50f,
+            borderColor = colCyberOrange,
+            isPrimary = false,
+            fontOverride = fontMedium
+        ) {
+            config.onExitToMenu()
+        }
+
+        btnRow.add(rematchBtn).width(250f).height(50f).padRight(20f)
+        btnRow.add(exitMenuBtn).width(220f).height(50f)
+        dialogCard.add(btnRow).center().row()
+
+        matchOverOverlay.add(dialogCard).width(820f).height(410f)
+        uiStage.addActor(matchOverOverlay)
+    }
+
+    private fun updateRoundUi() {
+        if (!matchRoundSystem.isMatchRoundMode) {
+            roundBannerContainer.isVisible = false
+            matchOverOverlay.isVisible = false
+            return
+        }
+
+        when (matchRoundSystem.state) {
+            MatchRoundState.STARTING -> {
+                matchOverOverlay.isVisible = false
+                roundBannerContainer.isVisible = true
+                roundBannerContainer.toFront()
+
+                val modeText = if (matchRoundSystem.isOvertimeRound) "OVERTIME SUDDEN DEATH" else config.mode.displayName.uppercase()
+                roundBannerTitleLabel.setText("$modeText • ROUND ${matchRoundSystem.currentRound} OF ${matchRoundSystem.totalRounds}")
+                roundBannerTitleLabel.color = colCyberYellow
+
+                val secLeft = max(1, matchRoundSystem.stateTimer.toInt() + 1)
+                if (matchRoundSystem.stateTimer > 0.5f) {
+                    roundBannerSubtitleLabel.setText("GET READY... $secLeft")
+                    roundBannerSubtitleLabel.color = Color.WHITE
+                } else {
+                    roundBannerSubtitleLabel.setText("FIGHT!")
+                    roundBannerSubtitleLabel.color = colCyberYellow
+                }
+
+                roundBannerScoreLabel.setText("ROUND-BASED ARENA MATCH • ELIMINATE OPPONENTS TO WIN")
+                roundBannerScoreLabel.color = colCyberCyan
+            }
+
+            MatchRoundState.ACTIVE -> {
+                matchOverOverlay.isVisible = false
+                roundBannerContainer.isVisible = false
+            }
+
+            MatchRoundState.ROUND_OVER -> {
+                matchOverOverlay.isVisible = false
+                roundBannerContainer.isVisible = true
+                roundBannerContainer.toFront()
+
+                roundBannerTitleLabel.setText("ROUND ${matchRoundSystem.currentRound} COMPLETE")
+                roundBannerTitleLabel.color = colCyberOrange
+
+                val winner = matchRoundSystem.roundWinner
+                if (winner != null) {
+                    if (winner.isLocal) {
+                        roundBannerSubtitleLabel.setText("🏆 YOU WON ROUND ${matchRoundSystem.currentRound}! 🏆")
+                        roundBannerSubtitleLabel.color = colCyberYellow
+                    } else {
+                        roundBannerSubtitleLabel.setText("★ ${winner.name.uppercase()} WON ROUND ${matchRoundSystem.currentRound}! ★")
+                        roundBannerSubtitleLabel.color = colCyberDanger
+                    }
+                } else {
+                    roundBannerSubtitleLabel.setText("ROUND TIED / DRAW!")
+                    roundBannerSubtitleLabel.color = Color.LIGHT_GRAY
+                }
+
+                val secLeft = max(1, matchRoundSystem.stateTimer.toInt() + 1)
+                val scores = matchRoundSystem.combatants.joinToString("  |  ") { "${it.name}: ${it.roundsWon}W" }
+                roundBannerScoreLabel.setText("$scores   [NEXT ROUND IN ${secLeft}S]")
+                roundBannerScoreLabel.color = Color.WHITE
+            }
+
+            MatchRoundState.MATCH_OVER -> {
+                roundBannerContainer.isVisible = false
+                matchOverOverlay.isVisible = true
+                matchOverOverlay.toFront()
+
+                val winner = matchRoundSystem.matchWinner
+                if (winner != null) {
+                    if (winner.isLocal) {
+                        matchWinnerTitleLabel.setText("🏆 VICTORY! YOU WON THE MATCH! 🏆")
+                        matchWinnerTitleLabel.color = colCyberYellow
+                        matchWinnerSubLabel.setText("MATCH CHAMPION: ${winner.name.uppercase()} (${winner.roundsWon} / ${matchRoundSystem.totalRounds} ROUNDS WON)")
+                        matchWinnerSubLabel.color = Color.WHITE
+                    } else {
+                        matchWinnerTitleLabel.setText("💀 DEFEAT — ${winner.name.uppercase()} WON THE MATCH! 💀")
+                        matchWinnerTitleLabel.color = colCyberDanger
+                        matchWinnerSubLabel.setText("MATCH CHAMPION: ${winner.name.uppercase()} (${winner.roundsWon} / ${matchRoundSystem.totalRounds} ROUNDS WON)")
+                        matchWinnerSubLabel.color = Color.WHITE
+                    }
+                } else {
+                    matchWinnerTitleLabel.setText("⚖ DRAW — TIED MATCH! ⚖")
+                    matchWinnerTitleLabel.color = colCyberCyan
+                    matchWinnerSubLabel.setText("HONORABLE DRAW IN THE ARENA")
+                    matchWinnerSubLabel.color = Color.WHITE
+                }
+
+                // Rebuild Leaderboard
+                matchLeaderboardTable.clearChildren()
+
+                // Header Row
+                val headerRow = Table()
+                headerRow.background = createRoundedDrawable(740, 32, 6, colButtonBg, colCyberOrange, 1)
+                headerRow.pad(4f, 12f, 4f, 12f)
+                val rH = Label("RANK", Label.LabelStyle(fontSmall, colCyberYellow))
+                val nH = Label("COMBATANT", Label.LabelStyle(fontSmall, colCyberYellow))
+                val wH = Label("ROUNDS WON", Label.LabelStyle(fontSmall, colCyberYellow))
+                val kH = Label("KILLS / DEATHS", Label.LabelStyle(fontSmall, colCyberYellow))
+                val sH = Label("STATUS", Label.LabelStyle(fontSmall, colCyberYellow))
+
+                headerRow.add(rH).width(80f).left()
+                headerRow.add(nH).width(200f).left()
+                headerRow.add(wH).width(160f).center()
+                headerRow.add(kH).width(160f).center()
+                headerRow.add(sH).width(120f).right()
+                matchLeaderboardTable.add(headerRow).fillX().padBottom(6f).row()
+
+                val ranked = matchRoundSystem.combatants.sortedWith(
+                    compareByDescending<MatchCombatant> { it.roundsWon }
+                        .thenByDescending { it.kills }
+                        .thenBy { it.deaths }
+                )
+
+                ranked.forEachIndexed { idx, c ->
+                    val isFirst = idx == 0
+                    val row = Table()
+                    val bgCol = if (isFirst) Color(0.24f, 0.18f, 0.04f, 0.94f) else colDarkTrack
+                    val borderCol = if (isFirst) colCyberYellow else if (c.isLocal) colCyberCyan else colCyberGrey
+                    row.background = createRoundedDrawable(740, 38, 6, bgCol, borderCol, if (isFirst) 2 else 1)
+                    row.pad(4f, 12f, 4f, 12f)
+
+                    val rankText = when (idx) {
+                        0 -> "👑 1ST"
+                        1 -> "2ND"
+                        2 -> "3RD"
+                        else -> "${idx + 1}TH"
+                    }
+                    val rankLbl = Label(rankText, Label.LabelStyle(fontMedium, if (isFirst) colCyberYellow else Color.WHITE))
+                    val displayName = if (c.isLocal) "${c.name} (YOU)" else c.name
+                    val nameLbl = Label(displayName, Label.LabelStyle(fontSmall, if (c.isLocal) colCyberCyan else Color.WHITE))
+                    val wonLbl = Label("${c.roundsWon} / ${matchRoundSystem.totalRounds}", Label.LabelStyle(fontMedium, if (isFirst) colCyberYellow else Color.WHITE))
+                    val kdLbl = Label("${c.kills} K / ${c.deaths} D", Label.LabelStyle(fontSmall, Color.LIGHT_GRAY))
+                    val statusLbl = Label(if (isFirst) "WINNER" else "RUNNER-UP", Label.LabelStyle(fontSmall, if (isFirst) colCyberYellow else colCyberGrey))
+
+                    row.add(rankLbl).width(80f).left()
+                    row.add(nameLbl).width(200f).left()
+                    row.add(wonLbl).width(160f).center()
+                    row.add(kdLbl).width(160f).center()
+                    row.add(statusLbl).width(120f).right()
+
+                    matchLeaderboardTable.add(row).fillX().padBottom(4f).row()
+                }
+            }
+        }
     }
 
     private fun createStyledPauseButton(
@@ -984,15 +1355,16 @@ class UiSystem(
         height: Float,
         borderColor: Color,
         isPrimary: Boolean = false,
+        fontOverride: BitmapFont = fontMedium,
         onClick: () -> Unit
     ): Stack {
         val stack = Stack()
         val bgCol = if (isPrimary) Color(0.24f, 0.18f, 0.04f, 0.96f) else colButtonBg
-        val normalDrawable = createRoundedDrawable(width.toInt(), height.toInt(), 8, bgCol, borderColor, 2)
-        val pressedDrawable = createRoundedDrawable(width.toInt(), height.toInt(), 8, colButtonPressed, colCyberYellow, 3)
+        val normalDrawable = createNinePatchRoundedDrawable(8, bgCol, borderColor, 2)
+        val pressedDrawable = createNinePatchRoundedDrawable(8, colButtonPressed, colCyberYellow, 3)
 
         val bgImage = Image(normalDrawable)
-        val label = Label(text, Label.LabelStyle(fontSmall, if (isPrimary) colCyberYellow else Color.WHITE))
+        val label = Label(text, Label.LabelStyle(fontOverride, if (isPrimary) colCyberYellow else Color.WHITE))
         label.setAlignment(Align.center)
 
         stack.add(bgImage)
@@ -1017,14 +1389,15 @@ class UiSystem(
         initialText: String,
         width: Float,
         height: Float,
+        fontOverride: BitmapFont = fontMedium,
         onClick: () -> Unit
     ): Pair<Stack, Label> {
         val stack = Stack()
-        val normalDrawable = createRoundedDrawable(width.toInt(), height.toInt(), 8, colButtonBg, colCyberOrange, 2)
-        val pressedDrawable = createRoundedDrawable(width.toInt(), height.toInt(), 8, colButtonPressed, colCyberYellow, 2)
+        val normalDrawable = createNinePatchRoundedDrawable(6, colButtonBg, colCyberOrange, 2)
+        val pressedDrawable = createNinePatchRoundedDrawable(6, colButtonPressed, colCyberYellow, 2)
 
         val bgImage = Image(normalDrawable)
-        val label = Label(initialText, Label.LabelStyle(fontTiny, colCyberYellow))
+        val label = Label(initialText, Label.LabelStyle(fontOverride, colCyberYellow))
         label.setAlignment(Align.center)
 
         stack.add(bgImage)
@@ -1047,10 +1420,10 @@ class UiSystem(
 
     private fun createSettingProgressBar(width: Float, height: Float): Triple<Table, Image, Cell<Image>> {
         val frame = Table()
-        frame.background = createRoundedDrawable(width.toInt(), height.toInt(), 5, colDarkTrack, colCyberOrange, 1)
-        frame.left().pad(3f)
+        frame.background = createRoundedDrawable(width.toInt(), height.toInt(), 6, colDarkTrack, colCyberOrange, 1)
+        frame.left().pad(4f)
         val fillImg = Image(fillYellowDrawable)
-        val cell = frame.add(fillImg).size(width - 6f, height - 6f).left()
+        val cell = frame.add(fillImg).size(width - 8f, height - 8f).left()
         return Triple(frame, fillImg, cell)
     }
 
@@ -1074,11 +1447,7 @@ class UiSystem(
     }
 
     private fun refreshPauseMenuUi(includeNetworkState: Boolean = true) {
-        val maxInnerBarW = 180f
-
-        // Update HUD top-right SFX / BGM labels too
-        sfxButtonLabel?.setText(if (audioService.isSoundEnabled) "SFX" else "MUTED")
-        bgmButtonLabel?.setText(if (audioService.isMusicEnabled) "BGM" else "MUTED")
+        val maxInnerBarW = pauseSettingBarTrackW - 8f
 
         // Room / Mode badge in pause header
         val netCode = if (includeNetworkState) {
@@ -1153,9 +1522,6 @@ class UiSystem(
         val bgImage = Image(normalDrawable)
         val label = Label(text, Label.LabelStyle(fontOverride, Color.WHITE))
         label.setAlignment(Align.center)
-
-        if (text == "SFX" || text == "MUTED" && sfxButtonLabel == null) sfxButtonLabel = label
-        else if (text == "BGM" || text == "MUTED" && bgmButtonLabel == null) bgmButtonLabel = label
 
         stack.add(bgImage)
         stack.add(label)
@@ -1333,60 +1699,97 @@ class UiSystem(
         // Update combat feed banner
         combatFeedLabel.setText(networkSystem.combatFeedMessage)
 
-        // Rebuild live scoreboard rows (shows each player's distinct health, K/D, and roof respawn status)
+        // Rebuild live scoreboard rows (shows each player's distinct health, K/D, and round status)
         scoreboardRowsTable.clearChildren()
-        val entries = networkSystem.getScoreboardEntries()
-        if (entries.isEmpty()) {
-            val row = Table()
-            val nameLbl = Label("${config.playerName} (YOU)".take(14), Label.LabelStyle(fontTiny, colCyberCyan))
-            val hpLbl = Label("100HP", Label.LabelStyle(fontTiny, colCyberYellow))
-            val kdLbl = Label("0K/0D", Label.LabelStyle(fontTiny, Color.LIGHT_GRAY))
-            row.add(nameLbl).width(120f).left()
-            row.add(hpLbl).width(64f).left()
-            row.add(kdLbl).width(64f).right()
-            scoreboardRowsTable.add(row).left().padBottom(2f).row()
-        } else {
-            entries.take(6).forEach { e ->
+        if (matchRoundSystem.isMatchRoundMode) {
+            val modeTitle = if (matchRoundSystem.isOvertimeRound) "OVERTIME" else "ROUND ${matchRoundSystem.currentRound}/${matchRoundSystem.totalRounds}"
+            sbTitleLabel.setText("${config.mode.name} • $modeTitle (${matchRoundSystem.aliveCombatantsCount}/${matchRoundSystem.totalCombatantsCount})")
+
+            matchRoundSystem.combatants.forEach { c ->
                 val row = Table()
-                val isDead = e.health <= 0f
-                val statusText = if (isDead) "ROOF" else "${e.health.toInt()}HP"
+                val e = c.entity
+                val hp = e?.let { healthCmps.getOrNull(it)?.currentHealth?.toInt() } ?: (if (c.isAlive) 100 else 0)
+                val isDead = !c.isAlive || hp <= 0
+                val statusText = if (isDead) "DOWN" else "${hp}HP"
                 val rowColor = when {
                     isDead -> colCyberDanger
-                    e.isLocal -> colCyberCyan
+                    c.isLocal -> colCyberCyan
                     else -> Color.WHITE
                 }
-                val displayName = if (e.isLocal) "${e.name} (YOU)" else e.name
-                val nameLbl = Label(displayName.take(14), Label.LabelStyle(fontTiny, rowColor))
-                val hpLbl = Label(statusText, Label.LabelStyle(fontTiny, if (isDead) colCyberDanger else colCyberYellow))
-                val kdLbl = Label("${e.kills}K/${e.deaths}D", Label.LabelStyle(fontTiny, Color.LIGHT_GRAY))
+                val displayName = if (c.isLocal) "${c.name} (YOU)" else c.name
 
+                val nameLbl = Label(displayName.take(13), Label.LabelStyle(fontTiny, rowColor))
+                val hpLbl = Label(statusText, Label.LabelStyle(fontTiny, if (isDead) colCyberDanger else colCyberYellow))
+                val winsLbl = Label("${c.roundsWon}W", Label.LabelStyle(fontTiny, colCyberYellow))
+                val kdLbl = Label("${c.kills}K/${c.deaths}D", Label.LabelStyle(fontTiny, Color.LIGHT_GRAY))
+
+                row.add(nameLbl).width(105f).left()
+                row.add(hpLbl).width(55f).left()
+                row.add(winsLbl).width(40f).center()
+                row.add(kdLbl).width(60f).right()
+                scoreboardRowsTable.add(row).left().padBottom(2f).row()
+            }
+        } else {
+            val entries = networkSystem.getScoreboardEntries()
+            if (entries.isEmpty()) {
+                val row = Table()
+                val nameLbl = Label("${config.playerName} (YOU)".take(14), Label.LabelStyle(fontTiny, colCyberCyan))
+                val hpLbl = Label("100HP", Label.LabelStyle(fontTiny, colCyberYellow))
+                val kdLbl = Label("0K/0D", Label.LabelStyle(fontTiny, Color.LIGHT_GRAY))
                 row.add(nameLbl).width(120f).left()
                 row.add(hpLbl).width(64f).left()
                 row.add(kdLbl).width(64f).right()
                 scoreboardRowsTable.add(row).left().padBottom(2f).row()
+            } else {
+                entries.take(6).forEach { e ->
+                    val row = Table()
+                    val isDead = e.health <= 0f
+                    val statusText = if (isDead) "ROOF" else "${e.health.toInt()}HP"
+                    val rowColor = when {
+                        isDead -> colCyberDanger
+                        e.isLocal -> colCyberCyan
+                        else -> Color.WHITE
+                    }
+                    val displayName = if (e.isLocal) "${e.name} (YOU)" else e.name
+                    val nameLbl = Label(displayName.take(14), Label.LabelStyle(fontTiny, rowColor))
+                    val hpLbl = Label(statusText, Label.LabelStyle(fontTiny, if (isDead) colCyberDanger else colCyberYellow))
+                    val kdLbl = Label("${e.kills}K/${e.deaths}D", Label.LabelStyle(fontTiny, Color.LIGHT_GRAY))
+
+                    row.add(nameLbl).width(120f).left()
+                    row.add(hpLbl).width(64f).left()
+                    row.add(kdLbl).width(64f).right()
+                    scoreboardRowsTable.add(row).left().padBottom(2f).row()
+                }
             }
         }
 
-        var directorEntity: Entity? = null
-        world.family(allOf = arrayOf(WaveDirectorComponent::class)).forEach {
-            directorEntity = it
-        }
-        val waveDirector = directorEntity
-        if (waveDirector != null) {
-            val waveCmp = waveCmps[waveDirector]
-            when (waveCmp.state) {
-                WaveState.COUNTDOWN -> {
-                    waveTagLabel.setText("NEXT WAVE")
-                    val secs = (waveCmp.stateTimer + 0.99f).toInt()
-                    waveValueLabel.setText("${secs}S")
-                }
-                WaveState.SPAWNING, WaveState.IN_PROGRESS -> {
-                    waveTagLabel.setText("WAVE")
-                    waveValueLabel.setText("${waveCmp.wave}")
-                }
-                WaveState.WAVE_CLEARED -> {
-                    waveTagLabel.setText("STATUS")
-                    waveValueLabel.setText("CLEARED")
+        if (matchRoundSystem.isMatchRoundMode) {
+            waveTagLabel.setText(if (matchRoundSystem.isOvertimeRound) "OVERTIME" else "ROUND")
+            waveValueLabel.setText("${matchRoundSystem.currentRound}/${matchRoundSystem.totalRounds}")
+            waveTagLabel.color = colCyberYellow
+            waveValueLabel.color = Color.WHITE
+        } else {
+            var directorEntity: Entity? = null
+            world.family(allOf = arrayOf(WaveDirectorComponent::class)).forEach {
+                directorEntity = it
+            }
+            val waveDirector = directorEntity
+            if (waveDirector != null) {
+                val waveCmp = waveCmps[waveDirector]
+                when (waveCmp.state) {
+                    WaveState.COUNTDOWN -> {
+                        waveTagLabel.setText("NEXT WAVE")
+                        val secs = (waveCmp.stateTimer + 0.99f).toInt()
+                        waveValueLabel.setText("${secs}S")
+                    }
+                    WaveState.SPAWNING, WaveState.IN_PROGRESS -> {
+                        waveTagLabel.setText("WAVE")
+                        waveValueLabel.setText("${waveCmp.wave}")
+                    }
+                    WaveState.WAVE_CLEARED -> {
+                        waveTagLabel.setText("STATUS")
+                        waveValueLabel.setText("CLEARED")
+                    }
                 }
             }
         }
@@ -1427,6 +1830,9 @@ class UiSystem(
                 achievementContainer.isVisible = false
             }
         }
+
+        // Update match round banners & victory ceremony
+        updateRoundUi()
     }
 
     private fun healthFrameTableInvalidate(img: Image) {

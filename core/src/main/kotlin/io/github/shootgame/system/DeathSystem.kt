@@ -15,8 +15,12 @@ import io.github.shootgame.component.PlayerComponent
 import io.github.shootgame.component.RemotePlayerComponent
 import io.github.shootgame.component.WeaponComponent
 
+import io.github.shootgame.screen.GameConfig
+import io.github.shootgame.screen.GameMode
+
 @AllOf([DeadComponent::class])
 class DeathSystem(
+    private val config: GameConfig,
     private val deadCmps: ComponentMapper<DeadComponent>,
     private val healthCmps: ComponentMapper<HealthComponent>,
     private val playerCmps: ComponentMapper<PlayerComponent>,
@@ -40,6 +44,12 @@ class DeathSystem(
         dead.time += deltaTime
 
         if (entity in playerCmps) {
+            // In DUO or SQUAD round-based matches, players do NOT respawn mid-round!
+            // MatchRoundSystem will revive and reset all players when the next round starts.
+            if (config.mode == GameMode.DUO || config.mode == GameMode.SQUAD) {
+                return
+            }
+
             // Players respawn after PLAYER_RESPAWN_DURATION
             if (dead.time >= PLAYER_RESPAWN_DURATION) {
                 world.configureEntity(entity) {

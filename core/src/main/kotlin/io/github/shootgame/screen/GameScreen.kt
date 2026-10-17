@@ -47,6 +47,7 @@ import io.github.shootgame.system.StatusEffectSystem
 import io.github.shootgame.system.UiSystem
 import io.github.shootgame.system.WaveDirectorSystem
 import io.github.shootgame.system.NetworkSystem
+import io.github.shootgame.system.MatchRoundSystem
 import ktx.app.KtxScreen
 import ktx.assets.disposeSafely
 import ktx.box2d.createWorld
@@ -83,6 +84,7 @@ class GameScreen(private val config: GameConfig = GameConfig()) : KtxScreen {
 
         system<EntitySpawnSystem>()
         system<NetworkSystem>()
+        system<MatchRoundSystem>()
         system<PlayerInputSystem>()
         system<AiSystem>()
         system<BossSystem>()
