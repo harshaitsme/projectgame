@@ -20,6 +20,7 @@ class AiSystem(
 ) : IteratingSystem() {
 
     private val uiSystem: UiSystem by lazy { world.system<UiSystem>() }
+    private val matchRoundSystem: MatchRoundSystem by lazy { world.system<MatchRoundSystem>() }
 
     override fun onTickEntity(entity: Entity) {
         val ai = aiCmps[entity]
@@ -28,17 +29,30 @@ class AiSystem(
         val image = imageCmps[entity].image
         val physic = physicCmps[entity]
 
-        if (uiSystem.isPaused) {
+        if (uiSystem.isPaused || (matchRoundSystem.isMatchRoundMode && matchRoundSystem.state != MatchRoundState.ACTIVE)) {
             move.cos = 0f
             move.doJump = false
             attack.isAttacking = false
             return
         }
 
-        // Find the active Player entity
+        val enemyCenterX = image.x + image.width * 0.5f
+        val enemyCenterY = image.y + image.height * 0.5f
+
+        // Find the nearest active opponent (living player/combatant)
         var targetPlayer: Entity? = null
+        var closestDistSq = Float.MAX_VALUE
         world.family(allOf = arrayOf(PlayerComponent::class, ImageComponent::class), noneOf = arrayOf(DeadComponent::class)).forEach { player ->
-            targetPlayer = player
+            if (player != entity) {
+                val pImg = imageCmps[player].image
+                val dx = (pImg.x + pImg.width * 0.5f) - enemyCenterX
+                val dy = (pImg.y + pImg.height * 0.5f) - enemyCenterY
+                val d2 = dx * dx + dy * dy
+                if (d2 < closestDistSq) {
+                    closestDistSq = d2
+                    targetPlayer = player
+                }
+            }
         }
 
         val player = targetPlayer
@@ -49,8 +63,6 @@ class AiSystem(
         }
 
         val playerImg = imageCmps[player].image
-        val enemyCenterX = image.x + image.width * 0.5f
-        val enemyCenterY = image.y + image.height * 0.5f
         val playerCenterX = playerImg.x + playerImg.width * 0.5f
         val playerCenterY = playerImg.y + playerImg.height * 0.5f
 
