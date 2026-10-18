@@ -176,6 +176,7 @@ class UiSystem(
     private lateinit var matchWinnerTitleLabel: Label
     private lateinit var matchWinnerSubLabel: Label
     private lateinit var matchLeaderboardTable: Table
+    private var matchOverUiBuilt = false
 
     private var maxHealthBarWidth = 432f
     private var maxAmmoBarWidth = 432f
@@ -1153,52 +1154,53 @@ class UiSystem(
 
         val dialogCard = Table()
         dialogCard.background = createNinePatchRoundedDrawable(14, colDarkChamber, colCyberYellow, 3)
-        dialogCard.pad(18f, 26f, 18f, 26f)
+        dialogCard.pad(16f, 22f, 16f, 22f)
 
-        matchWinnerTitleLabel = Label("MATCH FINISHED", Label.LabelStyle(fontXLarge, colCyberYellow)).apply {
+        matchWinnerTitleLabel = Label("MATCH FINISHED", Label.LabelStyle(fontMedium, colCyberYellow)).apply {
             setAlignment(Align.center)
         }
-        matchWinnerSubLabel = Label("", Label.LabelStyle(fontMedium, Color.WHITE)).apply {
+        matchWinnerSubLabel = Label("", Label.LabelStyle(fontSmall, Color.WHITE)).apply {
             setAlignment(Align.center)
         }
 
-        dialogCard.add(matchWinnerTitleLabel).center().padBottom(4f).row()
-        dialogCard.add(matchWinnerSubLabel).center().padBottom(14f).row()
+        dialogCard.add(matchWinnerTitleLabel).center().padBottom(3f).row()
+        dialogCard.add(matchWinnerSubLabel).center().padBottom(10f).row()
 
         // Leaderboard table
         matchLeaderboardTable = Table()
-        dialogCard.add(matchLeaderboardTable).expandX().fillX().padBottom(16f).row()
+        dialogCard.add(matchLeaderboardTable).expandX().fillX().padBottom(14f).row()
 
         // Action Buttons Row: [ PLAY AGAIN / REMATCH ]  [ RETURN TO MENU ]
         val btnRow = Table()
         val rematchBtn = createStyledPauseButton(
             text = "PLAY AGAIN / REMATCH",
             width = 250f,
-            height = 50f,
+            height = 46f,
             borderColor = colCyberYellow,
             isPrimary = true,
-            fontOverride = fontMedium
+            fontOverride = fontSmall
         ) {
             matchRoundSystem.restartMatch()
             matchOverOverlay.isVisible = false
+            matchOverUiBuilt = false
         }
 
         val exitMenuBtn = createStyledPauseButton(
             text = "RETURN TO MENU",
-            width = 220f,
-            height = 50f,
+            width = 210f,
+            height = 46f,
             borderColor = colCyberOrange,
             isPrimary = false,
-            fontOverride = fontMedium
+            fontOverride = fontSmall
         ) {
             config.onExitToMenu()
         }
 
-        btnRow.add(rematchBtn).width(250f).height(50f).padRight(20f)
-        btnRow.add(exitMenuBtn).width(220f).height(50f)
+        btnRow.add(rematchBtn).width(250f).height(46f).padRight(22f)
+        btnRow.add(exitMenuBtn).width(210f).height(46f)
         dialogCard.add(btnRow).center().row()
 
-        matchOverOverlay.add(dialogCard).width(820f).height(410f)
+        matchOverOverlay.add(dialogCard).width(760f).height(370f)
         uiStage.addActor(matchOverOverlay)
     }
 
@@ -1206,12 +1208,31 @@ class UiSystem(
         if (!matchRoundSystem.isMatchRoundMode) {
             roundBannerContainer.isVisible = false
             matchOverOverlay.isVisible = false
+            matchOverUiBuilt = false
             return
         }
 
         when (matchRoundSystem.state) {
+            MatchRoundState.WAITING_FOR_PLAYERS -> {
+                matchOverOverlay.isVisible = false
+                matchOverUiBuilt = false
+                roundBannerContainer.isVisible = true
+                roundBannerContainer.toFront()
+
+                roundBannerTitleLabel.setText("WAITING FOR PLAYERS • ${matchRoundSystem.combatants.size} OF ${matchRoundSystem.requiredCombatantsCount}")
+                roundBannerTitleLabel.color = colCyberYellow
+
+                val dots = ".".repeat(((matchRoundSystem.roundDuration * 2).toInt() % 3) + 1)
+                roundBannerSubtitleLabel.setText("WAITING FOR OPPONENTS$dots")
+                roundBannerSubtitleLabel.color = Color.WHITE
+
+                roundBannerScoreLabel.setText("ROOM [${config.roomCode}] • MATCH WILL START WHEN ALL PLAYERS ARRIVE")
+                roundBannerScoreLabel.color = colCyberCyan
+            }
+
             MatchRoundState.STARTING -> {
                 matchOverOverlay.isVisible = false
+                matchOverUiBuilt = false
                 roundBannerContainer.isVisible = true
                 roundBannerContainer.toFront()
 
@@ -1234,11 +1255,13 @@ class UiSystem(
 
             MatchRoundState.ACTIVE -> {
                 matchOverOverlay.isVisible = false
+                matchOverUiBuilt = false
                 roundBannerContainer.isVisible = false
             }
 
             MatchRoundState.ROUND_OVER -> {
                 matchOverOverlay.isVisible = false
+                matchOverUiBuilt = false
                 roundBannerContainer.isVisible = true
                 roundBannerContainer.toFront()
 
@@ -1270,82 +1293,108 @@ class UiSystem(
                 matchOverOverlay.isVisible = true
                 matchOverOverlay.toFront()
 
-                val winner = matchRoundSystem.matchWinner
-                if (winner != null) {
-                    if (winner.isLocal) {
-                        matchWinnerTitleLabel.setText("🏆 VICTORY! YOU WON THE MATCH! 🏆")
-                        matchWinnerTitleLabel.color = colCyberYellow
-                        matchWinnerSubLabel.setText("MATCH CHAMPION: ${winner.name.uppercase()} (${winner.roundsWon} / ${matchRoundSystem.totalRounds} ROUNDS WON)")
-                        matchWinnerSubLabel.color = Color.WHITE
-                    } else {
-                        matchWinnerTitleLabel.setText("💀 DEFEAT — ${winner.name.uppercase()} WON THE MATCH! 💀")
-                        matchWinnerTitleLabel.color = colCyberDanger
-                        matchWinnerSubLabel.setText("MATCH CHAMPION: ${winner.name.uppercase()} (${winner.roundsWon} / ${matchRoundSystem.totalRounds} ROUNDS WON)")
-                        matchWinnerSubLabel.color = Color.WHITE
-                    }
-                } else {
-                    matchWinnerTitleLabel.setText("⚖ DRAW — TIED MATCH! ⚖")
-                    matchWinnerTitleLabel.color = colCyberCyan
-                    matchWinnerSubLabel.setText("HONORABLE DRAW IN THE ARENA")
-                    matchWinnerSubLabel.color = Color.WHITE
-                }
-
-                // Rebuild Leaderboard
-                matchLeaderboardTable.clearChildren()
-
-                // Header Row
-                val headerRow = Table()
-                headerRow.background = createRoundedDrawable(740, 32, 6, colButtonBg, colCyberOrange, 1)
-                headerRow.pad(4f, 12f, 4f, 12f)
-                val rH = Label("RANK", Label.LabelStyle(fontSmall, colCyberYellow))
-                val nH = Label("COMBATANT", Label.LabelStyle(fontSmall, colCyberYellow))
-                val wH = Label("ROUNDS WON", Label.LabelStyle(fontSmall, colCyberYellow))
-                val kH = Label("KILLS / DEATHS", Label.LabelStyle(fontSmall, colCyberYellow))
-                val sH = Label("STATUS", Label.LabelStyle(fontSmall, colCyberYellow))
-
-                headerRow.add(rH).width(80f).left()
-                headerRow.add(nH).width(200f).left()
-                headerRow.add(wH).width(160f).center()
-                headerRow.add(kH).width(160f).center()
-                headerRow.add(sH).width(120f).right()
-                matchLeaderboardTable.add(headerRow).fillX().padBottom(6f).row()
-
-                val ranked = matchRoundSystem.combatants.sortedWith(
-                    compareByDescending<MatchCombatant> { it.roundsWon }
-                        .thenByDescending { it.kills }
-                        .thenBy { it.deaths }
-                )
-
-                ranked.forEachIndexed { idx, c ->
-                    val isFirst = idx == 0
-                    val row = Table()
-                    val bgCol = if (isFirst) Color(0.24f, 0.18f, 0.04f, 0.94f) else colDarkTrack
-                    val borderCol = if (isFirst) colCyberYellow else if (c.isLocal) colCyberCyan else colCyberGrey
-                    row.background = createRoundedDrawable(740, 38, 6, bgCol, borderCol, if (isFirst) 2 else 1)
-                    row.pad(4f, 12f, 4f, 12f)
-
-                    val rankText = when (idx) {
-                        0 -> "👑 1ST"
-                        1 -> "2ND"
-                        2 -> "3RD"
-                        else -> "${idx + 1}TH"
-                    }
-                    val rankLbl = Label(rankText, Label.LabelStyle(fontMedium, if (isFirst) colCyberYellow else Color.WHITE))
-                    val displayName = if (c.isLocal) "${c.name} (YOU)" else c.name
-                    val nameLbl = Label(displayName, Label.LabelStyle(fontSmall, if (c.isLocal) colCyberCyan else Color.WHITE))
-                    val wonLbl = Label("${c.roundsWon} / ${matchRoundSystem.totalRounds}", Label.LabelStyle(fontMedium, if (isFirst) colCyberYellow else Color.WHITE))
-                    val kdLbl = Label("${c.kills} K / ${c.deaths} D", Label.LabelStyle(fontSmall, Color.LIGHT_GRAY))
-                    val statusLbl = Label(if (isFirst) "WINNER" else "RUNNER-UP", Label.LabelStyle(fontSmall, if (isFirst) colCyberYellow else colCyberGrey))
-
-                    row.add(rankLbl).width(80f).left()
-                    row.add(nameLbl).width(200f).left()
-                    row.add(wonLbl).width(160f).center()
-                    row.add(kdLbl).width(160f).center()
-                    row.add(statusLbl).width(120f).right()
-
-                    matchLeaderboardTable.add(row).fillX().padBottom(4f).row()
+                if (!matchOverUiBuilt) {
+                    buildMatchOverUi()
+                    matchOverUiBuilt = true
                 }
             }
+        }
+    }
+
+    private fun buildMatchOverUi() {
+        val ranked = matchRoundSystem.combatants.sortedWith(
+            compareByDescending<MatchCombatant> { it.roundsWon }
+                .thenByDescending { it.kills }
+                .thenByDescending { it.damageDealt }
+                .thenBy { it.deaths }
+        )
+        val champion = ranked.firstOrNull() ?: matchRoundSystem.matchWinner
+
+        val rewardsText = if (matchRoundSystem.lastEarnedXp > 0 || matchRoundSystem.lastEarnedScore > 0) {
+            "  •  REWARD: +${matchRoundSystem.lastEarnedXp} XP  +${matchRoundSystem.lastEarnedScore} SCORE [SAVED TO FIREBASE]"
+        } else ""
+
+        if (champion != null) {
+            if (champion.isLocal) {
+                matchWinnerTitleLabel.setText("🏆 VICTORY! YOU WON THE MATCH! 🏆")
+                matchWinnerTitleLabel.color = colCyberYellow
+                matchWinnerSubLabel.setText("MATCH CHAMPION: ${champion.name.uppercase()} (${champion.roundsWon} / ${matchRoundSystem.totalRounds} ROUNDS WON)$rewardsText")
+                matchWinnerSubLabel.color = Color.WHITE
+            } else {
+                matchWinnerTitleLabel.setText("💀 DEFEAT — ${champion.name.uppercase()} WON THE MATCH! 💀")
+                matchWinnerTitleLabel.color = colCyberDanger
+                matchWinnerSubLabel.setText("MATCH CHAMPION: ${champion.name.uppercase()} (${champion.roundsWon} / ${matchRoundSystem.totalRounds} ROUNDS WON)$rewardsText")
+                matchWinnerSubLabel.color = Color.WHITE
+            }
+        } else {
+            matchWinnerTitleLabel.setText("⚖ DRAW — TIED MATCH! ⚖")
+            matchWinnerTitleLabel.color = colCyberCyan
+            matchWinnerSubLabel.setText("HONORABLE DRAW IN THE ARENA$rewardsText")
+            matchWinnerSubLabel.color = Color.WHITE
+        }
+
+        // Rebuild Leaderboard
+        matchLeaderboardTable.clearChildren()
+
+        val tableRowWidth = 710
+        val tableRowHeight = 32
+
+        // Header Row
+        val headerRow = Table()
+        headerRow.background = createRoundedDrawable(tableRowWidth, tableRowHeight, 6, colButtonBg, colCyberOrange, 1)
+        headerRow.pad(3f, 10f, 3f, 10f)
+
+        val rH = Label("RANK", Label.LabelStyle(fontSmall, colCyberYellow)).apply { setAlignment(Align.center) }
+        val nH = Label("COMBATANT", Label.LabelStyle(fontSmall, colCyberYellow)).apply { setAlignment(Align.left) }
+        val wH = Label("ROUNDS WON", Label.LabelStyle(fontSmall, colCyberYellow)).apply { setAlignment(Align.center) }
+        val kH = Label("KILLS / DEATHS", Label.LabelStyle(fontSmall, colCyberYellow)).apply { setAlignment(Align.center) }
+        val sH = Label("STATUS", Label.LabelStyle(fontSmall, colCyberYellow)).apply { setAlignment(Align.center) }
+
+        headerRow.add(rH).width(65f).center()
+        headerRow.add(nH).width(205f).left().padLeft(6f)
+        headerRow.add(wH).width(140f).center()
+        headerRow.add(kH).width(160f).center()
+        headerRow.add(sH).width(120f).center()
+        matchLeaderboardTable.add(headerRow).size(710f, 32f).padBottom(5f).row()
+
+        ranked.forEachIndexed { idx, c ->
+            val isFirst = idx == 0
+            val row = Table()
+            val bgCol = if (isFirst) Color(0.24f, 0.18f, 0.04f, 0.94f) else colDarkTrack
+            val borderCol = if (isFirst) colCyberYellow else if (c.isLocal) colCyberCyan else colCyberGrey
+            row.background = createRoundedDrawable(tableRowWidth, 36, 6, bgCol, borderCol, if (isFirst) 2 else 1)
+            row.pad(3f, 10f, 3f, 10f)
+
+            val rankText = when (idx) {
+                0 -> "👑 1ST"
+                1 -> "2ND"
+                2 -> "3RD"
+                else -> "${idx + 1}TH"
+            }
+            val rankLbl = Label(rankText, Label.LabelStyle(fontSmall, if (isFirst) colCyberYellow else Color.WHITE)).apply {
+                setAlignment(Align.center)
+            }
+            val displayName = if (c.isLocal) "${c.name} (YOU)" else c.name
+            val nameLbl = Label(displayName, Label.LabelStyle(fontSmall, if (c.isLocal) colCyberCyan else Color.WHITE)).apply {
+                setAlignment(Align.left)
+            }
+            val wonLbl = Label("${c.roundsWon} / ${matchRoundSystem.totalRounds}", Label.LabelStyle(fontSmall, if (isFirst) colCyberYellow else Color.WHITE)).apply {
+                setAlignment(Align.center)
+            }
+            val kdLbl = Label("${c.kills} K / ${c.deaths} D", Label.LabelStyle(fontSmall, Color.LIGHT_GRAY)).apply {
+                setAlignment(Align.center)
+            }
+            val statusLbl = Label(if (isFirst) "WINNER" else "RUNNER-UP", Label.LabelStyle(fontSmall, if (isFirst) colCyberYellow else colCyberGrey)).apply {
+                setAlignment(Align.center)
+            }
+
+            row.add(rankLbl).width(65f).center()
+            row.add(nameLbl).width(205f).left().padLeft(6f)
+            row.add(wonLbl).width(140f).center()
+            row.add(kdLbl).width(160f).center()
+            row.add(statusLbl).width(120f).center()
+
+            matchLeaderboardTable.add(row).size(710f, 36f).padBottom(4f).row()
         }
     }
 
@@ -1359,6 +1408,7 @@ class UiSystem(
         onClick: () -> Unit
     ): Stack {
         val stack = Stack()
+        stack.setSize(width, height)
         val bgCol = if (isPrimary) Color(0.24f, 0.18f, 0.04f, 0.96f) else colButtonBg
         val normalDrawable = createNinePatchRoundedDrawable(8, bgCol, borderColor, 2)
         val pressedDrawable = createNinePatchRoundedDrawable(8, colButtonPressed, colCyberYellow, 3)

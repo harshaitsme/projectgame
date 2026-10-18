@@ -15,16 +15,18 @@ import io.github.shootgame.audio.AudioService
 import io.github.shootgame.audio.SoundType
 import io.github.shootgame.component.*
 import io.github.shootgame.component.PhysicComponent.Companion.physicCmpFromImage
+import io.github.shootgame.profile.FirebaseProfileService
 import io.github.shootgame.screen.GameConfig
 import io.github.shootgame.screen.GameMode
 import ktx.box2d.box
 import kotlin.math.max
 
 enum class MatchRoundState {
-    STARTING,       // Countdown before round begins (3... 2... 1... FIGHT!)
-    ACTIVE,         // Active combat in progress
-    ROUND_OVER,     // Round finished, winner announced, intermission
-    MATCH_OVER      // All rounds complete, final match champion ceremony
+    WAITING_FOR_PLAYERS, // Waiting for all human players to join match
+    STARTING,            // Countdown before round begins (3... 2... 1... FIGHT!)
+    ACTIVE,              // Active combat in progress
+    ROUND_OVER,          // Round finished, winner announced, intermission
+    MATCH_OVER           // All rounds complete, final match champion ceremony
 }
 
 data class MatchCombatant(
@@ -111,6 +113,17 @@ class MatchRoundSystem(
     private var initializedCombatants = false
     private var botInitDelay = 0.6f
 
+    val requiredCombatantsCount: Int
+        get() = if (config.mode == GameMode.SQUAD) 4 else 2
+
+    var lastEarnedScore: Long = 0L
+        private set
+
+    var lastEarnedXp: Long = 0L
+        private set
+
+    private var matchStatsAwarded: Boolean = false
+
     override fun onTick() {
         if (!isMatchRoundMode) return
 
@@ -128,6 +141,39 @@ class MatchRoundSystem(
 
         // 3. State machine handling
         when (state) {
+            MatchRoundState.WAITING_FOR_PLAYERS -> {
+                roundDuration += deltaTime
+                freezeAllCombatants()
+
+                // Check for newly connected remote human players
+                world.family(allOf = arrayOf(RemotePlayerComponent::class, NetworkComponent::class)).forEach { remote ->
+                    val net = netCmps[remote]
+                    if (combatantsList.none { it.id == net.networkId }) {
+                        val rName = net.playerName.ifEmpty { "Player_${net.networkId}" }
+                        val slot = combatantsList.size
+                        val remoteCombatant = MatchCombatant(
+                            id = net.networkId,
+                            name = rName,
+                            isLocal = false,
+                            slot = slot,
+                            entity = remote
+                        )
+                        combatantsList.add(remoteCombatant)
+                        audioService.play(SoundType.CLICK, volumeModifier = 0.8f)
+                        networkSystem.postFeed("★ $rName JOINED THE MATCH (${combatantsList.size}/$requiredCombatantsCount) ★", duration = 4.0f)
+                    }
+                }
+
+                if (combatantsList.size >= requiredCombatantsCount) {
+                    resetAllCombatantsForNewRound()
+                    state = MatchRoundState.STARTING
+                    stateTimer = 3.0f
+                    countdownLastSecond = -1
+                    audioService.play(SoundType.RELOAD, volumeModifier = 0.9f)
+                    networkSystem.postFeed("ALL PLAYERS CONNECTED! ROUND 1 - FIGHT!", duration = 4.0f)
+                }
+            }
+
             MatchRoundState.STARTING -> {
                 stateTimer -= deltaTime
                 val currentSecond = max(1, stateTimer.toInt() + 1)
@@ -248,15 +294,38 @@ class MatchRoundSystem(
     }
 
     private fun finalizeMatchWinner() {
-        val champion = combatantsList.maxWithOrNull(
+        val sorted = combatantsList.sortedWith(
             compareByDescending<MatchCombatant> { it.roundsWon }
                 .thenByDescending { it.kills }
                 .thenByDescending { it.damageDealt }
                 .thenBy { it.deaths }
         )
+        val champion = sorted.firstOrNull()
         matchWinner = champion
         val champName = champion?.name?.uppercase() ?: "NO ONE"
         networkSystem.postFeed("🏆 MATCH OVER! CHAMPION: $champName! 🏆", duration = 8.0f)
+
+        if (!matchStatsAwarded) {
+            matchStatsAwarded = true
+            val localCombatant = combatantsList.firstOrNull { it.isLocal }
+            if (localCombatant != null) {
+                val isWinner = champion?.isLocal == true
+                val earnedScore = (localCombatant.kills * 100L) + (localCombatant.roundsWon * 250L) + (if (isWinner) 1000L else 0L) + 200L
+                val earnedXp = (localCombatant.kills * 120L) + (localCombatant.roundsWon * 300L) + (if (isWinner) 1200L else 400L)
+
+                lastEarnedScore = earnedScore
+                lastEarnedXp = earnedXp
+
+                FirebaseProfileService.addMatchResult(
+                    username = config.playerName,
+                    scoreDelta = earnedScore,
+                    xpDelta = earnedXp,
+                    killsDelta = localCombatant.kills,
+                    deathsDelta = localCombatant.deaths,
+                    won = isWinner
+                )
+            }
+        }
     }
 
     private fun initializeCombatants() {
@@ -293,28 +362,37 @@ class MatchRoundSystem(
             combatantsList.add(remoteCombatant)
         }
 
-        // 3. Fill remaining slots with AI Bots
-        val requiredCount = if (config.mode == GameMode.SQUAD) 4 else 2
-        val botNames = listOf("CYBER_BOT", "BOT_VIPER", "BOT_GHOST", "BOT_TITAN")
-
-        while (combatantsList.size < requiredCount && nextSlot < 4) {
-            val (sx, sy) = spawnLocations[nextSlot]
-            val bName = botNames[nextSlot % botNames.size]
-            val botEntity = spawnArenaBot(bName, sx, sy, nextSlot)
-            val botCombatant = MatchCombatant(
-                id = -(nextSlot + 100),
-                name = bName,
-                isLocal = false,
-                slot = nextSlot,
-                entity = botEntity
-            )
-            combatantsList.add(botCombatant)
-            nextSlot++
+        // 3. For offline mode ONLY, fill remaining slots with AI Bots
+        if (config.mode == GameMode.OFFLINE) {
+            val botNames = listOf("CYBER_BOT", "BOT_VIPER", "BOT_GHOST", "BOT_TITAN")
+            while (combatantsList.size < requiredCombatantsCount && nextSlot < 4) {
+                val (sx, sy) = spawnLocations[nextSlot]
+                val bName = botNames[nextSlot % botNames.size]
+                val botEntity = spawnArenaBot(bName, sx, sy, nextSlot)
+                val botCombatant = MatchCombatant(
+                    id = -(nextSlot + 100),
+                    name = bName,
+                    isLocal = false,
+                    slot = nextSlot,
+                    entity = botEntity
+                )
+                combatantsList.add(botCombatant)
+                nextSlot++
+            }
         }
 
         // Teleport everyone to their proper spawn locations for Round 1
         resetAllCombatantsForNewRound()
         initializedCombatants = true
+
+        if (config.mode != GameMode.OFFLINE && combatantsList.size < requiredCombatantsCount) {
+            state = MatchRoundState.WAITING_FOR_PLAYERS
+            networkSystem.postFeed("WAITING FOR OPPONENTS (${combatantsList.size}/$requiredCombatantsCount)...", duration = 6.0f)
+        } else {
+            state = MatchRoundState.STARTING
+            stateTimer = 3.0f
+            countdownLastSecond = -1
+        }
     }
 
     private fun spawnArenaBot(name: String, x: Float, y: Float, slot: Int): Entity {
@@ -489,6 +567,9 @@ class MatchRoundSystem(
         isOvertimeRound = false
         roundWinner = null
         matchWinner = null
+        matchStatsAwarded = false
+        lastEarnedScore = 0L
+        lastEarnedXp = 0L
         combatantsList.forEach { c ->
             c.roundsWon = 0
             c.kills = 0
