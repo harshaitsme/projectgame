@@ -108,6 +108,7 @@ data class GameConfig(
     var jwtToken: String = "",
     var sessionToken: String = "",
     var preConnectedClient: GameClient? = null,
+    var totalRounds: Int = if (mode == GameMode.SQUAD) 4 else 2,
     var onExitToMenu: () -> Unit = {}
 ) {
     companion object {

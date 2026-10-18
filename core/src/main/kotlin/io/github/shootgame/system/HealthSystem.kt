@@ -33,7 +33,10 @@ class HealthSystem(
     private val playerCmps: ComponentMapper<PlayerComponent>,
     private val remotePlayerCmps: ComponentMapper<RemotePlayerComponent>,
     private val statusEffectCmps: ComponentMapper<StatusEffectComponent>,
-    private val shieldCmps: ComponentMapper<ShieldComponent>
+    private val shieldCmps: ComponentMapper<ShieldComponent>,
+    private val perkCmps: ComponentMapper<PerkComponent>,
+    private val bossCmps: ComponentMapper<BossComponent>,
+    private val hazardCmps: ComponentMapper<HazardComponent>
 ) : IteratingSystem() {
 
     override fun onTickEntity(entity: Entity) {
@@ -142,7 +145,7 @@ class HealthSystem(
 
     private fun kill(entity: Entity) {
         val enemy = enemyCmps.getOrNull(entity)
-        if (enemy != null) {
+        if (enemy != null && entity !in playerCmps) {
             world.family(allOf = arrayOf(PlayerComponent::class)).forEach { player ->
                 if (player !in remotePlayerCmps) {
                     playerCmps[player].score += enemy.scoreValue

@@ -67,6 +67,7 @@ class MenuScreen(private val game: Main) : KtxScreen {
 
     private var currentStep = MenuStep.AUTH
     private var selectedMode = GameMode.DUO
+    private var customRounds: Int = 2
     private var activeSession: AuthSessionRecord? = null
     private var authBusy = false
 
@@ -756,7 +757,7 @@ class MenuScreen(private val game: Main) : KtxScreen {
             buildSimpleModeCard(
                 mode = GameMode.OFFLINE,
                 title = "SOLO",
-                subtitle = "1 PLAYER • OFFLINE"
+                subtitle = "1 PLAYER • PRACTICE"
             )
         ).width(310f).height(210f).padRight(22f)
 
@@ -764,7 +765,7 @@ class MenuScreen(private val game: Main) : KtxScreen {
             buildSimpleModeCard(
                 mode = GameMode.DUO,
                 title = "DUO",
-                subtitle = "2 PLAYERS • ONLINE"
+                subtitle = "2 PLAYERS • ${if (selectedMode == GameMode.DUO) customRounds else 2} ROUNDS"
             )
         ).width(310f).height(210f).padRight(22f)
 
@@ -772,7 +773,7 @@ class MenuScreen(private val game: Main) : KtxScreen {
             buildSimpleModeCard(
                 mode = GameMode.SQUAD,
                 title = "SQUAD",
-                subtitle = "4 PLAYERS • ONLINE"
+                subtitle = "4 PLAYERS • ${if (selectedMode == GameMode.SQUAD) customRounds else 4} ROUNDS"
             )
         ).width(310f).height(210f)
 
@@ -914,12 +915,33 @@ class MenuScreen(private val game: Main) : KtxScreen {
             if (selected) "SELECTED" else "SELECT",
             Label.LabelStyle(fontMedium, if (selected) colCyberGreen else colCyberOrange)
         )
-        card.add(statusLbl).center()
+        card.add(statusLbl).center().row()
+
+        if (selected && mode != GameMode.OFFLINE) {
+            val roundsRow = Table()
+            roundsRow.padTop(10f)
+            val minusBtn = createCyberButton("-", 34f, 30f, colButtonBg, colCyberOrange, colCyberYellow, fontSmall) {
+                customRounds = max(1, customRounds - 1)
+                rebuildUi()
+            }
+            val roundsLbl = Label("$customRounds ROUNDS", Label.LabelStyle(fontSmall, colCyberYellow))
+            val plusBtn = createCyberButton("+", 34f, 30f, colButtonBg, colCyberOrange, colCyberYellow, fontSmall) {
+                customRounds = (customRounds + 1).coerceAtMost(10)
+                rebuildUi()
+            }
+            roundsRow.add(minusBtn).padRight(6f)
+            roundsRow.add(roundsLbl).padRight(6f)
+            roundsRow.add(plusBtn)
+            card.add(roundsRow).center()
+        }
 
         card.addListener(object : ClickListener() {
             override fun clicked(event: InputEvent?, x: Float, y: Float) {
                 audioService.play(SoundType.CLICK, volumeModifier = 0.5f)
-                selectedMode = mode
+                if (selectedMode != mode) {
+                    selectedMode = mode
+                    customRounds = if (mode == GameMode.SQUAD) 4 else 2
+                }
                 rebuildUi()
             }
         })
@@ -1000,7 +1022,7 @@ class MenuScreen(private val game: Main) : KtxScreen {
         )
         topBar.pad(8f, 18f, 8f, 18f)
 
-        val modeTitle = Label("${selectedMode.name} ROOM", Label.LabelStyle(fontLarge, colCyberYellow))
+        val modeTitle = Label("${selectedMode.name} • $customRounds ROUNDS", Label.LabelStyle(fontLarge, colCyberYellow))
         topBar.add(modeTitle).left().expandX()
 
         val cLbl = Label("CODE: $waitingRoomCode", Label.LabelStyle(fontLarge, Color.WHITE))
@@ -1105,7 +1127,26 @@ class MenuScreen(private val game: Main) : KtxScreen {
             )
             waitingAutoStartBtnLabel?.color = if (waitingAutoStart) colCyberGreen else colTextDim
         }
-        bottomBar.add(autoStartBtn).width(210f).height(46f).left().expandX()
+        val roundsBtn = createCyberButton(
+            text = "ROUNDS: $customRounds",
+            width = 170f,
+            height = 46f,
+            fillColor = colButtonBg,
+            borderColor = colCyberYellow,
+            textColor = colCyberYellow,
+            fontOverride = fontSmall
+        ) {
+            val nextRounds = when (customRounds) {
+                2 -> 3
+                3 -> 4
+                4 -> 5
+                5 -> 6
+                else -> 2
+            }
+            customRounds = nextRounds
+            rebuildUi()
+        }
+        bottomBar.add(roundsBtn).width(170f).height(46f).padRight(16f)
 
         val startNowBtn = createCyberButton(
             text = "START MATCH",
@@ -1362,7 +1403,8 @@ class MenuScreen(private val game: Main) : KtxScreen {
             createRoom = waitingCreateRoom,
             jwtToken = session?.jwtToken ?: "",
             sessionToken = session?.sessionToken ?: "",
-            preConnectedClient = client
+            preConnectedClient = client,
+            totalRounds = customRounds
         )
         game.startGame(config)
     }
@@ -1558,7 +1600,8 @@ class MenuScreen(private val game: Main) : KtxScreen {
             roomCode = roomCode.trim().uppercase(),
             createRoom = createRoom,
             jwtToken = session?.jwtToken ?: "",
-            sessionToken = session?.sessionToken ?: ""
+            sessionToken = session?.sessionToken ?: "",
+            totalRounds = customRounds
         )
         game.startGame(config)
     }
