@@ -12,6 +12,7 @@ import com.badlogic.gdx.scenes.scene2d.Actor
 import com.badlogic.gdx.scenes.scene2d.InputEvent
 import com.badlogic.gdx.scenes.scene2d.InputListener
 import com.badlogic.gdx.scenes.scene2d.Stage
+import com.badlogic.gdx.scenes.scene2d.Touchable
 import com.badlogic.gdx.scenes.scene2d.ui.Image
 import com.badlogic.gdx.scenes.scene2d.ui.Label
 import com.badlogic.gdx.scenes.scene2d.ui.Stack
@@ -35,6 +36,8 @@ import io.github.shootgame.proto.LoginResponsePacket
 import io.github.shootgame.proto.PlayerConnectedPacket
 import io.github.shootgame.proto.PlayerDisconnectedPacket
 import io.github.shootgame.proto.PlayerStatePacket
+import io.github.shootgame.profile.FirebaseProfileService
+import io.github.shootgame.profile.PlayerProfile
 import ktx.app.KtxScreen
 import ktx.assets.disposeSafely
 import java.net.InetSocketAddress
@@ -100,6 +103,10 @@ class MenuScreen(private val game: Main) : KtxScreen {
     private var waitingCountLabel: Label? = null
     private var waitingSlotsContainer: Table? = null
     private var waitingAutoStartBtnLabel: Label? = null
+    private var waitingStartBtnLabel: Label? = null
+
+    // Player Profile (Score & XP from Firebase)
+    private var activeProfile: PlayerProfile? = null
 
     // Modal Popup overlay reference
     private var activePopupOverlay: Table? = null
@@ -121,6 +128,7 @@ class MenuScreen(private val game: Main) : KtxScreen {
     private val colCyberOrange = Color(1.0f, 0.58f, 0.02f, 1f)
     private val colCyberOrangeDark = Color(0.75f, 0.36f, 0.01f, 1f)
     private val colCyberYellow = Color(1.0f, 0.90f, 0.04f, 1f)
+    private val colCyberCyan = Color(0.18f, 0.88f, 1.0f, 1f)
     private val colCyberDanger = Color(0.96f, 0.22f, 0.26f, 1f)
     private val colCyberGreen = Color(0.24f, 0.96f, 0.48f, 1f)
     private val colCyberGrey = Color(0.38f, 0.40f, 0.44f, 1f)
@@ -141,6 +149,13 @@ class MenuScreen(private val game: Main) : KtxScreen {
         if (cached != null && cached.jwtToken.isNotBlank()) {
             activeSession = cached
             currentStep = MenuStep.LOBBY
+            activeProfile = FirebaseProfileService.getCachedProfile(cached.username)
+            FirebaseProfileService.fetchProfile(cached.username) { profile ->
+                activeProfile = profile
+                if (currentStep == MenuStep.LOBBY) {
+                    rebuildUi()
+                }
+            }
         } else {
             currentStep = MenuStep.AUTH
         }
@@ -489,6 +504,110 @@ class MenuScreen(private val game: Main) : KtxScreen {
         activePopupOverlay = null
     }
 
+    private fun showPlayerProfileModal(profile: PlayerProfile) {
+        activePopupOverlay?.remove()
+
+        val modalW = 540f
+        val modalH = 340f
+
+        val backdrop = Table()
+        backdrop.setFillParent(true)
+        backdrop.background = makeSolidDrawable(0.02f, 0.02f, 0.04f, 0.85f)
+        backdrop.addListener(object : ClickListener() {
+            override fun clicked(event: InputEvent?, x: Float, y: Float) {}
+        })
+
+        val card = Table()
+        card.background = createSciFiPanelDrawable(
+            w = modalW.toInt(),
+            h = modalH.toInt(),
+            bgColor = Color(0.06f, 0.07f, 0.10f, 0.98f),
+            borderColor = colCyberYellow,
+            borderWidth = 3,
+            chamfer = 14,
+            withTechTab = true,
+            accentPipsColor = colCyberYellow
+        )
+        card.pad(18f, 24f, 18f, 24f)
+
+        // Header: Title & Close
+        val header = Table()
+        val titleLbl = Label("OPERATIVE DOSSIER // PROFILE", Label.LabelStyle(fontLarge, colCyberYellow))
+        val closeBtn = createCyberButton("✕", 36f, 32f, colButtonBg, colCyberOrange, Color.WHITE, fontSmall) {
+            dismissPopupModal()
+        }
+        header.add(titleLbl).left().expandX()
+        header.add(closeBtn).right()
+        card.add(header).fillX().padBottom(8f).row()
+
+        val div = Image(makeSolidDrawable(colCyberOrange.r, colCyberOrange.g, colCyberOrange.b, 0.65f))
+        card.add(div).height(2f).fillX().padBottom(12f).row()
+
+        // Body: Avatar + Details
+        val body = Table()
+        if (avatarTexture != null) {
+            val av = Image(TextureRegionDrawable(avatarTexture!!)).apply { setScaling(Scaling.fit) }
+            val avFrame = Table()
+            avFrame.background = createSciFiPanelDrawable(68, 68, colDarkTrack, colCyberYellow, 2, 8, false)
+            avFrame.add(av).size(52f, 52f)
+            body.add(avFrame).size(68f, 68f).padRight(14f).top()
+        }
+
+        val infoCol = Table()
+        val nameLbl = Label(profile.username.uppercase(), Label.LabelStyle(fontLarge, colCyberYellow))
+        val rankBadge = Label("LVL ${profile.level} • ${profile.rankTitle}", Label.LabelStyle(fontSmall, colCyberCyan))
+        infoCol.add(nameLbl).left().row()
+        infoCol.add(rankBadge).left().padBottom(6f).row()
+
+        // XP bar
+        val xpBarTable = Table()
+        val xpTrackW = 360f
+        val xpTrackH = 8f
+        xpBarTable.background = makeSolidDrawable(0.12f, 0.14f, 0.18f, 0.9f)
+        val fillW = (xpTrackW * profile.progressRatio).coerceAtLeast(2f)
+        val fillImg = Image(makeSolidDrawable(colCyberCyan.r, colCyberCyan.g, colCyberCyan.b, 0.95f))
+        xpBarTable.add(fillImg).width(fillW).height(xpTrackH).left().expandX()
+        infoCol.add(xpBarTable).width(xpTrackW).height(xpTrackH).left().padBottom(4f).row()
+
+        val xpText = Label("XP: ${profile.xp}  [${profile.currentLevelXp} / 1000 TO NEXT LEVEL]", Label.LabelStyle(fontTiny, Color.LIGHT_GRAY))
+        infoCol.add(xpText).left().padBottom(6f).row()
+
+        body.add(infoCol).left().expandX().top().row()
+        card.add(body).fillX().padBottom(10f).row()
+
+        // Stats Grid: Score | Kills | Deaths | K/D | Matches | Win Rate
+        val statsGrid = Table()
+        statsGrid.background = createSciFiPanelDrawable(modalW.toInt() - 48, 62, colDarkTrack, colCyberOrange, 1, 8, false)
+        statsGrid.pad(6f, 12f, 6f, 12f)
+
+        val statBox = { label: String, value: String, col: Color ->
+            val t = Table()
+            t.add(Label(value, Label.LabelStyle(fontMedium, col))).center().row()
+            t.add(Label(label, Label.LabelStyle(fontTiny, colTextDim))).center()
+            t
+        }
+
+        statsGrid.add(statBox("SCORE", "${profile.score}", colCyberYellow)).expandX()
+        statsGrid.add(statBox("KILLS", "${profile.kills}", colCyberGreen)).expandX()
+        statsGrid.add(statBox("DEATHS", "${profile.deaths}", colCyberDanger)).expandX()
+        statsGrid.add(statBox("K/D", "%.2f".format(profile.kdRatio), Color.WHITE)).expandX()
+        statsGrid.add(statBox("MATCHES", "${profile.matchesPlayed}", colCyberCyan)).expandX()
+        statsGrid.add(statBox("WINS", "${profile.matchesWon}", colCyberYellow)).expandX()
+        card.add(statsGrid).fillX().padBottom(10f).row()
+
+        // Footer: Cloud Status Badge
+        val footer = Table()
+        val cloudDot = Label("●", Label.LabelStyle(fontTiny, colCyberGreen))
+        val cloudLbl = Label(" FIREBASE REALTIME DB SYNC ACTIVE", Label.LabelStyle(fontTiny, colCyberGreen))
+        footer.add(cloudDot).padRight(4f)
+        footer.add(cloudLbl).left().expandX()
+        card.add(footer).fillX()
+
+        backdrop.add(card).width(modalW).height(modalH).center()
+        activePopupOverlay = backdrop
+        stage.addActor(backdrop)
+    }
+
     private fun showNetworkUnavailablePopup(onRetry: () -> Unit) {
         val statusMsg = if (!internetAvailable) {
             "No internet connection detected.\nConnect to the internet to play ${selectedMode.displayName}, or play Solo offline."
@@ -633,6 +752,13 @@ class MenuScreen(private val game: Main) : KtxScreen {
             authBusy = false
             result.onSuccess { session ->
                 activeSession = session
+                activeProfile = FirebaseProfileService.getCachedProfile(session.username)
+                FirebaseProfileService.fetchProfile(session.username) { profile ->
+                    activeProfile = profile
+                    if (currentStep == MenuStep.LOBBY) {
+                        rebuildUi()
+                    }
+                }
                 currentStep = MenuStep.LOBBY
                 rebuildUi()
             }.onFailure { err ->
@@ -664,45 +790,93 @@ class MenuScreen(private val game: Main) : KtxScreen {
         root.setFillParent(true)
         root.pad(14f, 20f, 14f, 20f)
 
-        // 1. TOP BAR: Player Badge | SHOOT POWER | SFX / BGM / LOGOUT
+        // 1. TOP BAR: Player Profile Card | SHOOT POWER | SFX / BGM / LOGOUT
         val topBar = Table()
         topBar.background = createSciFiPanelDrawable(
             w = 984,
-            h = 56,
+            h = 68,
             bgColor = colDarkChamber,
             borderColor = colCyberOrange,
             borderWidth = 2,
             chamfer = 10,
             withTechTab = false
         )
-        topBar.pad(6f, 16f, 6f, 16f)
+        topBar.pad(4f, 12f, 4f, 12f)
 
-        // Left: Avatar + Player Name + Online Status
+        // Left: Operative Profile Badge (Avatar + Level + Score & XP + Mini Bar)
+        val profile = activeProfile ?: FirebaseProfileService.getCachedProfile(username)
         val playerBox = Table()
+        playerBox.background = createSciFiPanelDrawable(
+            w = 340,
+            h = 58,
+            bgColor = colDarkTrack,
+            borderColor = colCyberYellow,
+            borderWidth = 2,
+            chamfer = 8,
+            withTechTab = false
+        )
+        playerBox.pad(4f, 8f, 4f, 8f)
+
         if (avatarTexture != null) {
             val avImg = Image(TextureRegionDrawable(avatarTexture!!)).apply {
                 setScaling(Scaling.fit)
             }
-            playerBox.add(avImg).size(38f, 38f).padRight(10f)
+            val avFrame = Table()
+            avFrame.background = createSciFiPanelDrawable(44, 44, colDarkChamber, colCyberOrange, 1, 4, false)
+            avFrame.add(avImg).size(36f, 36f)
+            playerBox.add(avFrame).size(44f, 44f).padRight(8f)
         }
-        val nameStack = Table()
+
+        val infoCol = Table()
+        val nameRow = Table()
         val pNameLbl = Label(username.uppercase(), Label.LabelStyle(fontMedium, colCyberYellow))
+        val lvlBadge = Label(" LVL ${profile.level}", Label.LabelStyle(fontTiny, colCyberCyan))
+        nameRow.add(pNameLbl).left()
+        nameRow.add(lvlBadge).left().expandX()
+        infoCol.add(nameRow).fillX().row()
+
+        val scoreXpLbl = Label("★ SCORE: ${profile.score}  |  XP: ${profile.xp}", Label.LabelStyle(fontTiny, Color.WHITE))
+        infoCol.add(scoreXpLbl).left().row()
+
+        val miniXpRow = Table()
+        val miniBar = Table()
+        val miniBarW = 160f
+        val miniBarH = 4f
+        miniBar.background = makeSolidDrawable(0.10f, 0.12f, 0.16f, 0.9f)
+        val fillW = (miniBarW * profile.progressRatio).coerceAtLeast(2f)
+        val fillImg = Image(makeSolidDrawable(colCyberCyan.r, colCyberCyan.g, colCyberCyan.b, 0.95f))
+        miniBar.add(fillImg).width(fillW).height(miniBarH).left().expandX()
+        miniXpRow.add(miniBar).width(miniBarW).height(miniBarH).left().padRight(6f)
+
+        val xpSub = Label("${profile.currentLevelXp}/1000", Label.LabelStyle(fontTiny, colTextDim))
+        miniXpRow.add(xpSub).left()
+        infoCol.add(miniXpRow).left().padTop(2f)
+
+        playerBox.add(infoCol).left().expandX()
+        playerBox.touchable = Touchable.enabled
+        playerBox.addListener(object : ClickListener() {
+            override fun clicked(event: InputEvent?, x: Float, y: Float) {
+                audioService.play(SoundType.CLICK, volumeModifier = 0.6f)
+                val current = activeProfile ?: FirebaseProfileService.getCachedProfile(username)
+                showPlayerProfileModal(current)
+            }
+        })
+        topBar.add(playerBox).left().width(340f)
+
+        // Center: Game Title + Server Status
+        val titleStack = Table()
+        val titleLbl = Label("SHOOT POWER", Label.LabelStyle(fontLarge, colCyberYellow))
         val netText = when {
-            checkingNetwork -> "CHECKING..."
-            serverOnline -> "ONLINE"
-            else -> "OFFLINE"
+            checkingNetwork -> "● SERVER CONNECTING..."
+            serverOnline -> "● SERVER ONLINE"
+            else -> "● SERVER OFFLINE"
         }
         val netCol = if (serverOnline) colCyberGreen else colCyberDanger
         val netLbl = Label(netText, Label.LabelStyle(fontTiny, netCol))
         networkBadgeLabel = netLbl
-        nameStack.add(pNameLbl).left().row()
-        nameStack.add(netLbl).left()
-        playerBox.add(nameStack).left()
-        topBar.add(playerBox).left().width(250f)
-
-        // Center: Game Title
-        val titleLbl = Label("SHOOT POWER", Label.LabelStyle(fontXLarge, colCyberYellow))
-        topBar.add(titleLbl).expandX().center()
+        titleStack.add(titleLbl).center().row()
+        titleStack.add(netLbl).center()
+        topBar.add(titleStack).expandX().center()
 
         // Right: Quick Audio & Logout Buttons
         val rightBtns = Table()
@@ -747,9 +921,9 @@ class MenuScreen(private val game: Main) : KtxScreen {
         rightBtns.add(sfxBtn).width(68f).height(36f).padRight(8f)
         rightBtns.add(bgmBtn).width(68f).height(36f).padRight(8f)
         rightBtns.add(logoutBtn).width(84f).height(36f)
-        topBar.add(rightBtns).right().width(250f)
+        topBar.add(rightBtns).right().width(240f)
 
-        root.add(topBar).fillX().height(56f).padBottom(18f).row()
+        root.add(topBar).fillX().height(68f).padBottom(16f).row()
 
         // 2. CENTER: 3 BIG, CLEAN MODE CARDS (SOLO | DUO | SQUAD)
         val modesRow = Table()
@@ -1149,15 +1323,29 @@ class MenuScreen(private val game: Main) : KtxScreen {
         bottomBar.add(roundsBtn).width(170f).height(46f).padRight(16f)
 
         val startNowBtn = createCyberButton(
-            text = "START MATCH",
+            text = if (waitingMembers.size >= selectedMode.maxPlayers) "START MATCH" else "WAITING (${waitingMembers.size}/${selectedMode.maxPlayers})",
             width = 260f,
             height = 48f,
-            fillColor = colButtonPressed,
-            borderColor = colCyberYellow,
-            textColor = colCyberYellow,
-            fontOverride = fontLarge
+            fillColor = if (waitingMembers.size >= selectedMode.maxPlayers) colButtonPressed else colButtonBg,
+            borderColor = if (waitingMembers.size >= selectedMode.maxPlayers) colCyberYellow else colCyberGrey,
+            textColor = if (waitingMembers.size >= selectedMode.maxPlayers) colCyberYellow else colTextDim,
+            fontOverride = fontLarge,
+            labelHook = { waitingStartBtnLabel = it }
         ) {
-            deployFromWaitingRoom()
+            val currentCount = waitingMembers.size
+            val maxPlayers = selectedMode.maxPlayers
+            if (currentCount < maxPlayers) {
+                audioService.play(SoundType.CLICK, volumeModifier = 0.5f)
+                val missing = maxPlayers - currentCount
+                showPopupModal(
+                    title = "WAITING FOR PLAYERS",
+                    message = "Cannot start ${selectedMode.displayName} yet!\nWaiting for $missing more player${if (missing > 1) "s" else ""} to join.\nShare Room Code: $waitingRoomCode",
+                    isDanger = false,
+                    primaryText = "OK"
+                )
+            } else {
+                deployFromWaitingRoom()
+            }
         }
         bottomBar.add(startNowBtn).width(260f).height(48f).right()
 
@@ -1347,6 +1535,8 @@ class MenuScreen(private val game: Main) : KtxScreen {
         waitingCountLabel?.setText("PLAYERS: $currentCount / $maxPlayers")
 
         if (currentCount >= maxPlayers) {
+            waitingStartBtnLabel?.setText("START MATCH")
+            waitingStartBtnLabel?.color = colCyberYellow
             if (waitingAutoStart) {
                 if (waitingCountdown < 0f) {
                     waitingCountdown = 3.0f
@@ -1366,8 +1556,10 @@ class MenuScreen(private val game: Main) : KtxScreen {
             }
         } else {
             waitingCountdown = -1f
+            waitingStartBtnLabel?.setText("WAITING ($currentCount/$maxPlayers)")
+            waitingStartBtnLabel?.color = colTextDim
             val dots = ".".repeat(waitingDotCount)
-            waitingStatusBannerLabel?.setText("WAITING FOR PLAYERS$dots")
+            waitingStatusBannerLabel?.setText("WAITING FOR PLAYERS$dots ($currentCount/$maxPlayers)")
             waitingStatusBannerLabel?.color = colCyberYellow
         }
 
