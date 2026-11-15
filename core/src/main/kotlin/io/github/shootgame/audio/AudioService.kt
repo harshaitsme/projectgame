@@ -109,18 +109,18 @@ class AudioService {
         volumeModifier: Float = 1f,
         pitchVariation: Float = 0f
     ) {
-        if (!isSoundEnabled) return
+        if (isDisposed || !isSoundEnabled || !maxDistance.isFinite() || maxDistance <= 0f) return
         val sound = soundCache[type] ?: return
 
         val dx = sourceX - listenerX
         val dy = sourceY - listenerY
         val distance = kotlin.math.sqrt(dx * dx + dy * dy)
 
-        if (distance > maxDistance) return
+        if (!distance.isFinite() || distance >= maxDistance) return
 
-        val distanceFactor = (1f - (distance / maxDistance)).coerceIn(0f, 1f)
+        val distanceFactor = 1f - distance / maxDistance
         val finalVolume = (soundVolume * volumeModifier * distanceFactor).coerceIn(0f, 1f)
-        val pan = (dx / (maxDistance * 0.5f)).coerceIn(-1.0f, 1.0f)
+        val pan = (2f * (dx / maxDistance)).coerceIn(-1f, 1f)
 
         val finalPitch = if (pitchVariation > 0f) {
             (1f + MathUtils.random(-pitchVariation, pitchVariation)).coerceIn(0.5f, 2.0f)
