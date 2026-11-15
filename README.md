@@ -117,7 +117,7 @@ shootPower/
 ├── assets/                     # Runtime assets (packed into the APK)
 │   ├── graphics/               # PlayerObject.atlas/.png, map.atlas/.png
 │   ├── map/map1.tmx            # Tiled level
-│   ├── sounds/                 # bgm.wav + 6 SFX
+│   ├── sounds/                 # Background music and sound effects
 │   └── assets_raw/             # Source PNGs + TexturePacker project
 ├── assets_raw/                 # Copied into assets/assets_raw at build time
 ├── .github/workflows/          # build.yml, codeql.yml
@@ -326,8 +326,8 @@ keep consistent frame dimensions.
 
 | Kind | File | Notes |
 | --- | --- | --- |
-| Music | `sounds/bgm.wav` | Looping, `musicVolume` default `0.5` |
-| SFX | `sounds/shot.wav`, `reload.wav`, `throw.wav`, `explosion.wav`, `jump.wav`, `click.wav` | Cached; `soundVolume` default `0.8`; optional ±pitch variation per play |
+| Music | `sounds/bgm.mp3` | Looping, `musicVolume` default `0.5` |
+| SFX | `sounds/shot.mp3`, `shotgun.mp3`, `reload.mp3`, `throw.mp3`, `explosion.wav`, `jump.mp3`, `click.mp3` | Cached; `soundVolume` default `0.8`; optional ±pitch variation per play |
 
 Missing files are logged as errors and skipped rather than crashing.
 
