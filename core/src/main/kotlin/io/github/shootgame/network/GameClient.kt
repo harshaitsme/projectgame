@@ -77,10 +77,10 @@ class GameClient(
 
                 // 2. Connect TCP socket
                 val socket = Socket()
+                tcpSocket = socket
                 socket.connect(InetSocketAddress(inetAddr, tcpPort), timeoutMs)
                 socket.tcpNoDelay = true
 
-                tcpSocket = socket
                 tcpIn = socket.getInputStream()
                 tcpOut = socket.getOutputStream()
                 isConnected = true
