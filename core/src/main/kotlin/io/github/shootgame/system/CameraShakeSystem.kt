@@ -25,7 +25,7 @@ class CameraShakeSystem : IntervalSystem() {
     ) {
         GameSettings.ensureLoaded()
         if (!GameSettings.vibrationEnabled || GameSettings.vibrationIntensity <= 0.01f) return
-        if (duration <= 0f || amount <= 0f) return
+        if (!duration.isFinite() || !amount.isFinite() || duration <= 0f || amount <= 0f) return
 
         val scaledAmount = (amount * GameSettings.vibrationIntensity).coerceIn(0f, 1.5f)
         if (scaledAmount <= 0.001f) return
