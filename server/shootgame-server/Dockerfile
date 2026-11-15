@@ -10,7 +10,7 @@ WORKDIR /app
 COPY . .
 
 # Build the optimized release binary.
-RUN cargo build --release --bin shootgame-server \
+RUN cargo build --locked --release --bin shootgame-server \
     && strip target/release/shootgame-server
 
 # ---------- runtime stage ----------
