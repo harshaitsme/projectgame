@@ -22,8 +22,8 @@ fn connect_and_login(name: &str, token: &str) -> (TcpStream, u32, f32, f32, Stri
     // Read framed LoginResponsePacket.
     let resp: LoginResponsePacket = net::read_login_response(&mut stream).expect("login response");
     println!(
-        "{name}: id={}, room={}, spawn=({}, {}), token={}",
-        resp.assigned_id, resp.room_code, resp.spawn_x, resp.spawn_y, resp.session_token
+        "{name}: id={}, room={}, spawn=({}, {})",
+        resp.assigned_id, resp.room_code, resp.spawn_x, resp.spawn_y
     );
     (stream, resp.assigned_id, resp.spawn_x, resp.spawn_y, resp.session_token)
 }
