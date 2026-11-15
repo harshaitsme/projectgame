@@ -132,25 +132,16 @@ tasks.matching { it.name.contains("merge") && it.name.contains("JniLibFolders") 
 }
 
 tasks.register('run', Exec) {
-  def path
+  Properties properties = new Properties()
   def localProperties = project.file("../local.properties")
   if (localProperties.exists()) {
-    Properties properties = new Properties()
-    localProperties.withInputStream { instr ->
-      properties.load(instr)
-    }
-    def sdkDir = properties.getProperty('sdk.dir')
-    if (sdkDir) {
-      path = sdkDir
-    } else {
-      path = "$System.env.ANDROID_SDK_ROOT"
-    }
-  } else {
-    path = "$System.env.ANDROID_SDK_ROOT"
+    localProperties.withInputStream { properties.load(it) }
   }
 
-  def adb = path + "/platform-tools/adb"
-  commandLine "$adb", 'shell', 'am', 'start', '-n', 'io.github.shootgame/io.github.shootgame.android.AndroidLauncher'
+  def sdkDir = properties.getProperty('sdk.dir') ?: System.getenv('ANDROID_HOME') ?: System.getenv('ANDROID_SDK_ROOT')
+  def adbName = System.getProperty('os.name').startsWith('Windows') ? 'adb.exe' : 'adb'
+  def adb = sdkDir ? new File(sdkDir, "platform-tools/$adbName").path : adbName
+  commandLine adb, 'shell', 'am', 'start', '-n', 'io.github.shootgame/io.github.shootgame.android.AndroidLauncher'
 }
 
 eclipse.project.name = appName + "-android"
