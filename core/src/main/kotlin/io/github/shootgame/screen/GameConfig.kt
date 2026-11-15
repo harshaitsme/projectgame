@@ -31,7 +31,6 @@ object GameSettings {
 
     fun ensureLoaded() {
         if (loaded) return
-        loaded = true
         try {
             val prefs = Gdx.app?.getPreferences(PREFS_NAME) ?: return
             sfxEnabled = prefs.getBoolean("sfxEnabled", true)
@@ -41,6 +40,7 @@ object GameSettings {
             vibrationEnabled = prefs.getBoolean("vibrationEnabled", true)
             vibrationIntensity = prefs.getFloat("vibrationIntensity", 1.0f).coerceIn(0f, 2f)
             gamma = prefs.getFloat("gamma", 1.0f).coerceIn(0.5f, 1.5f)
+            loaded = true
         } catch (_: Exception) {
         }
     }
