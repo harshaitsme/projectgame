@@ -106,8 +106,8 @@ shootPower/
 │       ├── Main.kt             # KtxGame entry point, UNIT_SCALE constant
 │       ├── screen/
 │       │   └── GameScreen.kt   # Wires world, stage, physics, systems
-│       ├── system/             # 16 Fleks systems — see below
-│       ├── component/          # 14 plain-data components
+│       ├── system/             # Fleks gameplay, networking and rendering systems
+│       ├── component/          # Entity state and component listeners
 │       ├── audio/
 │       │   └── AudioService.kt # Sound cache, music, toggles
 │       └── event/
@@ -131,27 +131,7 @@ shootPower/
 `GameScreen` builds a Fleks `World`, injects its dependencies and registers systems **in execution
 order**. `GameScreen.render(delta)` calls `eWorld.update(delta.coerceAtMost(0.25f))`.
 
-| # | System | Kind | Responsibility |
-| ---: | --- | --- | --- |
-| 1 | `PlayerInputSystem` | Iterating | Reads keyboard + touch flags into `Move` / `Attack` |
-| 2 | `CombatSystem` | Iterating | Fire rate, ammo, reload, spawns bullets & grenade requests |
-| 3 | `CollisionSystem` | Interval + `EventListener` | Builds static Box2D bodies from the map `physics` layer |
-| 4 | `FragSystem` | Iterating | Counts grenade fuse, detonates, spawns explosions |
-| 5 | `MoveSystem` | Iterating | Writes body velocities, jump impulse, animation state, flipping |
-| 6 | `PhysicSystem` | Iterating (fixed 1/60) | Steps Box2D, syncs body position → `Image` |
-| 7 | `ExplosionSystem` | Iterating | AoE damage on first tick, despawn after duration |
-| 8 | `DamageSystem` | Interval + `ContactListener` | Queues contacts, applies damage next tick |
-| 9 | `HealthSystem` | Iterating | i-frames, HP reduction, triggers death |
-| 10 | `DeathSystem` | Iterating | Corpse timer, final entity removal |
-| 11 | `UiSystem` | Interval | HUD labels, touch buttons, SFX/BGM toggles |
-| 12 | `BulletSystem` | Iterating | Bullet lifetime countdown |
-| 13 | `AnimationSystem` | Iterating | Swaps/caches animations, drives `Image.drawable` |
-| 14 | `CameraShakeSystem` | Interval | Shake envelope; applied by `RenderSystem` |
-| 15 | `RenderSystem` | Iterating + `EventListener` | Map layers, camera follow, stage act/draw, UI draw |
-| 16 | `EntitySpawnSystem` | Iterating + `EventListener` | Materialises `SpawnComponent` requests; spawns map entities |
-
-> **Why is `EntitySpawnSystem` last?** Spawns are requested during the frame by other systems and
-> instantiated at the very end, so a new entity is never half-processed by systems that already ran.
+The [system registration in `GameScreen.kt`](core/src/main/kotlin/io/github/shootgame/screen/GameScreen.kt) defines the execution order. `EntitySpawnSystem` consumes requests at the start of the update, followed by multiplayer synchronization, round state, and player input. Gameplay and physics systems then update the world before the HUD and renderer draw the frame.
 
 ### Components
 
@@ -184,7 +164,7 @@ Two-phase spawning keeps physics and rendering deterministic:
 CombatSystem / FragSystem / map load
         │  world.entity { add SpawnComponent(type, location) [+ Move + Owner] }
         ▼
-EntitySpawnSystem.onTickEntity      (system #16)
+EntitySpawnSystem.onTickEntity
         │  builds Image (+ Animation)      → stage listener adds the actor
         │  builds Box2D body               → Physic listener sets body.userData = entity
         │  copies Move/Owner from the request
@@ -236,10 +216,8 @@ Circular buttons rendered on the `uiStage`, only created when `Gdx.app.type == A
 
 | Side | Buttons |
 | --- | --- |
-| Bottom-left | `L`, `R` movement |
-| Bottom-right | `SHOOT` (large), `RELOAD`, `JUMP`, `GRENADE` |
-| Top-left | Health / Ammo / Frag HUD |
-| Top-right | `SFX: ON/OFF`, `BGM: ON/OFF` toggles |
+| Bottom-left | `<`, `>` movement |
+| Bottom-right | `FIRE`, `RLD`, `JUMP`, `BOMB`, `SWAP` |
 
 ## Getting started
 
@@ -333,7 +311,7 @@ Missing files are logged as errors and skipped rather than crashing.
 
 ## Configuration reference
 
-All version pins live in [`gradle.properties`](gradle.properties):
+Core dependency versions are set in [`gradle.properties`](gradle.properties). The Gradle wrapper version is set in [`gradle-wrapper.properties`](gradle/wrapper/gradle-wrapper.properties).
 
 | Property | Value | Purpose |
 | --- | --- | --- |
@@ -341,7 +319,7 @@ All version pins live in [`gradle.properties`](gradle.properties):
 | `gdxVersion` | `1.14.2` | libGDX |
 | `fleksversion` | `1.3-JVM` | ECS |
 | `ktxVersion` | `1.14.2-rc1` | Kotlin extensions |
-| `visUiVersion` | `1.5.9` | VisUI (declared, unused) |
+| `visUiVersion` | `1.5.9` | VisUI widgets |
 | `artemisOdbVersion`, `ashleyVersion`, `aiVersion` | — | Declared but not used by gameplay code |
 | `projectVersion` | `1.0.0` | Maven/Git project version |
 | `enableGraalNative` | `false` | Optional GraalVM native-image helper |
@@ -352,7 +330,7 @@ Android specifics (`android/build.gradle`): namespace/applicationId `io.github.s
 
 ## Continuous integration
 
-**`.github/workflows/build.yml`** — runs on every push and pull request:
+[`build.yml`](.github/workflows/build.yml) runs for pushes to `main` and pull requests targeting `main`. Changes limited to Markdown files are skipped.
 
 1. Checkout → Temurin JDK 17 → Gradle setup → Android SDK (`platform-tools`,
    `android-36`, `build-tools;36.0.0`)
