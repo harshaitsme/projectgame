@@ -13,6 +13,8 @@ pub use generated::*;
 
 use prost::Message;
 
+pub const MAX_TCP_FRAME_LENGTH: usize = 1024 * 1024;
+
 // ---------------------------------------------------------------------------
 // Wire type tags.
 // ---------------------------------------------------------------------------
@@ -104,14 +106,15 @@ fn decode_client_typed(buf: &[u8]) -> Option<ClientPacket> {
 
 /// Parse all complete TCP frames in `buf`.
 /// Returns the packets and the number of bytes consumed; keep `buf[consumed..]`.
+/// An invalid length leaves that frame's header unconsumed.
 pub fn parse_tcp(buf: &[u8]) -> (Vec<ClientPacket>, usize) {
     let mut out = Vec::new();
     let mut off = 0usize;
     while buf.len() - off >= 4 {
         let len = u32::from_le_bytes([buf[off], buf[off + 1], buf[off + 2], buf[off + 3]])
             as usize;
-        if buf.len() - off < 4 + len {
-            break; // incomplete frame; wait for more bytes
+        if !(1..=MAX_TCP_FRAME_LENGTH).contains(&len) || len > buf.len() - off - 4 {
+            break; // leave incomplete or invalid frames to the caller
         }
         let frame = &buf[off + 4..off + 4 + len];
         if let Some(p) = decode_client_typed(frame) {
@@ -157,6 +160,9 @@ pub fn read_login_response<R: std::io::Read>(reader: &mut R) -> Option<LoginResp
     let mut len_buf = [0u8; 4];
     reader.read_exact(&mut len_buf).ok()?;
     let len = u32::from_le_bytes(len_buf) as usize;
+    if !(1..=MAX_TCP_FRAME_LENGTH).contains(&len) {
+        return None;
+    }
     let mut frame = vec![0u8; len];
     reader.read_exact(&mut frame).ok()?;
     decode_login_response(&frame)
