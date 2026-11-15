@@ -17,8 +17,11 @@ TCP:  [ len:u32 LE ][ type:u8 ][ protobuf body ]
 UDP:                [ type:u8 ][ protobuf body ]
 ```
 
-- **TCP (54555)** — reliable: `Login`, `LoginResponse`, and client `State`/`Shoot` inputs.
-- **UDP (54777)** — lossy: server broadcasts `PlayerState` and `PlayerHit`.
+- **TCP (54555)** carries login, player join and leave notifications, and gameplay packets.
+- **UDP (54777)** carries client registration and gameplay updates, including state, shots, and hits.
+
+The Android client sends state and shots over TCP and uses UDP to register for broadcasts.
+The server also accepts state and shots from clients over UDP.
 
 ## Type tags
 
@@ -26,11 +29,11 @@ UDP:                [ type:u8 ][ protobuf body ]
 |----:|---------|-----------------------|
 | 1 | LoginPacket | client → server (TCP) |
 | 2 | LoginResponsePacket | server → client (TCP) |
-| 3 | PlayerStatePacket | both (client→server TCP; server→client UDP) |
-| 4 | PlayerShootPacket | client → server (TCP) |
-| 5 | PlayerHitPacket | server → client (UDP) |
-| 6 | PlayerConnectedPacket | server → client (TCP/UDP) |
-| 7 | PlayerDisconnectedPacket | server → client (TCP/UDP) |
+| 3 | PlayerStatePacket | both directions (TCP and UDP) |
+| 4 | PlayerShootPacket | both directions (TCP and UDP) |
+| 5 | PlayerHitPacket | server → client (TCP and UDP) |
+| 6 | PlayerConnectedPacket | server → client (TCP) |
+| 7 | PlayerDisconnectedPacket | server → client (TCP) |
 | 8 | (register) | client → server (UDP) body = raw u32 LE client id |
 
 ## UDP registration
