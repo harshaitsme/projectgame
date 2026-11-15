@@ -33,7 +33,7 @@ services:
 
     # Ensure the container is actually responsive
     healthcheck:
-      test: ["CMD", "curl", "-f", "<unsafe_url>http://localhost:54556/health</unsafe_url>"]
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1:54556/api/analytics"]
       interval: 30s
       timeout: 10s
       retries: 3
