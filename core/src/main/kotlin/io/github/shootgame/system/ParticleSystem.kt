@@ -22,7 +22,7 @@ class ParticleSystem(
     private val imageCmps: ComponentMapper<ImageComponent>
 ) : IteratingSystem() {
 
-    private val circleRegion: TextureRegion by lazy {
+    private val circleRegionResource = lazy {
         val pixmap = Pixmap(16, 16, Pixmap.Format.RGBA8888)
         pixmap.setColor(1f, 1f, 1f, 1f)
         pixmap.fillCircle(8, 8, 7)
@@ -30,6 +30,8 @@ class ParticleSystem(
         pixmap.dispose()
         TextureRegion(texture)
     }
+
+    private val circleRegion by circleRegionResource
 
     override fun onTickEntity(entity: Entity) {
         val particle = particleCmps[entity]
@@ -141,7 +143,7 @@ class ParticleSystem(
     }
 
     override fun onDispose() {
-        if (circleRegion.texture != null) {
+        if (circleRegionResource.isInitialized()) {
             circleRegion.texture.dispose()
         }
     }
