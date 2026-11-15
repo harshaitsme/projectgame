@@ -2,6 +2,10 @@
 /target
 **/target
 
+# Local configuration and credentials
+.env
+.env.*
+
 # Local/editor/OS cruft
 .idea
 .vscode
