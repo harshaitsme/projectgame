@@ -334,6 +334,14 @@ async fn client_handler(
             stream_buf.drain(..consumed);
         }
 
+        if let Some(header) = stream_buf.first_chunk::<4>() {
+            let length = u32::from_le_bytes(*header) as usize;
+            if !(1..=net::MAX_TCP_FRAME_LENGTH).contains(&length) {
+                eprintln!("Client {remote} sent invalid TCP frame length: {length}");
+                break;
+            }
+        }
+
         for pkt in packets {
             match pkt {
                 net::ClientPacket::Login(login) => {
