@@ -61,18 +61,18 @@ class AudioService {
 
     private fun loadMusic() {
         try {
-            val musicFile = Gdx.files.internal("sounds/bgm.mp3")
+            val musicFile = Gdx.files.internal(MUSIC_FILE)
             if (musicFile.exists()) {
                 music = Gdx.audio.newMusic(musicFile).apply {
                     isLooping = true
                     volume = if (isMusicEnabled) musicVolume else 0f
                 }
-                log.info { "Loaded background music: sounds/bgm.mp3" }
+                log.info { "Loaded background music: $MUSIC_FILE" }
             } else {
-                log.error { "Background music file not found: sounds/bgm.mp3" }
+                log.error { "Background music file not found: $MUSIC_FILE" }
             }
         } catch (e: Exception) {
-            log.error(e) { "Failed to load background music: sounds/bgm.wav" }
+            log.error(e) { "Failed to load background music: $MUSIC_FILE" }
         }
     }
 
@@ -225,6 +225,7 @@ class AudioService {
     }
 
     companion object {
+        private const val MUSIC_FILE = "sounds/bgm.mp3"
         private val log = logger<AudioService>()
     }
 }
