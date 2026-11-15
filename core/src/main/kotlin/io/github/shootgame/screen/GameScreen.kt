@@ -92,6 +92,7 @@ class GameScreen(private val config: GameConfig = GameConfig()) : KtxScreen {
         system<CombatSystem>()
         system<CollisionSystem>()
         system<FragSystem>()
+        system<AudioSystem>()
         system<StatusEffectSystem>()
         system<ShieldRegenSystem>()
         system<PerkSystem>()
