@@ -30,4 +30,6 @@ Create a local `.env` file in this directory. Set `FIREBASE_DB_URL` to an empty 
 docker compose up --build
 ```
 
+The analytics dashboard is available at `http://localhost:54556/dashboard` while the service runs. Use `docker compose ps` to check its status. From a separate terminal in the same directory, run `docker compose down` to stop the service.
+
 See the [wire protocol](docs/wire-protocol.md) and [client integration notes](docs/interop.md) for the packet format and schema locations.
