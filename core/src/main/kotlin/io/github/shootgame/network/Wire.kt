@@ -1,10 +1,11 @@
 package io.github.shootgame.network
 
+import java.io.IOException
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
 /**
- * Wire codec shared with the Rust server (see docs/wire-protocol.md).
+ * Wire codec shared with the Rust server (see server/shootgame-server/docs/wire-protocol.md).
  *
  * Framing:
  *   TCP:  [ len:u32 LE ][ type:u8 ][ protobuf body ]
@@ -14,6 +15,8 @@ import java.nio.ByteOrder
  * shootgame.proto into package `io.github.shootgame.proto`.
  */
 object Wire {
+    private const val MAX_TCP_FRAME_LENGTH = 1024 * 1024
+
     /** Wire type tags — must match the Rust server. */
     const val TYPE_LOGIN: Byte = 1
     const val TYPE_LOGIN_RESPONSE: Byte = 2
@@ -69,6 +72,9 @@ object Wire {
     fun readFrame(input: java.io.InputStream): Pair<Byte, ByteArray>? {
         val lenBytes = readFully(input, 4) ?: return null
         val len = ByteBuffer.wrap(lenBytes).order(ByteOrder.LITTLE_ENDIAN).int
+        if (len !in 1..MAX_TCP_FRAME_LENGTH) {
+            throw IOException("Invalid TCP frame length: $len")
+        }
         val frame = readFully(input, len) ?: return null
         val type = frame[0]
         val body = frame.copyOfRange(1, frame.size)
@@ -78,9 +84,9 @@ object Wire {
     /** Read one UDP datagram and return its (type, body) pair. */
     fun readDatagram(packet: java.net.DatagramPacket): Pair<Byte, ByteArray> {
         val data = packet.data
-        val len = packet.length
-        val type = data[0]
-        val body = data.copyOfRange(1, len)
+        val offset = packet.offset
+        val type = data[offset]
+        val body = data.copyOfRange(offset + 1, offset + packet.length)
         return type to body
     }
 }
