@@ -86,7 +86,7 @@ class GameClient(
                 isConnected = true
 
                 // 3. Start UDP receive loop
-                Thread { runUdpLoop(udp) }.apply {
+                Thread { runUdpLoop(udp, inetAddr) }.apply {
                     isDaemon = true
                     setName("ShootGame-UDP-Worker")
                 }.start()
@@ -171,13 +171,13 @@ class GameClient(
         }
     }
 
-    private fun runUdpLoop(udp: DatagramSocket) {
+    private fun runUdpLoop(udp: DatagramSocket, serverAddress: InetAddress) {
         val buffer = ByteArray(4096)
         try {
             while (isConnected && !udp.isClosed && !Thread.currentThread().isInterrupted) {
                 val datagram = DatagramPacket(buffer, buffer.size)
                 udp.receive(datagram)
-                if (datagram.length == 0) continue
+                if (datagram.address != serverAddress || datagram.port != udpPort || datagram.length == 0) continue
                 val (type, body) = Wire.readDatagram(datagram)
                 val packet = try {
                     when (type) {
