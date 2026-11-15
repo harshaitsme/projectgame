@@ -1,5 +1,6 @@
 package io.github.shootgame.network
 
+import com.google.protobuf.InvalidProtocolBufferException
 import io.github.shootgame.proto.*
 import java.io.InputStream
 import java.io.OutputStream
@@ -76,10 +77,10 @@ class GameClient(
 
                 // 2. Connect TCP socket
                 val socket = Socket()
+                tcpSocket = socket
                 socket.connect(InetSocketAddress(inetAddr, tcpPort), timeoutMs)
                 socket.tcpNoDelay = true
 
-                tcpSocket = socket
                 tcpIn = socket.getInputStream()
                 tcpOut = socket.getOutputStream()
                 isConnected = true
@@ -176,24 +177,21 @@ class GameClient(
             while (isConnected && !udp.isClosed && !Thread.currentThread().isInterrupted) {
                 val datagram = DatagramPacket(buffer, buffer.size)
                 udp.receive(datagram)
+                if (datagram.length == 0) continue
                 val (type, body) = Wire.readDatagram(datagram)
-                when (type) {
-                    Wire.TYPE_PLAYER_STATE -> {
-                        packetQueue.add(PlayerStatePacket.parseFrom(body))
+                val packet = try {
+                    when (type) {
+                        Wire.TYPE_PLAYER_STATE -> PlayerStatePacket.parseFrom(body)
+                        Wire.TYPE_PLAYER_HIT -> PlayerHitPacket.parseFrom(body)
+                        Wire.TYPE_PLAYER_SHOOT -> PlayerShootPacket.parseFrom(body)
+                        Wire.TYPE_PLAYER_CONNECTED -> PlayerConnectedPacket.parseFrom(body)
+                        Wire.TYPE_PLAYER_DISCONNECTED -> PlayerDisconnectedPacket.parseFrom(body)
+                        else -> continue
                     }
-                    Wire.TYPE_PLAYER_HIT -> {
-                        packetQueue.add(PlayerHitPacket.parseFrom(body))
-                    }
-                    Wire.TYPE_PLAYER_SHOOT -> {
-                        packetQueue.add(PlayerShootPacket.parseFrom(body))
-                    }
-                    Wire.TYPE_PLAYER_CONNECTED -> {
-                        packetQueue.add(PlayerConnectedPacket.parseFrom(body))
-                    }
-                    Wire.TYPE_PLAYER_DISCONNECTED -> {
-                        packetQueue.add(PlayerDisconnectedPacket.parseFrom(body))
-                    }
+                } catch (_: InvalidProtocolBufferException) {
+                    continue
                 }
+                packetQueue.add(packet)
             }
         } catch (e: Exception) {
             if (isConnected && !udp.isClosed) {

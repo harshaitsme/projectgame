@@ -8,6 +8,7 @@ import io.github.shootgame.audio.AudioService
 import io.github.shootgame.component.AudioEmitterComponent
 import io.github.shootgame.component.ImageComponent
 import io.github.shootgame.component.PlayerComponent
+import io.github.shootgame.component.RemotePlayerComponent
 
 @AllOf([AudioEmitterComponent::class])
 class AudioSystem(
@@ -23,7 +24,10 @@ class AudioSystem(
 
         var listenerX = 0f
         var listenerY = 0f
-        world.family(allOf = arrayOf(PlayerComponent::class, ImageComponent::class)).forEach { player ->
+        world.family(
+            allOf = arrayOf(PlayerComponent::class, ImageComponent::class),
+            noneOf = arrayOf(RemotePlayerComponent::class)
+        ).forEach { player ->
             val img = imageCmps[player].image
             listenerX = img.x + img.width * 0.5f
             listenerY = img.y + img.height * 0.5f

@@ -9,10 +9,9 @@
 | --- | --- | --- | --- | --- |
 | **Kotlin** 2.4.10 | **libGDX** 1.14.2 | **Fleks** 1.3-JVM | **Gradle** 9.7.1 | **Android Min SDK** 21 |
 
-`shootPower` is a landscape, touch-and-keyboard friendly shooter for Android and desktop JVMs.
-You control a lone soldier on a tiled 2D map: run, jump, shoot, reload and lob grenades while the
-camera tracks your movement, explosions shake the screen and a fully data-driven entity/component
-system drives everything on screen.
+`shootPower` is a landscape shooter for Android with touch and keyboard controls.
+Play solo against bots or join a two-player Duo or four-player Squad room. Run, jump, shoot,
+reload, and throw grenades while the camera follows your character across the arena.
 
 ---
 
@@ -32,6 +31,7 @@ system drives everything on screen.
   - [Prerequisites](#prerequisites)
   - [Run on Android](#run-on-android)
   - [Build a release APK](#build-a-release-apk)
+  - [Useful Gradle tasks](#useful-gradle-tasks)
   - [Server module](#server-module)
 - [Assets and content pipeline](#assets-and-content-pipeline)
   - [Texture atlas](#texture-atlas)
@@ -39,8 +39,6 @@ system drives everything on screen.
   - [Audio](#audio)
 - [Configuration reference](#configuration-reference)
 - [Continuous integration](#continuous-integration)
-- [Roadmap](#roadmap)
-- [Known limitations](#known-limitations)
 - [Contributing](#contributing)
 - [License](#license)
 - [Acknowledgements](#acknowledgements)
@@ -97,7 +95,7 @@ The Tiled map supplies both the visuals *and* the collision geometry.
 | Audio | libGDX `Music` / `Sound` |
 | Build | Gradle `9.7.1`, AGP `8.9.3` |
 | CI | GitHub Actions (build + CodeQL) |
-| Target | Android `minSdk 21` / `targetSdk 36`, desktop JVM |
+| Target | Android `minSdk 21` / `targetSdk 36` |
 
 ## Project layout
 
@@ -115,11 +113,11 @@ shootPower/
 │       └── event/
 │           └── event.kt        # MapChangeEvent + Stage.fire helper
 ├── android/                    # Android launcher, manifest, resources, natives
-├── server/                     # Placeholder JVM entry point (not implemented)
+├── server/shootgame-server/     # Rust multiplayer server
 ├── assets/                     # Runtime assets (packed into the APK)
 │   ├── graphics/               # PlayerObject.atlas/.png, map.atlas/.png
 │   ├── map/map1.tmx            # Tiled level
-│   ├── sounds/                 # bgm.wav + 6 SFX
+│   ├── sounds/                 # Background music and sound effects
 │   └── assets_raw/             # Source PNGs + TexturePacker project
 ├── assets_raw/                 # Copied into assets/assets_raw at build time
 ├── .github/workflows/          # build.yml, codeql.yml
@@ -214,11 +212,12 @@ Box2D contact  →  DamageSystem.beginContact
 ```
 
 Grenades bypass Box2D for damage: `ExplosionSystem` measures centre-to-centre distance and applies
-`HealthSystem.damagePercent` (10 % inner radius, 50 % outer radius), then triggers a camera shake.
+`HealthSystem.damagePercent` (65% in the inner half of the radius, 35% in the outer half),
+then triggers a camera shake.
 
 ## Controls
 
-### Keyboard (desktop / Android with keyboard)
+### Keyboard (Android)
 
 | Action | Keys |
 | --- | --- |
@@ -227,6 +226,9 @@ Grenades bypass Box2D for damage: `ExplosionSystem` measures centre-to-centre di
 | Shoot (hold) | `Space` |
 | Reload | `R` |
 | Throw grenade | `G` |
+| Select pistol / shotgun / machine gun | `1` / `2` / `3` |
+| Previous / next weapon | `Q` / `E` |
+| Pause menu | `Esc` |
 
 ### Touch (Android)
 
@@ -243,7 +245,7 @@ Circular buttons rendered on the `uiStage`, only created when `Gdx.app.type == A
 
 ### Prerequisites
 
-- **JDK 17+** (CI uses Temurin 17)
+- **JDK 21** for the Gradle daemon. CI starts Gradle with Temurin 17 and the wrapper's daemon JVM criteria select JDK 21.
 - **Android SDK** with `platforms;android-36` and `build-tools;36.0.0` — path written to
   `local.properties` as `sdk.dir=...`
 - No need to install Gradle: the wrapper is committed.
@@ -254,7 +256,7 @@ Circular buttons rendered on the `uiStage`, only created when `Gdx.app.type == A
 # Build and install the debug APK on a connected device/emulator
 ./gradlew android:installDebug
 
-# Or launch the app directly via adb (what `android:run` does)
+# Launch the installed APK on the connected device or emulator
 ./gradlew android:run
 ```
 
@@ -274,21 +276,12 @@ Release builds are minified (`minifyEnabled true`) with the default Android ProG
 | `./gradlew build` | Compiles and tests every subproject |
 | `./gradlew core:test` | Runs unit tests in `core` (none yet — task exists by default) |
 | `./gradlew android:lint` | Android lint validation |
-| `./gradlew server:run` | Runs the (placeholder) server entry point |
-| `./gradlew generateAssetList` | Regenerates `assets/assets.txt` (auto-run before `processResources`) |
+| `./gradlew :core:generateAssetList` | Regenerates `assets/assets.txt` (auto-run before `processResources`) |
 
 ### Server module
 
-`server/src/main/kotlin/.../ServerLauncher.kt` is intentionally a stub:
-
-```kotlin
-fun main() {
-    TODO("Implement server application.")
-}
-```
-
-It builds into a self-contained, executable fat JAR but has no gameplay code today. Multiplayer is
-on the roadmap, not implemented.
+Duo and Squad rooms run on the Rust server in `server/shootgame-server/`.
+See the [server README](server/shootgame-server/README.md) for startup commands and ports.
 
 ## Assets and content pipeline
 
@@ -333,8 +326,8 @@ keep consistent frame dimensions.
 
 | Kind | File | Notes |
 | --- | --- | --- |
-| Music | `sounds/bgm.wav` | Looping, `musicVolume` default `0.5` |
-| SFX | `sounds/shot.wav`, `reload.wav`, `throw.wav`, `explosion.wav`, `jump.wav`, `click.wav` | Cached; `soundVolume` default `0.8`; optional ±pitch variation per play |
+| Music | `sounds/bgm.mp3` | Looping, `musicVolume` default `0.5` |
+| SFX | `sounds/shot.mp3`, `shotgun.mp3`, `reload.mp3`, `throw.mp3`, `explosion.wav`, `jump.mp3`, `click.mp3` | Cached; `soundVolume` default `0.8`; optional ±pitch variation per play |
 
 Missing files are logged as errors and skipped rather than crashing.
 
@@ -361,10 +354,9 @@ Android specifics (`android/build.gradle`): namespace/applicationId `io.github.s
 
 **`.github/workflows/build.yml`** — runs on every push and pull request:
 
-1. Checkout → Temurin JDK 17 (Gradle cache) → Android SDK (`platform-tools`, `android-36`,
-   `build-tools;36.0.0`) → Gradle setup
-2. `./gradlew --no-daemon clean build android:assembleRelease`
-3. Uploads `shootPower-v1.0-release.apk` as a workflow artifact
+1. Checkout → Temurin JDK 17 → Gradle setup → Android SDK (`platform-tools`,
+   `android-36`, `build-tools;36.0.0`)
+2. `./gradlew build`
 
 **`.github/workflows/codeql.yml`** — CodeQL Advanced security analysis.
 

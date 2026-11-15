@@ -32,17 +32,18 @@ class CollisionSystem(
 
             if (layer is TiledMapTileLayer) {
                 // Handle as Tile Layer (painting tiles)
-                val tileSize = layer.tileWidth.toFloat() // assuming square tiles
+                val tileWidth = layer.tileWidth.toFloat()
+                val tileHeight = layer.tileHeight.toFloat()
                 for (x in 0 until layer.width) {
                     for (y in 0 until layer.height) {
                         val cell = layer.getCell(x, y)
                         if (cell?.tile != null) {
                             phWorld.body {
                                 position.set(
-                                    (x * tileSize + tileSize * 0.5f) * UNIT_SCALE,
-                                    (y * tileSize + tileSize * 0.5f) * UNIT_SCALE
+                                    (x + 0.5f) * tileWidth * UNIT_SCALE,
+                                    (y + 0.5f) * tileHeight * UNIT_SCALE
                                 )
-                                box(width = tileSize * UNIT_SCALE, height = tileSize * UNIT_SCALE)
+                                box(width = tileWidth * UNIT_SCALE, height = tileHeight * UNIT_SCALE)
                             }
                             groundCount++
                         }
