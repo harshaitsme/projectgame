@@ -2,6 +2,7 @@ package io.github.shootgame.screen
 
 import com.badlogic.gdx.Gdx
 import io.github.shootgame.network.GameClient
+import io.github.shootgame.network.NetworkConfig
 
 enum class GameMode(val displayName: String, val maxPlayers: Int, val description: String) {
     OFFLINE("Solo Practice", 1, "Play solo against AI bots on the arena map."),
@@ -102,7 +103,7 @@ object GameSettings {
 data class GameConfig(
     var mode: GameMode = GameMode.DUO,
     var playerName: String = "Player",
-    var serverHost: String = "161.118.255.172",
+    var serverHost: String = NetworkConfig.serverHost,
     var roomCode: String = "",
     var createRoom: Boolean = false,
     var jwtToken: String = "",
