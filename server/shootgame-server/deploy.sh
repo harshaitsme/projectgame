@@ -61,7 +61,7 @@ fi
 
 if [[ "$NO_BUILD" -eq 0 ]]; then
   printf "==> Building release binary\n"
-  run_cmd cargo build --release --manifest-path "$SCRIPT_DIR/Cargo.toml"
+  run_cmd cargo build --locked --release --bin shootgame-server --manifest-path "$SCRIPT_DIR/Cargo.toml"
 fi
 
 if [[ "$DRY_RUN" -eq 0 ]] && [[ ! -f "$BIN" ]]; then
