@@ -44,7 +44,7 @@ class RenderSystem(
     private val mapRenderer = OrthogonalTiledMapRenderer(null, UNIT_SCALE, stage.batch)
     private val orthoCam = stage.camera as OrthographicCamera
 
-    private val whitePixel: Texture by lazy {
+    private val whitePixelResource = lazy {
         val pixmap = Pixmap(1, 1, Pixmap.Format.RGBA8888)
         pixmap.setColor(Color.WHITE)
         pixmap.fill()
@@ -53,12 +53,15 @@ class RenderSystem(
         tex
     }
 
-    private val nameTagFont: BitmapFont by lazy {
+    private val whitePixel by whitePixelResource
+
+    private val nameTagFontResource = lazy {
         BitmapFont().apply {
             data.setScale(1.05f)
             setUseIntegerPositions(false)
         }
     }
+    private val nameTagFont by nameTagFontResource
     private val glyphLayout = GlyphLayout()
     private val tmpVec3 = Vector3()
 
@@ -248,7 +251,7 @@ class RenderSystem(
 
     override fun onDispose() {
         mapRenderer.disposeSafely()
-        whitePixel.disposeSafely()
-        nameTagFont.disposeSafely()
+        if (whitePixelResource.isInitialized()) whitePixel.disposeSafely()
+        if (nameTagFontResource.isInitialized()) nameTagFont.disposeSafely()
     }
 }
