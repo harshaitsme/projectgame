@@ -48,13 +48,13 @@ class HealthSystem(
 
     fun damagePercent(entity: Entity, fraction: Float): Boolean {
         val health = healthCmps.getOrNull(entity) ?: return false
-        if (fraction <= 0f) return false
+        if (!fraction.isFinite() || fraction <= 0f) return false
         return damage(entity, health.maxHealth * fraction.coerceAtMost(1f))
     }
 
     fun damage(entity: Entity, amount: Float, fromNetwork: Boolean = false): Boolean {
         val health = healthCmps.getOrNull(entity) ?: return false
-        if (health.isDead || entity in deadCmps || amount <= 0f) return false
+        if (health.isDead || entity in deadCmps || !amount.isFinite() || amount <= 0f) return false
         if (health.invulnerableTime > 0f) return false
 
         var remainingDamage = amount
@@ -107,6 +107,7 @@ class HealthSystem(
 
     fun setAuthoritativeHealth(entity: Entity, targetHealth: Float) {
         val health = healthCmps.getOrNull(entity) ?: return
+        if (!targetHealth.isFinite()) return
         val clamped = targetHealth.coerceIn(0f, health.maxHealth)
         if (clamped <= 0f) {
             if (!health.isDead || entity !in deadCmps) {
