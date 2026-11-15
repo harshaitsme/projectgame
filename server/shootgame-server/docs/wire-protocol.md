@@ -17,6 +17,8 @@ TCP:  [ len:u32 LE ][ type:u8 ][ protobuf body ]
 UDP:                [ type:u8 ][ protobuf body ]
 ```
 
+Both endpoints accept TCP frame lengths from 1 to 1,048,576 bytes inclusive. The length includes the type tag and protobuf body. An invalid length closes the connection.
+
 - **TCP (54555)** carries login, player join and leave notifications, and gameplay packets.
 - **UDP (54777)** carries client registration and gameplay updates, including state, shots, and hits.
 
