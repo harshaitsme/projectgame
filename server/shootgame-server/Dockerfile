@@ -10,8 +10,7 @@ WORKDIR /app
 COPY . .
 
 # Build the optimized release binary.
-RUN cargo build --locked --release --bin shootgame-server \
-    && strip target/release/shootgame-server
+RUN cargo build --locked --release --bin shootgame-server
 
 # ---------- runtime stage ----------
 FROM debian:bookworm-slim
