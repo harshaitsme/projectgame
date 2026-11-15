@@ -34,7 +34,7 @@ class StatusEffectSystem(
                     if (effect.tickTimer >= effect.tickInterval) {
                         effect.tickTimer = 0f
                         health?.let {
-                            if (!it.isDead) {
+                            if (!it.isDead && it.currentHealth > 1f) {
                                 it.currentHealth = (it.currentHealth - effect.magnitude).coerceAtLeast(1f)
                             }
                         }
