@@ -13,7 +13,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-INSTALL_DIR="/opt/shootgame"
+DEFAULT_INSTALL_DIR="/opt/shootgame"
+INSTALL_DIR="$DEFAULT_INSTALL_DIR"
 SERVICE_NAME="shootgame-server"
 NO_BUILD=0
 DRY_RUN=0
@@ -72,9 +73,9 @@ fi
 printf "==> Installing to %s\n" "$INSTALL_DIR"
 run_cmd sudo install -Dm 0755 "$BIN" "$INSTALL_DIR/shootgame-server"
 
-# Copy the systemd unit if it exists
+# The packaged unit points to the default install directory.
 UNIT_SRC="$SCRIPT_DIR/deploy/systemd/$SERVICE_NAME.service"
-if [[ -f "$UNIT_SRC" ]] && [[ -d /etc/systemd/system ]]; then
+if [[ "$INSTALL_DIR" == "$DEFAULT_INSTALL_DIR" && -f "$UNIT_SRC" && -d /etc/systemd/system ]]; then
   printf "==> Installing systemd unit\n"
   run_cmd sudo cp "$UNIT_SRC" "/etc/systemd/system/$SERVICE_NAME.service"
   run_cmd sudo systemctl daemon-reload
