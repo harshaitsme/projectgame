@@ -121,7 +121,7 @@ class PlayerInputSystem(
         moveCmp.doJump = Gdx.input.isKeyJustPressed(Input.Keys.W) || Gdx.input.isKeyJustPressed(Input.Keys.UP) || uiSystem.touchJump
         
         // Debug / Test Loot drop on 'P' key
-        if (Gdx.input.isKeyJustPressed(Input.Keys.P)) {
+        if (!matchRoundSystem.isMatchRoundMode && Gdx.input.isKeyJustPressed(Input.Keys.P)) {
             val physic = physicCmps.getOrNull(entity)
             if (physic != null) {
                 val types = PickupType.values()
